@@ -2,3 +2,5 @@ data/amazon_review_polarity_csv/
 .env
 __pycache__/
 **/__pycache__/
+.~lock.*
+.DS_Store
