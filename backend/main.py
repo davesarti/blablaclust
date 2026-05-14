@@ -1,4 +1,7 @@
+import uuid
+
 from fastapi import FastAPI, Depends
+from pydantic import BaseModel
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 
@@ -14,6 +17,10 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+
+class CreateSessionRequest(BaseModel):
+    dataset_name: str
+
 # Dependency per ottenere la sessione del DB
 def get_db():
     db = SessionLocal()
@@ -25,5 +32,32 @@ def get_db():
 @app.get("/sessions")
 def read_sessions(db: Session = Depends(get_db)):
     # Recupera tutte le sessioni dal database
-    chatSessions = db.query(ChatSession).all()
-    return chatSessions
+    chat_sessions = db.query(ChatSession).all()
+    return [
+        {
+            "id": session.id,
+            "dataset_name": session.dataset_name,
+            "embedding_model": session.embedding_model,
+            "status": session.status,
+        }
+        for session in chat_sessions
+    ]
+
+
+@app.post("/sessions")
+def create_session(payload: CreateSessionRequest, db: Session = Depends(get_db)):
+    new_session = ChatSession(
+        id=str(uuid.uuid4()),
+        dataset_name=payload.dataset_name,
+        embedding_model="default",
+        status="active",
+    )
+    db.add(new_session)
+    db.commit()
+    db.refresh(new_session)
+    return {
+        "id": new_session.id,
+        "dataset_name": new_session.dataset_name,
+        "embedding_model": new_session.embedding_model,
+        "status": new_session.status,
+    }
