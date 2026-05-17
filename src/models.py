@@ -1,13 +1,11 @@
 from sqlalchemy import (
 	JSON,
 	CheckConstraint,
-	DateTime,
 	Float,
 	ForeignKey,
 	Integer,
 	String,
 	Text,
-	func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 

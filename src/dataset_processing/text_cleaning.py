@@ -4,14 +4,25 @@ import re
 import unicodedata
 
 
+def clean_fields(title: str, text: str) -> tuple[str, str]:
+    """Clean title and text fields independently."""
+    title_clean = _normalize_unicode(title or "")
+    title_clean = _fix_double_quotes(title_clean)
+    title_clean = _collapse_repeated_chars(title_clean)
+    title_clean = _collapse_whitespace(title_clean)
+
+    text_clean = _normalize_unicode(text or "")
+    text_clean = _fix_double_quotes(text_clean)
+    text_clean = _collapse_repeated_chars(text_clean)
+    text_clean = _collapse_whitespace(text_clean)
+    return title_clean, text_clean
+
+
 def clean_text(title: str, text: str) -> str:
     """Combine title and text into a single clean string for embedding."""
-    combined = title.strip() + " " + text.strip()
-    combined = _normalize_unicode(combined)
-    combined = _fix_double_quotes(combined)
-    combined = _collapse_repeated_chars(combined)
-    combined = _collapse_whitespace(combined)
-    return combined
+    title_clean, text_clean = clean_fields(title, text)
+    combined = f"{title_clean} {text_clean}".strip()
+    return _collapse_whitespace(combined)
 
 
 def _normalize_unicode(s: str) -> str:

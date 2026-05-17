@@ -13,7 +13,7 @@ from sentence_transformers import SentenceTransformer
 from sqlalchemy.orm import Session
 
 from src.models import DataPoint
-from src.text_cleaning import clean_text
+from dataset_processing.text_cleaning import clean_text
 
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 EMBEDDING_BATCH_SIZE = 64

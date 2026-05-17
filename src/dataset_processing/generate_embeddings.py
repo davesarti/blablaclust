@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from sentence_transformers import SentenceTransformer
 
 from src.models import DataPoint
-from src.text_cleaning import clean_text
+from dataset_processing.text_cleaning import clean_text
 
 MODEL_NAME = "all-MiniLM-L6-v2"
 BATCH_SIZE = 64

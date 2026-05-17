@@ -22,7 +22,8 @@ class FeedbackEntry(BaseModel):
     turn: int
     type: Literal["global", "cluster", "point", "instructional"]
     content: str
-    target_id: Optional[str] = None
+    target_cluster_id: Optional[str] = None
+    target_point_ids: List[str] = Field(default_factory=list)
 
 
 class ChatSessionState(BaseModel):
@@ -32,8 +33,13 @@ class ChatSessionState(BaseModel):
     status: Literal["active", "converged", "closed"]
     clusters: List[Cluster]
     feedback_history: List[FeedbackEntry]
-    contradictions: List[Any] = Field(default_factory=list)
-    oracle_preferences: Dict[str, Any] = Field(default_factory=dict)
+
+
+class DatasetUploadResponse(BaseModel):
+    dataset_name: str
+    inserted: int
+    skipped: int
+    embeddings_generated: int
 
 
 class InputOracle(BaseModel):
