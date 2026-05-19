@@ -1,5 +1,6 @@
+import json
 from src.schemas import ChatSessionState, InputOracle
-from src.harness import ConversationContext
+from src.harness import ConversationContext, render_prompt, call_llm
 
 
 def f_output(
@@ -8,10 +9,32 @@ def f_output(
     context: ConversationContext,
     total_points: int,
 ) -> dict:
-    return {
-        "action": "no_change",
-        "clusters_updated": [],
-        "display": "stub: no changes applied",
-        "contradiction_detected": False,
-        "cognitive_load_score": 0.0,
-    }
+    # Build the prompt by injecting current state and oracle input into the
+    # f_output.txt template. Claude receives the full picture: existing clusters,
+    # what the oracle just said, and the conversation history so far.
+    prompt = render_prompt(
+        "f_output",
+        session_id=state.session_id,
+        turn_number=state.turn_number,
+        total_points=total_points,
+        clusters_json=json.dumps([c.model_dump() for c in state.clusters]),
+        feedback_type=oracle_turn.feedback_type,
+        oracle_raw_text=oracle_turn.raw_text,
+        target_cluster_id=oracle_turn.target_cluster_id or "",
+        history_summary=json.dumps([f.model_dump() for f in state.feedback_history]),
+    )
+
+    # Register the oracle's message in the conversation memory so future turns
+    # can see the full dialogue history when calling build_messages().
+    context.add_oracle_turn(oracle_turn.model_dump())
+
+    # Call whichever LLM is configured (Claude or GPT) via the provider-agnostic
+    # wrapper — LLM_PROVIDER env var controls which one is used.
+    msg = call_llm(context.build_messages(), system=prompt)
+
+    # Register Claude's response in the conversation memory.
+    context.add_system_turn({"display": msg.text})
+
+    # Return the raw parsed JSON — f_next_state is responsible for turning this
+    # into a proper ChatSessionState. This function never touches state logic.
+    return json.loads(msg.text)

@@ -276,6 +276,22 @@ def estimate_cost_usd(usage: dict[str, int], model: str = DEFAULT_MODEL) -> floa
 
 
 # ---------------------------------------------------------------------------
+# Provider-agnostic call
+# ---------------------------------------------------------------------------
+
+def call_llm(
+    messages: list[dict[str, str]],
+    system: str,
+    max_tokens: int = 2048,
+) -> LLMResponse:
+    provider = os.environ.get("LLM_PROVIDER", "claude").lower()
+    if provider == "openai":
+        from src.harness_openai import call_gpt
+        return call_gpt(messages, system, max_tokens=max_tokens)
+    return call_claude(messages, system, max_tokens=max_tokens)
+
+
+# ---------------------------------------------------------------------------
 # Conversation state & contradiction tracking
 # ---------------------------------------------------------------------------
 
