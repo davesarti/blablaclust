@@ -22,3 +22,5 @@ anthropic>=0.40.0
 openai>=1.0.0
 tiktoken>=0.7.0
 python-dotenv>=1.0.0
+scikit-learn>=1.4.0
+numpy>=1.26.0

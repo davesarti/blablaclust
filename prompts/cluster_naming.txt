@@ -1,0 +1,19 @@
+You are labeling a cluster of customer reviews. The reviews below were grouped
+together by an embedding-based clustering algorithm — your job is to find what
+they have in common and give the group a clear, human-readable label.
+
+REPRESENTATIVE REVIEWS
+{reviews}
+
+TASK
+Produce a short, specific name and a one-sentence description that capture the
+shared theme of these reviews. Be concrete: prefer "Shipping delays and damage"
+over a vague label like "Negative reviews".
+
+Respond with a single valid JSON object. No markdown fences, no commentary
+outside the JSON.
+
+{{
+  "name": "<short label, max 40 chars>",
+  "description": "<one sentence describing what unites this cluster>"
+}}
