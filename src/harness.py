@@ -327,8 +327,60 @@ class ConversationContext:
         new_oracle_turn: dict,
         cluster_state: list[dict],
     ) -> ContradictionRecord | None:
-        # Week 3: implement real logic
-        # For now: stub that always returns None
+        # Cerca contraddizioni tra il turno corrente e quelli precedenti sullo stesso cluster.
+        # Logica: se due turni usano keyword opposte (split↔merge) e condividono almeno un
+        # target_cluster_id, viene restituito un ContradictionRecord che descrive il conflitto.
+        # Logica puramente Python — nessuna chiamata LLM, quindi indipendente dal provider
+        # (funziona uguale con harness_openai o harness Anthropic).
+        #
+        # Need at least one prior turn to compare against.
+        if len(self._oracle_turns) < 2:
+            return None
+
+        _SPLIT_KEYWORDS = {"split", "divide", "separate", "break"}
+        _MERGE_KEYWORDS = {"merge", "combine", "join", "unify", "consolidate"}
+
+        def _intent(text: str) -> str | None:
+            words = set(text.lower().split())
+            if words & _SPLIT_KEYWORDS:
+                return "split"
+            if words & _MERGE_KEYWORDS:
+                return "merge"
+            return None
+
+        # _oracle_turns[-1] is the current turn (already appended by add_oracle_turn).
+        current = self._oracle_turns[-1]
+        current_intent = _intent(current.get("raw_text", ""))
+        if current_intent is None:
+            return None
+
+        current_clusters = set(current.get("target_cluster_ids", []))
+        opposite = {"split": "merge", "merge": "split"}
+        current_turn_number = len(self._oracle_turns)
+
+        for i, prior in enumerate(self._oracle_turns[:-1]):
+            prior_clusters = set(prior.get("target_cluster_ids", []))
+            shared = current_clusters & prior_clusters
+            if not shared:
+                continue
+            prior_intent = _intent(prior.get("raw_text", ""))
+            if prior_intent != opposite[current_intent]:
+                continue
+            target_id = next(iter(shared))
+            record = ContradictionRecord(
+                turn_number=current_turn_number,
+                description=(
+                    f"Turn {i + 1} requested '{prior_intent}' on cluster {target_id}, "
+                    f"but turn {current_turn_number} requests '{current_intent}'."
+                ),
+                earlier_turn=i + 1,
+                feedback_type_a=prior.get("feedback_type", ""),
+                feedback_type_b=current.get("feedback_type", ""),
+                target_cluster_id=target_id,
+            )
+            self.contradictions.append(record)
+            return record
+
         return None
 
     def build_messages(self, model: str = DEFAULT_MODEL) -> list[dict[str, str]]:
