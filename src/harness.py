@@ -31,7 +31,7 @@ _PRICING: dict[str, dict[str, float]] = {
 
 _DRY_RUN_OUTPUT = json.dumps({
     "action": "no_change",
-    "clusters_updated": [],
+    "operations": [],
     "display": "[DRY RUN] This is a mock response. No API call was made.",
     "contradiction_detected": False,
     "cognitive_load_score": 1,

@@ -18,19 +18,28 @@ CONVERSATION HISTORY
 {history_summary}
 
 TASK
-Apply the oracle's feedback to the current cluster state and return the updated clustering.
+Interpret the oracle's feedback and return the operations needed to update the clustering.
+You must NEVER decide which data points belong to which cluster — only specify what structural
+operations to perform. A separate algorithm handles all data point reassignment.
 
 Respond with a single valid JSON object. No markdown fences, no commentary outside the JSON.
 
 {{
-  "action": "<one of: relabel | split | merge | reassign | explain | no_change>",
-  "clusters_updated": [
+  "action": "<one of: merge | split | rename | no_change | explain>",
+  "operations": [
     {{
-      "id": "<existing cluster id or 'new_<short_label>'>",
-      "name": "<short label, max 40 chars>",
-      "description": "<one sentence>",
-      "size": <integer>,
-      "representative_points": ["<point_id>", "..."]
+      "type": "merge",
+      "cluster_ids": ["<id_1>", "<id_2>"],
+      "new_name": "<short label, max 40 chars>"
+    }},
+    {{
+      "type": "split",
+      "cluster_id": "<existing cluster id>"
+    }},
+    {{
+      "type": "rename",
+      "cluster_id": "<existing cluster id>",
+      "new_name": "<short label, max 40 chars>"
     }}
   ],
   "display": "<plain English explanation of what changed and why, max 3 sentences, shown directly to oracle>",
@@ -39,7 +48,9 @@ Respond with a single valid JSON object. No markdown fences, no commentary outsi
 }}
 
 CONSTRAINTS
-- Use only point IDs present in the provided clusters. Do not invent IDs.
-- If feedback_type is "explain", set action to "explain" and do not modify clusters.
+- Use only cluster IDs present in the provided clusters. Do not invent IDs.
+- operations can be an empty array when action is "no_change" or "explain".
+- Each operation must have a "type" field: merge | split | rename.
+- If feedback_type is "explain", set action to "explain" and leave operations empty.
 - If contradiction_detected is true, briefly note the conflict in the display field.
 - cognitive_load_score reflects how much information the oracle must process this turn (1=trivial, 5=overwhelming).
