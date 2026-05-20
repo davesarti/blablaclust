@@ -33,7 +33,7 @@ def f_output(
     msg = call_llm(context.build_messages(), system=prompt)
 
     # Register Claude's response in the conversation memory.
-    context.add_system_turn({"display": msg.text})
+    context.add_system_turn(raw)
 
     # Return the raw parsed JSON — f_next_state is responsible for turning this
     # into a proper ChatSessionState. This function never touches state logic.

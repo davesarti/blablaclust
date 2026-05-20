@@ -18,7 +18,7 @@ Componenti del grading di competenza P4:
 |---|---|
 | `src/harness.py` | ✅ creato (Week 1) |
 | `prompts/f_output.txt` | ✅ creato (Week 1) |
-| `prompts/f_next_state.txt` | ⬜ Week 2 |
+| `prompts/f_next_state.txt` | ~~⬜ Week 2~~ — rimosso, P3+P4 usano solo `f_output.txt` |
 | `prompts/f_next_best_step.txt` | ⬜ Week 3 |
 | `prompts/f_uncertainty.txt` | ⬜ Week 3 |
 | `prompts/f_eval.txt` | ⬜ Week 4 |
@@ -139,11 +139,9 @@ print(hash_prompt('f_output'), msg.content[0].text)
 
 ### Week 2 — f_next_state + feedback history
 
-- Scrivere `prompts/f_next_state.txt`
+- ~~Scrivere `prompts/f_next_state.txt`~~ — P3+P4 hanno deciso di usare solo `f_output.txt` come unico prompt
 - Popolare `ConversationContext` con storia reale dal DB (richiede `crud.get_session_turns` da P1)
 - Test su 5 turni reali con chiamata vera (non dry-run)
-
-`f_next_state.txt` variabili: `{current_state_json}`, `{oracle_raw_text}`, `{feedback_type}`, `{target_cluster_id}`, `{feedback_history_json}`
 
 ### Week 3 — Contradiction tracking + f_next_best_step
 
@@ -197,6 +195,5 @@ Se il modello risponde con JSON malformato, l'errore emerge nel layer corretto.
 - (da compilare a fine sprint)
 
 ## Cosa faccio nel prossimo sprint
-- Scrivere `prompts/f_next_state.txt`
 - Integrare `ConversationContext` con DB (aspetta `crud.get_session_turns` da P1)
 - Test su turni reali con API vera
