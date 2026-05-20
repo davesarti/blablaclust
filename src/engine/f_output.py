@@ -9,7 +9,7 @@ def f_output(
     oracle_turn: InputOracle,
     context: ConversationContext,
     total_points: int,
-) -> dict:
+) -> tuple[dict, dict]:
     # Build the prompt by injecting current state and oracle input into the
     # f_output.txt template. Claude receives the full picture: existing clusters,
     # what the oracle just said, and the conversation history so far.
@@ -45,6 +45,6 @@ def f_output(
     # Register Claude's response in the conversation memory.
     context.add_system_turn(raw)
 
-    # Return the raw parsed JSON — f_next_state is responsible for turning this
-    # into a proper ChatSessionState. This function never touches state logic.
-    return raw
+    # Return raw dict + usage so callers can persist token counts and cost.
+    # f_next_state is responsible for turning raw into a proper ChatSessionState.
+    return raw, msg.usage

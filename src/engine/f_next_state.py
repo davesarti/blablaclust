@@ -12,7 +12,7 @@ def f_next_state(
     # Ask Claude to apply the oracle's feedback to the current clustering.
     # raw is a dict with keys: action, clusters_updated, display,
     # contradiction_detected, cognitive_load_score.
-    raw = f_output(state, oracle_turn, context, total_points)
+    raw, _ = f_output(state, oracle_turn, context, total_points)
 
     # Rebuild the cluster list from Claude's response. Claude only knows about
     # clustering fields (name, description, size, etc.) — we fill in session_id

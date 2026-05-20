@@ -75,6 +75,8 @@ class SystemTurn(BaseModel):
     contradiction_detail: Optional[str] = None
     cognitive_load_score: int = Field(ge=1, le=5)
     state_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    token_usage: Optional[Dict[str, int]] = None
+    cost_usd: Optional[float] = None
 
 
 class TurnRead(BaseModel):
