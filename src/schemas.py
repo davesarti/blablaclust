@@ -36,6 +36,13 @@ class ChatSessionState(BaseModel):
     contradictions: List[Any] = Field(default_factory=list)
 
 
+class SoftAssignment(BaseModel):
+    data_point_id: str
+    cluster_id: str
+    turn_number: int = Field(ge=1)
+    probability: float = Field(ge=0.0, le=1.0)
+
+
 class DatasetUploadResponse(BaseModel):
     dataset_name: str
     inserted: int
