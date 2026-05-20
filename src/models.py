@@ -92,7 +92,7 @@ class SoftAssignment(Base):
 			"probability >= 0.0 AND probability <= 1.0",
 			name="ck_soft_assignments_probability",
 		),
-		CheckConstraint("turn_number >= 1", name="ck_soft_assignments_turn_number"),
+		CheckConstraint("turn_number >= 0", name="ck_soft_assignments_turn_number"),
 	)
 
 	data_point_id: Mapped[str] = mapped_column(

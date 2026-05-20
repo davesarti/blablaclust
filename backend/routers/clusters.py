@@ -64,7 +64,7 @@ def run_initial_clustering(
             data_points=data_points,
             k=payload.k,
             session_id=session_id,
-            turn_number=1,
+            turn_number=0,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))

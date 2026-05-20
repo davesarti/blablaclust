@@ -43,7 +43,7 @@ def initial_clustering(
     data_points: list[DataPoint],
     k: int,
     session_id: str,
-    turn_number: int = 1,
+    turn_number: int = 0,
 ) -> tuple[list[DbCluster], list[DbSoftAssignment]]:
     """Run k-means on the embedding matrix and compute soft assignments.
 
@@ -54,7 +54,8 @@ def initial_clustering(
         data_points: DataPoint rows that must already have embeddings.
         k: Number of clusters (>= 1 and <= number of embedded points).
         session_id: The ChatSession this clustering belongs to.
-        turn_number: Turn at which the clustering is recorded (default 1).
+        turn_number: Turn at which the clustering is recorded (default 0 —
+            the pre-oracle state; oracle turns start at 1).
 
     Returns:
         (db_clusters, db_assignments) — not yet added to any DB session.
