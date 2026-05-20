@@ -288,6 +288,9 @@ def call_llm(
     if provider == "openai":
         from src.harness_openai import call_gpt
         return call_gpt(messages, system, max_tokens=max_tokens)
+    if provider == "openrouter":
+        from src.harness_openrouter import call_openrouter
+        return call_openrouter(messages, system, max_tokens=max_tokens)
     return call_claude(messages, system, max_tokens=max_tokens)
 
 
