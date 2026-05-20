@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from backend.main import get_db
 from backend.session_state import build_cluster_schemas
 from src.engine.cluster_naming import name_clusters
+from src.engine.f_parse_clustering_intent import f_parse_clustering_intent
 from src.engine.initial_clustering import initial_clustering, silhouette_for_k, sweep_k
 from src.models import ChatSession, Cluster as DbCluster, DataPoint, SoftAssignment
 from src.schemas import Cluster as ClusterSchema, ClusterPointsResponse, ClusterPoint
@@ -18,6 +19,15 @@ class ClusteringRequest(BaseModel):
     generate_names: bool = Field(
         default=True,
         description="Ask the LLM to name each cluster (set false to skip LLM calls)",
+    )
+    oracle_intent: str | None = Field(
+        default=None,
+        description=(
+            "Free-text description of how the oracle wants to cluster "
+            "(e.g. 'separate positive from negative reviews'). "
+            "When provided, Claude extracts k and axis automatically "
+            "and the k field is ignored."
+        ),
     )
 
 
@@ -60,10 +70,22 @@ def run_initial_clustering(
             detail=f"No data points found for dataset '{session.dataset_name}'",
         )
 
+    # If the oracle described their intent in natural language, let Claude extract k.
+    # Otherwise fall back to the explicit k from the request body.
+    if payload.oracle_intent:
+        parsed = f_parse_clustering_intent(
+            payload.oracle_intent,
+            k_min=1,
+            k_max=min(50, len(data_points)),
+        )
+        k = parsed["k"]
+    else:
+        k = payload.k
+
     try:
         db_clusters, db_assignments = initial_clustering(
             data_points=data_points,
-            k=payload.k,
+            k=k,
             session_id=session_id,
             turn_number=0,
         )
@@ -91,15 +113,15 @@ def run_initial_clustering(
 
     # Silhouette score is only defined for 2 <= k < n_points.
     silhouette: float | None = None
-    if 2 <= payload.k < len(data_points):
+    if 2 <= k < len(data_points):
         try:
-            silhouette = silhouette_for_k(data_points, payload.k)
+            silhouette = silhouette_for_k(data_points, k)
         except ValueError:
             silhouette = None
 
     return {
         "session_id": session_id,
-        "k": payload.k,
+        "k": k,
         "silhouette_score": silhouette,
         "clusters": [
             {
