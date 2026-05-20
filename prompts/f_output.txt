@@ -35,11 +35,11 @@ Respond with a single valid JSON object. No markdown fences, no commentary outsi
   ],
   "display": "<plain English explanation of what changed and why, max 3 sentences, shown directly to oracle>",
   "contradiction_detected": <true | false>,
-  "cognitive_load_score": <float between 0.0 and 1.0>
+  "cognitive_load_score": <integer between 1 and 5>
 }}
 
 CONSTRAINTS
 - Use only point IDs present in the provided clusters. Do not invent IDs.
 - If feedback_type is "explain", set action to "explain" and do not modify clusters.
 - If contradiction_detected is true, briefly note the conflict in the display field.
-- cognitive_load_score reflects how much information the oracle must process this turn (0=trivial, 1=overwhelming).
+- cognitive_load_score reflects how much information the oracle must process this turn (1=trivial, 5=overwhelming).
