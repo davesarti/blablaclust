@@ -34,7 +34,7 @@ _DRY_RUN_OUTPUT = json.dumps({
     "clusters_updated": [],
     "display": "[DRY RUN] This is a mock response. No API call was made.",
     "contradiction_detected": False,
-    "cognitive_load_score": 0.0,
+    "cognitive_load_score": 1,
 })
 
 
@@ -344,5 +344,5 @@ class ConversationContext:
     Calcola un punteggio grezzo di "carico cognitivo", espresso come il rapporto tra il numero di interazioni avute e un massimo teorico (max_turns). 
     Restituisce un valore compreso tra 0.0 e 1.0.
     '''
-    def get_cognitive_load_score(self, max_turns: int = 20) -> float:
-        return min(len(self._oracle_turns) / max_turns, 1.0)
+    def get_cognitive_load_score(self, max_turns: int = 20) -> int:
+        return max(1, min(round(len(self._oracle_turns) / max_turns * 5), 5))
