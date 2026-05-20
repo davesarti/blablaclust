@@ -22,7 +22,7 @@ class FeedbackEntry(BaseModel):
     turn: int
     type: Literal["global", "cluster", "point", "instructional"]
     content: str
-    target_cluster_id: Optional[str] = None
+    target_cluster_ids: List[str] = Field(default_factory=list)
     target_point_ids: List[str] = Field(default_factory=list)
 
 
@@ -54,7 +54,7 @@ class InputOracle(BaseModel):
     session_id: str
     raw_text: str
     feedback_type: Literal["global", "cluster", "point", "instructional"]
-    target_cluster_id: Optional[str] = None
+    target_cluster_ids: List[str] = Field(default_factory=list)
     target_point_ids: List[str] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 

@@ -117,6 +117,24 @@ def test_closed_session_returns_409(client):
 def test_unknown_target_cluster_returns_422(client):
     resp = client.post(
         "/turns",
-        json=_payload(feedback_type="cluster", target_cluster_id="nope"),
+        json=_payload(feedback_type="cluster", target_cluster_ids=["nope"]),
+    )
+    assert resp.status_code == 422
+
+
+def test_multiple_target_clusters_accepted(client):
+    # c1 is valid; a second valid cluster would be needed for a real merge,
+    # but the guard only rejects unknown IDs — single known ID must pass
+    resp = client.post(
+        "/turns",
+        json=_payload(feedback_type="cluster", target_cluster_ids=["c1"]),
+    )
+    assert resp.status_code == 201
+
+
+def test_mixed_valid_invalid_clusters_returns_422(client):
+    resp = client.post(
+        "/turns",
+        json=_payload(feedback_type="cluster", target_cluster_ids=["c1", "nope"]),
     )
     assert resp.status_code == 422

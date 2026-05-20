@@ -1,7 +1,6 @@
 import os
 os.environ["HARNESS_DRY_RUN"] = "true"
 
-import pytest
 from src.schemas import ChatSessionState, InputOracle, Cluster
 from src.harness import ConversationContext
 from src.engine.f_next_state import f_next_state
@@ -34,12 +33,12 @@ def make_state(clusters: list[Cluster] | None = None) -> ChatSessionState:
     )
 
 
-def make_oracle_turn(feedback_type: str = "global", target_cluster_id: str | None = None) -> InputOracle:
+def make_oracle_turn(feedback_type: str = "global", target_cluster_ids: list[str] | None = None) -> InputOracle:
     return InputOracle(
         session_id="sess-1",
         raw_text="merge the two clusters",
         feedback_type=feedback_type,
-        target_cluster_id=target_cluster_id,
+        target_cluster_ids=target_cluster_ids or [],
         target_point_ids=[],
         metadata={},
     )
@@ -81,12 +80,12 @@ def test_feedback_history_grows():
 def test_feedback_entry_content_matches_oracle_input():
     state = make_state()
     context = ConversationContext(session_id="sess-1")
-    oracle_turn = make_oracle_turn(feedback_type="cluster", target_cluster_id="c1")
+    oracle_turn = make_oracle_turn(feedback_type="cluster", target_cluster_ids=["c1"])
     new_state = f_next_state(state, oracle_turn, context, total_points=100)
     entry = new_state.feedback_history[-1]
     assert entry.content == oracle_turn.raw_text
     assert entry.type == "cluster"
-    assert entry.target_cluster_id == "c1"
+    assert entry.target_cluster_ids == ["c1"]
 
 
 def test_no_crash_with_empty_clusters():

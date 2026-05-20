@@ -102,13 +102,13 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
             detail="No active clusters for this session — run clustering first",
         )
 
-    if payload.target_cluster_id is not None:
-        cluster_ids = {cluster.id for cluster in clusters}
-        if payload.target_cluster_id not in cluster_ids:
+    if payload.target_cluster_ids:
+        active_ids = {cluster.id for cluster in clusters}
+        unknown = [cid for cid in payload.target_cluster_ids if cid not in active_ids]
+        if unknown:
             raise HTTPException(
                 status_code=422,
-                detail=f"target_cluster_id '{payload.target_cluster_id}' "
-                "is not an active cluster in this session",
+                detail=f"target_cluster_ids contains unknown cluster(s): {unknown}",
             )
 
     state = build_session_state(db, session)

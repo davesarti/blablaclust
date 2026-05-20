@@ -12,7 +12,7 @@ CURRENT CLUSTERS
 ORACLE INPUT
 Feedback type: {feedback_type}
 Text: {oracle_raw_text}
-Target cluster: {target_cluster_id}
+Target clusters: {target_cluster_ids}
 
 CONVERSATION HISTORY
 {history_summary}

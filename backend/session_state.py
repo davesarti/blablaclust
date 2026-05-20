@@ -123,7 +123,7 @@ def build_session_state(db: Session, session: ChatSession) -> ChatSessionState:
                 turn=turn.turn_number,
                 type=oracle_input.get("feedback_type", "global"),
                 content=oracle_input.get("raw_text", ""),
-                target_cluster_id=oracle_input.get("target_cluster_id"),
+                target_cluster_ids=oracle_input.get("target_cluster_ids") or [],
                 target_point_ids=oracle_input.get("target_point_ids") or [],
             )
         )
