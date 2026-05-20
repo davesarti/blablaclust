@@ -1,6 +1,7 @@
 import json
 from src.schemas import ChatSessionState, InputOracle
-from src.harness import ConversationContext, render_prompt, call_llm
+from src.harness import ConversationContext, render_prompt, call_llm, hash_prompt, estimate_cost_usd
+from src.logger import log_llm_call
 
 
 def f_output(
@@ -31,10 +32,19 @@ def f_output(
     # Call whichever LLM is configured (Claude or GPT) via the provider-agnostic
     # wrapper — LLM_PROVIDER env var controls which one is used.
     msg = call_llm(context.build_messages(), system=prompt)
+    log_llm_call(
+        session_id=state.session_id,
+        prompt_name="f_output",
+        prompt_hash=hash_prompt("f_output"),
+        usage=msg.usage,
+        cost_usd=estimate_cost_usd(msg.usage),
+    )
+
+    raw = json.loads(msg.text)
 
     # Register Claude's response in the conversation memory.
     context.add_system_turn(raw)
 
     # Return the raw parsed JSON — f_next_state is responsible for turning this
     # into a proper ChatSessionState. This function never touches state logic.
-    return json.loads(msg.text)
+    return raw
