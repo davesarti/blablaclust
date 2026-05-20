@@ -29,7 +29,6 @@ def make_state(clusters: list[Cluster] | None = None) -> ChatSessionState:
         clusters=clusters or [make_cluster("c1"), make_cluster("c2")],
         feedback_history=[],
         contradictions=[],
-        oracle_preferences={},
     )
 
 

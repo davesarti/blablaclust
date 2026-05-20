@@ -45,7 +45,7 @@ def f_next_state(
         turn=state.turn_number,
         type=oracle_turn.feedback_type,
         content=oracle_turn.raw_text,
-        target_cluster_id=oracle_turn.target_cluster_id,
+        target_cluster_ids=oracle_turn.target_cluster_ids,
     )
 
     # Return a new state object — never mutate the input state.

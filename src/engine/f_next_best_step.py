@@ -1,45 +1,123 @@
-import json
+"""Decide what the system should do next after processing one oracle turn.
 
-from src.schemas import ChatSessionState, SystemTurn, Display
-from src.harness import ConversationContext, render_prompt, call_llm, hash_prompt, estimate_cost_usd
-from src.logger import log_llm_call
+The three possible actions:
+  - "show"  →  present the current clustering state to the oracle
+  - "ask"   →  ask the oracle to clarify a specific ambiguous area
+                (triggered when boundary points are found with high uncertainty)
+  - "stop"  →  end the session (oracle is cognitively overloaded or the
+                clustering has stabilised over many turns)
+
+Decision logic (rule-based, no LLM needed):
+  1. If cognitive load is too high (score >= 4) or too many turns have passed
+     (turn_number > MAX_TURNS), stop — the oracle has given enough feedback.
+  2. If there are boundary points with uncertainty above ASK_THRESHOLD,
+     ask — there are genuinely ambiguous data points worth clarifying.
+  3. Otherwise, show — present the current state and wait for the next turn.
+"""
+
+from src.engine.f_uncertainty import BoundaryPoint
+from src.schemas import ChatSessionState, Display, SystemTurn
+from src.harness import ConversationContext
+
+# A point with uncertainty >= this value is worth asking the oracle about.
+ASK_THRESHOLD = 0.4
+
+# After this many turns the session is likely to have converged.
+MAX_TURNS = 20
 
 
 def f_next_best_step(
     state: ChatSessionState,
-    uncertainty: list,
+    uncertainty: list[BoundaryPoint],
     context: ConversationContext,
 ) -> SystemTurn:
-    prompt = render_prompt(
-        "f_next_best_step",
-        turn_number=state.turn_number,
-        cognitive_load=context.get_cognitive_load_score(),
-        current_state_json=json.dumps([c.model_dump() for c in state.clusters]),
-        last_oracle_input=json.dumps(
-            state.feedback_history[-1].model_dump() if state.feedback_history else {}
-        ),
-        uncertainty_scores_json=json.dumps(uncertainty),
-    )
+    """Return the next action the system should take.
 
-    msg = call_llm([{"role": "user", "content": prompt}], system="")
-    log_llm_call(
-        session_id=state.session_id,
-        prompt_name="f_next_best_step",
-        prompt_hash=hash_prompt("f_next_best_step"),
-        usage=msg.usage,
-        cost_usd=estimate_cost_usd(msg.usage),
-    )
+    Args:
+        state: Current clustering state (clusters, turn number, history).
+        uncertainty: Output of f_uncertainty — boundary points sorted by score.
+        context: Conversation memory, used to compute cognitive load.
 
-    raw = json.loads(msg.text)
+    Returns:
+        A SystemTurn describing what to show/ask/stop and why.
+    """
+    cognitive_load = context.get_cognitive_load_score()
+    contradiction = bool(state.contradictions)
 
+    # Rule 1: stop if the oracle is overloaded or the session has run long.
+    if cognitive_load >= 4 or state.turn_number > MAX_TURNS:
+        return SystemTurn(
+            session_id=state.session_id,
+            turn_number=state.turn_number,
+            action="stop",
+            clusters_updated=False,
+            display=Display(
+                type="text",
+                content=(
+                    f"Clustering complete after {state.turn_number} turns. "
+                    f"Final state has {len(state.clusters)} clusters."
+                ),
+            ),
+            contradiction_detected=contradiction,
+            contradiction_detail=state.contradictions[-1] if contradiction else None,
+            cognitive_load_score=cognitive_load,
+            state_snapshot={"reason": "max_turns_or_load_reached"},
+        )
+
+    # Rule 2: ask if there are genuinely ambiguous data points.
+    ambiguous = [p for p in uncertainty if p.uncertainty_score >= ASK_THRESHOLD]
+    if ambiguous:
+        top = ambiguous[0]  # most uncertain point
+        return SystemTurn(
+            session_id=state.session_id,
+            turn_number=state.turn_number,
+            action="ask",
+            clusters_updated=False,
+            display=Display(
+                type="text",
+                content=(
+                    f"Some data points are ambiguous between clusters. "
+                    f"For example: \"{top.text_preview[:120]}\" "
+                    f"(uncertainty {top.uncertainty_score:.2f}). "
+                    f"How should this be classified?"
+                ),
+                items=[
+                    {
+                        "point_id": p.point_id,
+                        "text_preview": p.text_preview,
+                        "uncertainty_score": p.uncertainty_score,
+                        "cluster_scores": p.cluster_scores,
+                    }
+                    for p in ambiguous[:5]  # surface top 5 to the oracle
+                ],
+            ),
+            contradiction_detected=contradiction,
+            contradiction_detail=state.contradictions[-1] if contradiction else None,
+            cognitive_load_score=cognitive_load,
+            state_snapshot={"ambiguous_count": len(ambiguous)},
+        )
+
+    # Rule 3: show — clustering looks stable, present current state.
     return SystemTurn(
         session_id=state.session_id,
         turn_number=state.turn_number,
-        action=raw["action"],
+        action="show",
         clusters_updated=False,
-        display=Display(type="text", content=raw["display_content"]),
-        contradiction_detected=False,
-        contradiction_detail=None,
-        cognitive_load_score=raw["cognitive_load_score"],
-        state_snapshot={},
+        display=Display(
+            type="text",
+            content=(
+                f"Current clustering has {len(state.clusters)} clusters "
+                f"after {state.turn_number} turns. "
+                "All data points are assigned with high confidence."
+            ),
+            items=[
+                {"cluster_id": c.id, "name": c.name, "size": c.size}
+                for c in state.clusters
+            ],
+        ),
+        contradiction_detected=contradiction,
+        contradiction_detail=state.contradictions[-1] if contradiction else None,
+        cognitive_load_score=cognitive_load,
+        state_snapshot={"reason": "stable_clustering"},
     )
+
