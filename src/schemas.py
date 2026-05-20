@@ -75,3 +75,10 @@ class SystemTurn(BaseModel):
     contradiction_detail: Optional[str] = None
     cognitive_load_score: int = Field(ge=1, le=5)
     state_snapshot: Dict[str, Any] = Field(default_factory=dict)
+
+
+class TurnRead(BaseModel):
+    session_id: str
+    turn_number: int
+    oracle_input: InputOracle
+    system_output: SystemTurn

@@ -1,7 +1,6 @@
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -10,19 +9,12 @@ from backend.session_state import build_session_state
 from src.engine.f_output import f_output
 from src.harness import ConversationContext
 from src.models import ChatSession, Cluster as DbCluster, DataPoint, Turn
-from src.schemas import InputOracle
+from src.schemas import InputOracle, TurnRead
 
 router = APIRouter(prefix="/turns", tags=["turns"])
 
 
-class TurnPlaceholder(BaseModel):
-    session_id: str
-    turn_number: int
-    oracle_input: dict
-    system_output: dict
-
-
-@router.get("", response_model=list[TurnPlaceholder])
+@router.get("", response_model=list[TurnRead])
 def list_turns(
     session_id: str = Query(...),
     limit: int = Query(50, ge=1, le=200),
@@ -40,18 +32,26 @@ def list_turns(
         .all()
     )
 
-    return [
-        TurnPlaceholder(
-            session_id=turn.session_id,
-            turn_number=turn.turn_number,
-            oracle_input=turn.oracle_input,
-            system_output=turn.system_output,
-        )
-        for turn in turns
-    ]
+    return [TurnRead.model_validate(turn, from_attributes=True) for turn in turns]
 
 
-@router.get("/{session_id}/{turn_number}", response_model=TurnPlaceholder)
+@router.get("/{session_id}", response_model=list[TurnRead])
+def list_turns_for_session(session_id: str, db: Session = Depends(get_db)):
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    turns = (
+        db.query(Turn)
+        .filter(Turn.session_id == session_id)
+        .order_by(Turn.turn_number.asc())
+        .all()
+    )
+
+    return [TurnRead.model_validate(turn, from_attributes=True) for turn in turns]
+
+
+@router.get("/{session_id}/{turn_number}", response_model=TurnRead)
 def read_turn(session_id: str, turn_number: int, db: Session = Depends(get_db)):
     turn = (
         db.query(Turn)
@@ -61,15 +61,10 @@ def read_turn(session_id: str, turn_number: int, db: Session = Depends(get_db)):
     if turn is None:
         raise HTTPException(status_code=404, detail="Turn not found")
 
-    return TurnPlaceholder(
-        session_id=turn.session_id,
-        turn_number=turn.turn_number,
-        oracle_input=turn.oracle_input,
-        system_output=turn.system_output,
-    )
+    return TurnRead.model_validate(turn, from_attributes=True)
 
 
-@router.post("", response_model=TurnPlaceholder, status_code=201)
+@router.post("", response_model=TurnRead, status_code=201)
 def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     """Run one engine interaction step and persist it as a turn.
 
@@ -160,9 +155,4 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_turn)
 
-    return TurnPlaceholder(
-        session_id=new_turn.session_id,
-        turn_number=new_turn.turn_number,
-        oracle_input=new_turn.oracle_input,
-        system_output=new_turn.system_output,
-    )
+    return TurnRead.model_validate(new_turn, from_attributes=True)
