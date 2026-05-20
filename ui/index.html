@@ -1,34 +1,34 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Conversational Clustering</title>
+  <title>BlaBlaClust</title>
   <style>
     :root {
       /* ── Palette ────────────────────────────────────────────────
-         #706D54  olive scuro  → accento primario, testo muted
-         #A08963  marrone mid  → testo faint, bordi forti
-         #C9B194  beige caldo  → glow, highlight, msg-diff border
-         #DBDBDB  grigio luce  → surface principale
+         #622B14  mogano scuro  → accento primario, testo muted
+         #995F2F  terra bruna   → testo faint, bordi forti
+         #978F66  oliva/cachi   → bordi, superfici terziarie
+         #E4D6A9  crema calda   → surface principale
       ─────────────────────────────────────────────────────────── */
-      --bg:          #f0ede6;   /* bianco caldo derivato dalla palette */
-      --surface:     #DBDBDB;   /* palette — surface principale       */
-      --surface-2:   #d0ccc5;   /* surface secondaria                  */
-      --surface-3:   #c8c3bb;   /* surface terziaria (msg sistema)     */
-      --border:      #bfbbb3;   /* bordo sottile                       */
-      --border-s:    #A08963;   /* palette — bordo forte               */
-      --text:        #1a1916;   /* quasi-nero caldo per leggibilità    */
-      --text-muted:  #706D54;   /* palette — testo secondario          */
-      --text-faint:  #A08963;   /* palette — label, placeholder        */
-      --accent:      #706D54;   /* palette — accento primario          */
-      --accent-dim:  rgba(112,109,84,.1);
-      --green:       #3a7548;
-      --green-bg:    rgba(58,117,72,.09);
-      --blue:        #345888;
-      --blue-bg:     rgba(52,88,136,.09);
-      --red:         #883838;
-      --red-bg:      rgba(136,56,56,.09);
+      --bg:          #f5eed8;   /* crema chiara derivata dalla palette */
+      --surface:     #E4D6A9;   /* palette — surface principale        */
+      --surface-2:   #d8ca98;   /* surface secondaria                  */
+      --surface-3:   #cfc08a;   /* surface terziaria (msg sistema)     */
+      --border:      #c4b47a;   /* bordo sottile                       */
+      --border-s:    #978F66;   /* palette — bordo forte               */
+      --text:        #1e0c04;   /* quasi-nero caldo per leggibilità    */
+      --text-muted:  #622B14;   /* palette — testo secondario          */
+      --text-faint:  #995F2F;   /* palette — label, placeholder        */
+      --accent:      #622B14;   /* palette — accento primario          */
+      --accent-dim:  rgba(98,43,20,.1);
+      --green:       #3a6b40;
+      --green-bg:    rgba(58,107,64,.09);
+      --blue:        #345278;
+      --blue-bg:     rgba(52,82,120,.09);
+      --red:         #7a2828;
+      --red-bg:      rgba(122,40,40,.09);
       --header-h:    44px;
       --drawer-col:  116px;
       --drawer-exp:  380px;
@@ -47,7 +47,7 @@
       line-height: 1.5;
       color: var(--text);
       background-color: var(--bg);
-      background-image: radial-gradient(circle at 1px 1px, rgba(112,109,84,.06) 1px, transparent 0);
+      background-image: radial-gradient(circle at 1px 1px, rgba(98,43,20,.05) 1px, transparent 0);
       background-size: 28px 28px;
       overflow: hidden;
       height: 100vh;
@@ -118,57 +118,62 @@
       content: '';
       position: absolute;
       inset: 0;
-      background: radial-gradient(ellipse 60% 55% at 50% 50%, rgba(201,177,148,.18) 0%, transparent 68%);
+      background: radial-gradient(ellipse 65% 55% at 50% 50%, rgba(153,95,47,.16) 0%, transparent 68%);
       pointer-events: none;
     }
 
     .welcome-inner {
       text-align: center;
-      max-width: 460px;
+      max-width: 560px;
       position: relative;
       z-index: 1;
     }
     .welcome-mark {
-      font-size: 56px;
-      margin-bottom: 28px;
-      display: block;
-      color: var(--accent);
-      line-height: 1;
-      animation: markGlow 3.2s ease-in-out infinite;
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+      justify-content: center;
+      margin-bottom: 32px;
+      height: 52px;
     }
-    @keyframes markGlow {
-      0%, 100% {
-        text-shadow: 0 0 20px rgba(201,177,148,.7), 0 0 60px rgba(201,177,148,.25);
-      }
-      50% {
-        text-shadow: 0 0 30px rgba(201,177,148,.95), 0 0 90px rgba(201,177,148,.4), 0 0 150px rgba(201,177,148,.12);
-      }
+    .wm-bar {
+      width: 14px;
+      border-radius: 2px 2px 1px 1px;
+      background: var(--accent);
+      animation: barBreathe 2.8s ease-in-out infinite;
+    }
+    .wm-bar:nth-child(1) { height: 52px; }
+    .wm-bar:nth-child(2) { height: 33px; opacity: 0.52; animation-delay: 0.26s; }
+    .wm-bar:nth-child(3) { height: 18px; opacity: 0.26; animation-delay: 0.52s; }
+    @keyframes barBreathe {
+      0%, 100% { transform: scaleY(1); }
+      50%       { transform: scaleY(0.84); }
     }
     .welcome-inner h1 {
       font-family: var(--serif);
-      font-size: 30px;
+      font-size: 44px;
       font-weight: normal;
-      letter-spacing: -0.025em;
-      margin-bottom: 12px;
-      line-height: 1.2;
+      letter-spacing: -0.03em;
+      margin-bottom: 14px;
+      line-height: 1.1;
       color: var(--text);
     }
     .welcome-inner p {
-      font-size: 13px;
+      font-size: 16px;
       color: var(--text-muted);
-      line-height: 1.75;
-      margin-bottom: 32px;
+      line-height: 1.65;
+      margin-bottom: 30px;
     }
     .welcome-meta {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 0;
-      margin-top: 22px;
+      margin-top: 18px;
     }
     .welcome-stat {
       font-family: var(--mono);
-      font-size: 10px;
+      font-size: 11px;
       color: var(--text-faint);
       letter-spacing: 0.05em;
       padding: 0 16px;
@@ -220,12 +225,12 @@
       gap: 10px;
     }
 
-    /* per-cluster accent colors — muted/earthy, armonizzati con la palette */
-    .cluster-card:nth-child(1) { --ca: #8b4040; --ca-rgb: 139,64,64; }
-    .cluster-card:nth-child(2) { --ca: #706D54; --ca-rgb: 112,109,84; }
-    .cluster-card:nth-child(3) { --ca: #3a5a88; --ca-rgb: 58,90,136; }
-    .cluster-card:nth-child(4) { --ca: #3d6b48; --ca-rgb: 61,107,72; }
-    .cluster-card:nth-child(5) { --ca: #6a4880; --ca-rgb: 106,72,128; }
+    /* per-cluster accent colors — earthen, armonizzati con la palette */
+    .cluster-card:nth-child(1) { --ca: #8B3520; --ca-rgb: 139,53,32; }
+    .cluster-card:nth-child(2) { --ca: #622B14; --ca-rgb: 98,43,20; }
+    .cluster-card:nth-child(3) { --ca: #3d5e38; --ca-rgb: 61,94,56; }
+    .cluster-card:nth-child(4) { --ca: #344e60; --ca-rgb: 52,78,96; }
+    .cluster-card:nth-child(5) { --ca: #784838; --ca-rgb: 120,72,56; }
 
     .cluster-card {
       background: var(--surface);
@@ -251,7 +256,7 @@
     .cluster-card:hover {
       background: var(--surface-2);
       border-color: var(--border-s);
-      box-shadow: 0 3px 14px rgba(112,109,84,.15);
+      box-shadow: 0 3px 14px rgba(98,43,20,.14);
       transform: translateY(-1px);
     }
     .cluster-card.selected {
@@ -389,11 +394,11 @@
       border: 1px solid var(--border);
       transition: background 0.22s, border-color 0.22s;
     }
-    .load-dot.d1 { background: #3a7548; border-color: #3a7548; }
-    .load-dot.d2 { background: #7a9040; border-color: #7a9040; }
-    .load-dot.d3 { background: #A08963; border-color: #A08963; }
-    .load-dot.d4 { background: #906040; border-color: #906040; }
-    .load-dot.d5 { background: #883838; border-color: #883838; }
+    .load-dot.d1 { background: #3a6b40; border-color: #3a6b40; }
+    .load-dot.d2 { background: #6a7a38; border-color: #6a7a38; }
+    .load-dot.d3 { background: #995F2F; border-color: #995F2F; }
+    .load-dot.d4 { background: #8B4020; border-color: #8B4020; }
+    .load-dot.d5 { background: #7a2828; border-color: #7a2828; }
 
     .btn-outline {
       display: block; width: 100%;
@@ -492,7 +497,7 @@
     .msg.user {
       align-self: flex-end;
       background: var(--accent-dim);
-      border: 1px solid rgba(112,109,84,.2);
+      border: 1px solid rgba(98,43,20,.2);
       border-radius: var(--r) var(--r) 1px var(--r);
       padding: 7px 11px;
       font-size: 12px;
@@ -521,8 +526,8 @@
 
     .msg-diff {
       margin-top: 8px;
-      background: rgba(201,177,148,.15);
-      border-left: 2px solid #C9B194;
+      background: rgba(151,143,102,.14);
+      border-left: 2px solid #978F66;
       padding: 6px 10px;
       font-family: var(--mono);
       font-size: 10px;
@@ -571,7 +576,7 @@
       font-family: var(--mono);
       font-size: 10px;
       background: var(--accent-dim);
-      border: 1px solid rgba(112,109,84,.22);
+      border: 1px solid rgba(98,43,20,.22);
       border-radius: 2px;
       padding: 2px 8px;
       width: fit-content;
@@ -608,7 +613,7 @@
       transition: border-color 0.14s;
     }
     #chat-input::placeholder { color: var(--text-faint); }
-    #chat-input:focus { border-color: rgba(112,109,84,.4); }
+    #chat-input:focus { border-color: rgba(98,43,20,.38); }
 
     #send-btn {
       background: var(--accent);
@@ -625,7 +630,7 @@
       font-family: var(--sans);
       letter-spacing: 0.01em;
     }
-    #send-btn:hover   { background: #5a5844; }
+    #send-btn:hover   { background: #4a1c0a; }
     #send-btn:disabled { opacity: 0.38; cursor: default; }
 
     /* ── SHARED BUTTONS ── */
@@ -641,7 +646,7 @@
       transition: background 0.12s;
       font-family: var(--sans);
     }
-    .btn-primary:hover { background: #5a5844; }
+    .btn-primary:hover { background: #4a1c0a; }
 
     .btn-link {
       background: none; border: none;
@@ -657,7 +662,7 @@
     .modal-overlay {
       display: none;
       position: fixed; inset: 0;
-      background: rgba(26,25,22,.6);
+      background: rgba(30,12,4,.55);
       z-index: 200;
       align-items: center;
       justify-content: center;
@@ -671,7 +676,7 @@
       padding: 24px;
       width: 420px;
       max-width: 95vw;
-      box-shadow: 0 12px 40px rgba(112,109,84,.18), 0 0 0 1px var(--border);
+      box-shadow: 0 12px 40px rgba(98,43,20,.16), 0 0 0 1px var(--border);
       animation: modalIn 0.2s cubic-bezier(0.4,0,0.2,1);
     }
     @keyframes modalIn {
@@ -719,7 +724,7 @@
     }
     .form-field input::placeholder { color: var(--text-faint); }
     .form-field input:focus,
-    .form-field select:focus { border-color: rgba(112,109,84,.45); }
+    .form-field select:focus { border-color: rgba(98,43,20,.42); }
     .form-field select option { background: var(--surface-2); }
 
     .modal-actions {
@@ -773,7 +778,7 @@
     .review-list li:last-child { border-bottom: none; }
 
     :focus-visible {
-      outline: 2px solid rgba(112,109,84,.45);
+      outline: 2px solid rgba(98,43,20,.4);
       outline-offset: 2px;
       border-radius: 2px;
     }
@@ -784,7 +789,7 @@
 <!-- ── HEADER ── -->
 <div id="header" style="display:none">
   <div class="header-left">
-    <span class="brand">CC</span>
+    <span class="brand">BBC</span>
     <div class="divider"></div>
     <span class="session-name" id="header-name">—</span>
   </div>
@@ -794,18 +799,22 @@
 <!-- ── WELCOME ── -->
 <div id="welcome" class="visible">
   <div class="welcome-inner">
-    <span class="welcome-mark">◈</span>
-    <h1>Conversational Clustering</h1>
-    <p>Organizza iterativamente un dataset di testi in cluster<br>conversando con un'AI. Nessuna ground truth: l'oracle sei tu.</p>
-    <button class="btn-primary" onclick="openModal('modal-new-session')" aria-label="Avvia nuova sessione">
-      Avvia nuova sessione
+    <div class="welcome-mark" aria-hidden="true">
+      <span class="wm-bar"></span>
+      <span class="wm-bar"></span>
+      <span class="wm-bar"></span>
+    </div>
+    <h1>BlaBlaClust</h1>
+    <p>Iteratively organise a text dataset into clusters<br>by conversing with an AI. No ground truth: you are the oracle.</p>
+    <button class="btn-primary" onclick="openModal('modal-new-session'); loadDatasets()" aria-label="Start new session">
+      Start new session
     </button>
     <div class="welcome-meta">
-      <span class="welcome-stat">1.500 recensioni</span>
+      <span class="welcome-stat">1,500 reviews</span>
       <div class="welcome-sep"></div>
       <span class="welcome-stat">Amazon Electronics</span>
       <div class="welcome-sep"></div>
-      <span class="welcome-stat">Clustering iterativo</span>
+      <span class="welcome-stat">Iterative clustering</span>
     </div>
   </div>
 </div>
@@ -816,20 +825,20 @@
 
     <!-- Cluster area -->
     <div id="cluster-area">
-      <div class="section-label">Cluster correnti</div>
+      <div class="section-label">Current clusters</div>
       <div class="cluster-grid" id="cluster-grid"></div>
     </div>
 
     <!-- Sidebar -->
     <div id="sidebar">
       <div class="sb-section">
-        <div class="sb-label">Turno</div>
+        <div class="sb-label">Turn</div>
         <div class="stat-big" id="stat-turn">0</div>
-        <div class="stat-unit">turno</div>
+        <div class="stat-unit">turn</div>
       </div>
       <div class="sb-section">
         <div class="sb-label">Token</div>
-        <div class="stat-tokens" id="stat-tokens">0 token</div>
+        <div class="stat-tokens" id="stat-tokens">0 tokens</div>
         <div class="stat-cost"   id="stat-cost">≈ $0.0000</div>
       </div>
       <div class="sb-section">
@@ -837,12 +846,12 @@
         <div class="load-dots" id="load-dots" aria-label="Cognitive load score"></div>
       </div>
       <div class="sb-section">
-        <div class="sb-label">Azioni</div>
-        <button class="btn-outline blue" id="btn-converge" onclick="markConverged()" aria-label="Segna come Converged">
-          Segna come Converged
+        <div class="sb-label">Actions</div>
+        <button class="btn-outline blue" id="btn-converge" onclick="markConverged()" aria-label="Mark as Converged">
+          Mark as Converged
         </button>
-        <button class="btn-outline red" onclick="openModal('modal-stop')" aria-label="Interrompi sessione">
-          Interrompi sessione
+        <button class="btn-outline red" onclick="openModal('modal-stop')" aria-label="Stop session">
+          Stop session
         </button>
       </div>
     </div>
@@ -854,9 +863,9 @@
     <div id="drawer-topbar">
       <span class="label">
         <span class="drawer-live-dot"></span>
-        Conversazione
+        Conversation
       </span>
-      <button id="toggle-btn" onclick="toggleDrawer()" aria-label="Espandi o collassa la chat">▲</button>
+      <button id="toggle-btn" onclick="toggleDrawer()" aria-label="Expand or collapse chat">▲</button>
     </div>
     <div id="chat-history"></div>
     <div id="typing-indicator">
@@ -867,11 +876,11 @@
     <div id="drawer-input">
       <div id="cluster-tag">
         <span id="cluster-tag-label"></span>
-        <button onclick="deselectCluster()" aria-label="Rimuovi selezione cluster">×</button>
+        <button onclick="deselectCluster()" aria-label="Deselect cluster">×</button>
       </div>
       <div id="input-row">
-        <textarea id="chat-input" rows="2" placeholder="Scrivi il tuo feedback sui cluster…" aria-label="Feedback oracle"></textarea>
-        <button id="send-btn" onclick="sendMessage()" aria-label="Invia messaggio">Invia</button>
+        <textarea id="chat-input" rows="2" placeholder="Share your feedback on the clusters…" aria-label="Oracle feedback"></textarea>
+        <button id="send-btn" onclick="sendMessage()" aria-label="Send message">Send</button>
       </div>
     </div>
   </div>
@@ -882,24 +891,24 @@
 <!-- ── MODAL: Nuova sessione ── -->
 <div class="modal-overlay" id="modal-new-session" role="dialog" aria-modal="true" aria-labelledby="lbl-new">
   <div class="modal-card">
-    <h2 id="lbl-new">Nuova sessione</h2>
+    <h2 id="lbl-new">New session</h2>
     <div class="form-field">
-      <label for="inp-name">Nome sessione *</label>
-      <input type="text" id="inp-name" placeholder="es. Amazon Electronics – Iterazione 1" required />
+      <label for="inp-name">Session name *</label>
+      <input type="text" id="inp-name" placeholder="e.g. Amazon Electronics – Iteration 1" required />
     </div>
     <div class="form-field">
       <label for="inp-dataset">Dataset</label>
       <select id="inp-dataset">
-        <option value="amazon">Amazon Electronics Reviews – 1.500 testi</option>
+        <option value="amazon">amazon (Amazon Electronics Reviews)</option>
       </select>
     </div>
     <div class="form-field">
-      <label for="inp-k">Cluster iniziali suggeriti</label>
+      <label for="inp-k">Suggested initial clusters</label>
       <input type="number" id="inp-k" value="5" min="3" max="10" />
     </div>
     <div class="modal-actions">
-      <button class="btn-link" onclick="closeModal('modal-new-session')">Annulla</button>
-      <button class="btn-primary" onclick="startSession()">Avvia</button>
+      <button class="btn-link" onclick="closeModal('modal-new-session')">Cancel</button>
+      <button class="btn-primary" onclick="startSession()">Start</button>
     </div>
   </div>
 </div>
@@ -907,14 +916,14 @@
 <!-- ── MODAL: Interrompi sessione ── -->
 <div class="modal-overlay" id="modal-stop" role="dialog" aria-modal="true" aria-labelledby="lbl-stop">
   <div class="modal-card">
-    <h2 id="lbl-stop">Interrompi la sessione</h2>
-    <p class="modal-desc">Vuoi esportare i cluster prima di chiudere?</p>
+    <h2 id="lbl-stop">Stop session</h2>
+    <p class="modal-desc">Export your clusters before closing?</p>
     <div class="export-stack">
-      <button class="btn-primary" onclick="exportJSON()">Esporta JSON</button>
-      <button class="btn-secondary" onclick="exportCSV()">Esporta CSV</button>
+      <button class="btn-primary" onclick="exportJSON()">Export JSON</button>
+      <button class="btn-secondary" onclick="exportCSV()">Export CSV</button>
     </div>
     <div class="modal-actions">
-      <button class="btn-link" onclick="closeSessionFinal()">Chiudi senza salvare</button>
+      <button class="btn-link" onclick="closeSessionFinal()">Close without saving</button>
     </div>
   </div>
 </div>
@@ -925,135 +934,51 @@
     <h2 id="lbl-expand">—</h2>
     <ul class="review-list" id="expand-list"></ul>
     <div class="modal-actions">
-      <button class="btn-primary" onclick="closeModal('modal-expand')">Chiudi</button>
+      <button class="btn-primary" onclick="closeModal('modal-expand')">Close</button>
     </div>
   </div>
 </div>
 
 
 <script>
-// --- MOCK DATA ---
+// ── CONSTANTS ──────────────────────────────────────────────────────────────
+const CLUSTER_EMOJIS = ['🔧', '⭐', '🚚', '💰', '📞', '📊', '🎯', '🔍', '💡', '🌿'];
 
-const MOCK_CLUSTERS = [
-  { id: 'c1', name: 'Problemi tecnici',       description: 'Malfunzionamenti, difetti hardware, prodotti rotti alla consegna.',  count: 87,  emoji: '🔧' },
-  { id: 'c2', name: 'Elogi del prodotto',      description: 'Recensioni positive sulla qualità costruttiva e le funzionalità.',   count: 134, emoji: '⭐' },
-  { id: 'c3', name: 'Problemi di spedizione',  description: 'Ritardi, imballaggi danneggiati, consegne errate o mancanti.',       count: 56,  emoji: '🚚' },
-  { id: 'c4', name: 'Rapporto qualità-prezzo', description: 'Commenti sul prezzo, confronti con prodotti concorrenti.',           count: 98,  emoji: '💰' },
-  { id: 'c5', name: 'Assistenza clienti',      description: 'Esperienze positive o negative con il supporto post-vendita.',       count: 43,  emoji: '📞' },
-];
-
-const MOCK_REVIEWS = {
-  c1: [
-    'Il prodotto si è rotto dopo soli 3 giorni di utilizzo ordinario.',
-    'Schermo difettoso: linee orizzontali appaiono casualmente dopo 10 minuti.',
-    'La batteria si scarica in meno di un\'ora nonostante le specifiche dichiarate.',
-    'Pulsante laterale bloccato già all\'apertura della scatola, inutilizzabile.',
-    'Il software crasha continuamente su tutte e tre le versioni firmware.',
-    'Connessione Bluetooth instabile, si disconnette ogni 4–5 minuti.',
-    'Materiali scadenti: la plastica della scocca si è incrinata in una settimana.',
-    'Il caricabatterie incluso non eroga la corrente corretta, danneggia la batteria.',
-    'Surriscaldamento anomalo già dopo 20 minuti di utilizzo leggero.',
-    'Display che mostra una dominante cromatica verde non correggibile da software.',
-  ],
-  c2: [
-    'Prodotto eccellente, supera le aspettative sotto ogni aspetto. Già al secondo acquisto.',
-    'Qualità costruttiva impressionante per questa fascia di prezzo.',
-    'Funziona esattamente come descritto, molto soddisfatto dell\'acquisto.',
-    'Ottimo rapporto tra prestazioni e ingombro, perfetto per l\'uso quotidiano.',
-    'Setup in meno di 5 minuti, tutto ha funzionato immediatamente senza configurazioni.',
-    'La qualità audio è notevolmente superiore a tutti i competitor testati.',
-    'Design elegante e sobrio, si abbina bene a qualsiasi ambiente.',
-    'Prestazioni costanti anche dopo sei mesi di utilizzo quotidiano intensivo.',
-    'Imballaggio curato, si percepisce la cura nel dettaglio anche prima di aprire.',
-    'Consiglio vivamente a chiunque cerchi qualità senza compromessi in questa fascia.',
-  ],
-  c3: [
-    'Pacco arrivato completamente schiacciato, prodotto con angolo del display rotto.',
-    'Consegna in ritardo di 10 giorni senza alcuna comunicazione proattiva.',
-    'Prodotto sbagliato nella scatola: ho ricevuto un modello diverso da quello ordinato.',
-    'Imballaggio del tutto inadeguato per un oggetto fragile di questo valore.',
-    'Il corriere ha lasciato il pacco sotto la pioggia per tutto il pomeriggio.',
-    'Tracking non aggiornato per 4 giorni: impossibile sapere dove si trovasse il pacco.',
-    'Arrivato con sigillo aperto e con segni evidenti di manomissione.',
-    'Il venditore ha spedito la versione EU quando avevo ordinato quella IT.',
-    'Tre settimane di attesa quando la consegna era stimata in 2–3 giorni lavorativi.',
-    'Nessuna protezione interna: il prodotto era avvolto solo in un foglio di carta velina.',
-  ],
-  c4: [
-    'Per il prezzo richiesto mi aspettavo decisamente qualcosa di meglio.',
-    'Lo stesso prodotto è disponibile su altri store a quasi la metà del prezzo.',
-    'Vale assolutamente ogni centesimo: acquisto più che consigliato.',
-    'Il prezzo è giustificato dalla qualità, ma rimane un investimento importante.',
-    'Rispetto alla concorrenza diretta offre di più a parità di costo.',
-    'Con il coupon applicato al checkout è diventato un ottimo affare.',
-    'Non riesco a capire come mai costi così tanto per le funzionalità offerte.',
-    'Il prezzo riflette la qualità premium: soddisfatto della spesa.',
-    'Ho aspettato il Prime Day per comprarlo: risparmio del 35%, ottima scelta.',
-    'Costoso, ma la durata nel tempo è superiore a tutto ciò che ho usato prima.',
-  ],
-  c5: [
-    'L\'assistenza ha risposto entro 20 minuti e ha risolto il problema immediatamente.',
-    'Nessuno risponde alle email da due settimane: servizio clienti completamente assente.',
-    'Reso approvato in automatico senza dover fornire fotografie o spiegazioni.',
-    'Mi hanno fatto rimandare il prodotto tre volte senza mai risolvere il difetto.',
-    'L\'operatore è stato gentilissimo e competente: esperienza di supporto eccellente.',
-    'La richiesta di rimborso è rimasta ignorata per tre settimane consecutive.',
-    'Amazon ha sostituito il prodotto difettoso senza richiedere prove o documentazione.',
-    'Il venditore terzo non risponde; solo il supporto Amazon mi ha aiutato davvero.',
-    'La chat live è stata utilissima: problema risolto in circa 5 minuti.',
-    'La policy di reso è chiarissima e rispettata: zero problemi nel restituire l\'articolo.',
-  ],
-};
-
-const MOCK_SYSTEM_RESPONSES = [
-  {
-    text: 'Ho aggiornato il clustering in base al tuo feedback. I cluster sono stati riorganizzati per riflettere meglio le distinzioni che hai indicato.',
-    diff: null,
-  },
-  {
-    text: 'Ho diviso il cluster in due sottogruppi distinti come richiesto.',
-    diff: 'SPLIT: "Problemi tecnici" →\n  + "Difetti hardware"         (51 recensioni)\n  + "Bug e problemi software"  (36 recensioni)',
-  },
-  {
-    text: 'Ho unito i due cluster in un unico gruppo più coerente.',
-    diff: 'MERGE: "Elogi" + "Qualità premium" →\n  → "Feedback positivo"        (218 recensioni)',
-  },
-  {
-    text: 'Ho spostato le recensioni indicate nel cluster più appropriato.',
-    diff: 'REASSIGN: 14 recensioni\n  da  "Problemi tecnici"\n  →   "Assistenza clienti"',
-  },
-  {
-    text: 'Ho rinominato il cluster e aggiornato la descrizione per renderla più precisa.',
-    diff: 'RELABEL: "Problemi spedizione" →\n  → "Logistica e consegna"',
-  },
-];
-
-
-// --- STATE ---
-
+// ── STATE ──────────────────────────────────────────────────────────────────
 const state = {
-  view: 'welcome',
+  sessionId: null,
   session: {
     name: '',
-    dataset: 'Amazon Electronics Reviews – 1.500 testi',
-    status: 'active',   // active | converged | closed
+    dataset: '',
+    status: 'active',
     turn: 0,
     tokens: 0,
+    cost: 0,
     cognitiveLoad: 1,
   },
   clusters: [],
   chat: [],
   selectedClusterId: null,
   drawerExpanded: false,
-  mockRespIdx: 0,
 };
 
+// Map API cluster (has size, no emoji) → UI cluster (has count, emoji)
+function mapCluster(c, idx) {
+  return {
+    id:          c.id,
+    name:        c.name,
+    description: c.description,
+    count:       c.size,
+    emoji:       CLUSTER_EMOJIS[idx % CLUSTER_EMOJIS.length],
+  };
+}
 
-// --- RENDER ---
+
+// ── RENDER ─────────────────────────────────────────────────────────────────
 
 function renderClusters() {
-  const grid = document.getElementById('cluster-grid');
-  const maxCount = Math.max(...state.clusters.map(c => c.count));
+  const grid     = document.getElementById('cluster-grid');
+  const maxCount = Math.max(...state.clusters.map(c => c.count), 1);
   grid.innerHTML = state.clusters.map(c => `
     <div class="cluster-card ${state.selectedClusterId === c.id ? 'selected' : ''}"
          onclick="selectCluster('${c.id}')"
@@ -1071,8 +996,8 @@ function renderClusters() {
       <div class="card-footer">
         <button class="btn-ghost"
                 onclick="event.stopPropagation(); expandCluster('${c.id}')"
-                aria-label="Espandi cluster ${c.name}">
-          espandi →
+                aria-label="Expand cluster ${c.name}">
+          expand →
         </button>
       </div>
     </div>
@@ -1081,8 +1006,8 @@ function renderClusters() {
 
 function renderSidebar() {
   document.getElementById('stat-turn').textContent   = state.session.turn;
-  document.getElementById('stat-tokens').textContent = state.session.tokens.toLocaleString('it-IT') + ' token';
-  document.getElementById('stat-cost').textContent   = '≈ $' + (state.session.tokens * 0.000003).toFixed(4);
+  document.getElementById('stat-tokens').textContent = state.session.tokens.toLocaleString('en-US') + ' tokens';
+  document.getElementById('stat-cost').textContent   = '≈ $' + state.session.cost.toFixed(4);
 
   const dotClasses = ['d1','d2','d3','d4','d5'];
   document.getElementById('load-dots').innerHTML = Array.from({ length: 5 }, (_, i) =>
@@ -1090,8 +1015,8 @@ function renderSidebar() {
   ).join('');
 
   const badge = document.getElementById('status-badge');
-  badge.textContent  = state.session.status.toUpperCase();
-  badge.className    = 'status-badge ' + state.session.status;
+  badge.textContent = state.session.status.toUpperCase();
+  badge.className   = 'status-badge ' + state.session.status;
 
   document.getElementById('btn-converge').style.display =
     state.session.status === 'active' ? 'block' : 'none';
@@ -1128,7 +1053,7 @@ function renderAll() {
 }
 
 
-// --- EVENTS ---
+// ── CLUSTER INTERACTION ────────────────────────────────────────────────────
 
 function selectCluster(id) {
   state.selectedClusterId = state.selectedClusterId === id ? null : id;
@@ -1141,6 +1066,9 @@ function deselectCluster() {
   renderClusters();
   renderClusterTag();
 }
+
+
+// ── DRAWER ─────────────────────────────────────────────────────────────────
 
 function toggleDrawer() {
   state.drawerExpanded = !state.drawerExpanded;
@@ -1158,23 +1086,62 @@ function toggleDrawer() {
   }
 }
 
-function sendMessage() {
+
+// ── API HELPERS ────────────────────────────────────────────────────────────
+
+function showError(msg) {
+  state.chat.push({ role: 'system', text: `⚠ ${msg}`, diff: null });
+  renderChat();
+}
+
+async function refreshClusters() {
+  const res = await fetch(`/clusters/active?session_id=${state.sessionId}`);
+  if (!res.ok) return;
+  const clusters = await res.json();
+  state.clusters = clusters.map(mapCluster);
+  renderClusters();
+}
+
+function handleSystemTurn(turnData) {
+  const out  = turnData.system_output;
+  const text = out.display?.content || '';
+  const items = out.display?.items;
+  const diff = items?.length ? items.join('\n') : null;
+  state.chat.push({ role: 'system', text, diff });
+
+  state.session.turn = turnData.turn_number;
+  if (out.token_usage) {
+    state.session.tokens += (out.token_usage.input_tokens || 0) + (out.token_usage.output_tokens || 0);
+  }
+  if (out.cost_usd != null) {
+    state.session.cost += out.cost_usd;
+  }
+  state.session.cognitiveLoad = out.cognitive_load_score ?? state.session.cognitiveLoad;
+
+  renderChat();
+  renderSidebar();
+}
+
+async function loadDatasets() {
+  try {
+    const res  = await fetch('/datasets');
+    if (!res.ok) return;
+    const list = await res.json();
+    if (!list.length) return;
+    const sel = document.getElementById('inp-dataset');
+    sel.innerHTML = list.map(d => `<option value="${d.dataset_name}">${d.dataset_name}</option>`).join('');
+  } catch (_) { /* keep default option */ }
+}
+
+
+// ── CHAT ───────────────────────────────────────────────────────────────────
+
+async function sendMessage() {
   const input = document.getElementById('chat-input');
   const text  = input.value.trim();
   if (!text) return;
 
-  // TODO: replace with fetch('/api/sessions/' + sessionId + '/turns', {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify({
-  //     session_id: sessionId,
-  //     raw_text: text,
-  //     feedback_type: 'global',
-  //     target_cluster_id: state.selectedClusterId,
-  //     target_point_ids: [],
-  //     metadata: {}
-  //   })
-  // }).then(r => r.json()).then(handleSystemTurn)
+  const targetClusterId = state.selectedClusterId;
 
   state.chat.push({ role: 'user', text });
   input.value = '';
@@ -1186,24 +1153,37 @@ function sendMessage() {
   const btn = document.getElementById('send-btn');
   btn.disabled    = true;
   btn.textContent = '…';
-
   document.getElementById('typing-indicator').classList.add('visible');
 
-  setTimeout(() => {
+  try {
+    const res = await fetch('/turns', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        session_id:         state.sessionId,
+        raw_text:           text,
+        feedback_type:      targetClusterId ? 'cluster' : 'global',
+        target_cluster_ids: targetClusterId ? [targetClusterId] : [],
+        target_point_ids:   [],
+        metadata:           {},
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    const turnData = await res.json();
+    handleSystemTurn(turnData);
+    if (turnData.system_output?.clusters_updated) {
+      await refreshClusters();
+    }
+  } catch (e) {
+    showError(e.message);
+  } finally {
     document.getElementById('typing-indicator').classList.remove('visible');
-
-    const resp = MOCK_SYSTEM_RESPONSES[state.mockRespIdx % MOCK_SYSTEM_RESPONSES.length];
-    state.mockRespIdx++;
-    state.chat.push({ role: 'system', text: resp.text, diff: resp.diff });
-    state.session.turn++;
-    state.session.tokens      += Math.floor(Math.random() * 900 + 350);
-    state.session.cognitiveLoad = Math.min(5, state.session.cognitiveLoad + (Math.random() > 0.55 ? 1 : 0));
-
     btn.disabled    = false;
-    btn.textContent = 'Invia';
-    renderChat();
-    renderSidebar();
-  }, 800);
+    btn.textContent = 'Send';
+  }
 }
 
 document.getElementById('chat-input').addEventListener('keydown', e => {
@@ -1213,66 +1193,143 @@ document.getElementById('chat-input').addEventListener('keydown', e => {
   }
 });
 
-function markConverged() {
-  state.session.status = 'converged';
-  renderSidebar();
+async function markConverged() {
+  if (!state.sessionId) return;
+  try {
+    const res = await fetch(`/sessions/${state.sessionId}/state`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ status: 'converged' }),
+    });
+    if (!res.ok) throw new Error('Failed to update status');
+    state.session.status = 'converged';
+    renderSidebar();
+  } catch (e) {
+    showError(e.message);
+  }
 }
 
 
-// --- MODALS ---
+// ── MODALS ─────────────────────────────────────────────────────────────────
 
 function openModal(id)  { document.getElementById(id).classList.add('visible');    }
 function closeModal(id) { document.getElementById(id).classList.remove('visible'); }
 
-function startSession() {
+async function startSession() {
   const name = document.getElementById('inp-name').value.trim();
   if (!name) { document.getElementById('inp-name').focus(); return; }
 
-  // TODO: replace with fetch('/api/sessions', {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify({ dataset_name: 'amazon_reviews_train' })
-  // }).then(r => r.json()).then(data => { sessionId = data.id; loadInitialState(); })
+  const dataset = document.getElementById('inp-dataset').value;
+  const k       = parseInt(document.getElementById('inp-k').value, 10) || 5;
 
-  state.session.name          = name;
-  state.session.status        = 'active';
-  state.session.turn          = 0;
-  state.session.tokens        = 0;
-  state.session.cognitiveLoad = 1;
-  state.clusters              = JSON.parse(JSON.stringify(MOCK_CLUSTERS));
-  state.chat                  = [
-    { role: 'system', text: 'Ho analizzato 1.500 recensioni e proposto 5 cluster iniziali. Seleziona un cluster per contestualizzare il tuo feedback, oppure scrivi liberamente.', diff: null },
-  ];
-  state.selectedClusterId     = null;
-  state.mockRespIdx           = 0;
+  const btn = document.querySelector('#modal-new-session .btn-primary');
+  btn.disabled    = true;
+  btn.textContent = '…';
 
-  closeModal('modal-new-session');
+  try {
+    // 1. Create session
+    const sessRes = await fetch('/sessions', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ dataset_name: dataset }),
+    });
+    if (!sessRes.ok) {
+      const err = await sessRes.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to create session');
+    }
+    const sessData   = await sessRes.json();
+    state.sessionId  = sessData.id;
 
-  document.getElementById('header-name').textContent = name;
-  document.getElementById('header').style.display    = 'flex';
-  document.getElementById('welcome').classList.remove('visible');
-  document.getElementById('workspace').classList.add('visible');
-  document.getElementById('drawer').classList.add('visible');
+    // 2. Run initial clustering (LLM names each cluster — may take a moment)
+    const clRes = await fetch(`/clusters/${state.sessionId}`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ k, generate_names: true }),
+    });
+    if (!clRes.ok) {
+      const err = await clRes.json().catch(() => ({}));
+      throw new Error(err.detail || 'Initial clustering failed');
+    }
 
-  renderAll();
+    // 3. Load active clusters
+    const acRes = await fetch(`/clusters/active?session_id=${state.sessionId}`);
+    if (!acRes.ok) throw new Error('Could not load clusters');
+    const activeClusters = await acRes.json();
+
+    const totalPoints = activeClusters.reduce((s, c) => s + (c.size || 0), 0);
+
+    state.session.name          = name;
+    state.session.dataset       = dataset;
+    state.session.status        = 'active';
+    state.session.turn          = 0;
+    state.session.tokens        = 0;
+    state.session.cost          = 0;
+    state.session.cognitiveLoad = 1;
+    state.clusters              = activeClusters.map(mapCluster);
+    state.chat                  = [
+      { role: 'system', text: `Analysed ${totalPoints.toLocaleString('en-US')} data points and proposed ${activeClusters.length} initial clusters. Select a cluster to contextualise your feedback, or write freely.`, diff: null },
+    ];
+    state.selectedClusterId = null;
+
+    closeModal('modal-new-session');
+    document.getElementById('header-name').textContent = name;
+    document.getElementById('header').style.display    = 'flex';
+    document.getElementById('welcome').classList.remove('visible');
+    document.getElementById('workspace').classList.add('visible');
+    document.getElementById('drawer').classList.add('visible');
+    renderAll();
+
+  } catch (e) {
+    alert('Error: ' + e.message);
+    state.sessionId = null;
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Start';
+  }
 }
 
-function expandCluster(id) {
+async function expandCluster(id) {
   const c = state.clusters.find(c => c.id === id);
   if (!c) return;
 
-  // TODO: replace with fetch('/api/sessions/' + sessionId + '/clusters/' + id + '/points')
-  //   .then(r => r.json()).then(renderExpandModal)
-
-  document.getElementById('lbl-expand').textContent = `${c.emoji} ${c.name} (${c.count} recensioni)`;
-  const reviews = MOCK_REVIEWS[id] || [];
-  document.getElementById('expand-list').innerHTML =
-    reviews.map(r => `<li>${r}</li>`).join('');
+  document.getElementById('lbl-expand').textContent = `${c.emoji} ${c.name}`;
+  document.getElementById('expand-list').innerHTML  = '<li>Loading…</li>';
   openModal('modal-expand');
+
+  try {
+    const res = await fetch(`/clusters/${id}/points`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data   = await res.json();
+    const points = data.points || [];
+
+    document.getElementById('lbl-expand').textContent = `${c.emoji} ${c.name} (${points.length} reviews)`;
+    document.getElementById('expand-list').innerHTML  = points.length
+      ? points.map(p => {
+          const text = p.data.text ?? p.data.review ?? p.data.content ?? p.data.body
+            ?? Object.values(p.data).find(v => typeof v === 'string')
+            ?? JSON.stringify(p.data);
+          return `<li>${text}</li>`;
+        }).join('')
+      : '<li>No data points found for this cluster.</li>';
+  } catch (e) {
+    document.getElementById('expand-list').innerHTML = `<li>Error: ${e.message}</li>`;
+  }
 }
 
-function closeSessionFinal() {
+async function closeSessionFinal() {
   closeModal('modal-stop');
+
+  if (state.sessionId) {
+    try {
+      await fetch(`/sessions/${state.sessionId}/state`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ status: 'closed' }),
+      });
+    } catch (_) { /* best-effort */ }
+  }
+
+  state.sessionId      = null;
   state.session.status = 'closed';
   document.getElementById('header').style.display = 'none';
   document.getElementById('workspace').classList.remove('visible');
@@ -1293,13 +1350,12 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 });
 
 
-// --- EXPORT ---
+// ── EXPORT ─────────────────────────────────────────────────────────────────
 
 function exportJSON() {
-  // TODO: replace with GET /api/sessions/{id}/state for live cluster data
   const payload = {
     session:  { name: state.session.name, dataset: state.session.dataset, turns: state.session.turn },
-    clusters: state.clusters.map(({ id, name, description, count }) => ({ id, name, description, count })),
+    clusters: state.clusters.map(({ id, name, description, count }) => ({ id, name, description, size: count })),
   };
   _download(
     `clusters_${_slug(state.session.name)}.json`,
@@ -1310,12 +1366,9 @@ function exportJSON() {
 }
 
 function exportCSV() {
-  // TODO: replace with GET /api/sessions/{id}/state + data points for live data
-  const rows = [['cluster_id', 'cluster_name', 'review_text']];
+  const rows = [['cluster_id', 'cluster_name', 'cluster_description', 'size']];
   state.clusters.forEach(c => {
-    (MOCK_REVIEWS[c.id] || []).forEach(text => {
-      rows.push([c.id, `"${c.name}"`, `"${text.replace(/"/g, '""')}"`]);
-    });
+    rows.push([c.id, `"${c.name}"`, `"${c.description.replace(/"/g, '""')}"`, c.count]);
   });
   _download(
     `clusters_${_slug(state.session.name)}.csv`,

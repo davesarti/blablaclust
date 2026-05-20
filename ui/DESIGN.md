@@ -1,14 +1,14 @@
-# UI Design Reference — Conversational Clustering
+# UI Design Reference — BlaBlaClust
 
-Documento di riferimento per le scelte grafiche di `ui/index.html`.  
-Aggiorna questo file ogni volta che cambi colori, font, layout o animazioni.
+Design reference for the graphic choices in `ui/index.html`.  
+Update this file whenever you change colours, fonts, layout, or animations.
 
 ---
 
 ## Tema generale
 
-**Modalità:** Light (warm/parchment)  
-**Estetica:** Research tool editoriale — warm neutral, serif + mono, rarefatto  
+**Modalità:** Light (warm/terracotta)  
+**Estetica:** Research tool editoriale — mogano, terra bruciata, oliva, crema; serif + mono  
 **Filosofia:** Nessuna dipendenza esterna. Tutto inline in un singolo file HTML.
 
 ---
@@ -17,12 +17,12 @@ Aggiorna questo file ogni volta che cambi colori, font, layout o animazioni.
 
 Questi quattro colori sono la base di tutto. Non usare altri colori senza motivazione.
 
-| Colore      | Hex       | Ruolo nel sistema                                    |
-|-------------|-----------|------------------------------------------------------|
-| Olive scuro | `#706D54` | Accento primario, `--accent`, `--text-muted`         |
-| Marrone mid | `#A08963` | `--text-faint`, `--border-s`, dot load lvl 3         |
-| Beige caldo | `#C9B194` | Glow animazioni, `msg-diff` border, radial welcome   |
-| Grigio luce | `#DBDBDB` | `--surface` — sfondo card e pannelli principali      |
+| Colore        | Hex       | Ruolo nel sistema                                    |
+|---------------|-----------|------------------------------------------------------|
+| Mogano scuro  | `#622B14` | Accento primario, `--accent`, `--text-muted`         |
+| Terra bruna   | `#995F2F` | `--text-faint`, dot load lvl 3, glow radial welcome  |
+| Oliva/cachi   | `#978F66` | `--border-s`, `msg-diff` border, superficie terziaria|
+| Crema calda   | `#E4D6A9` | `--surface` — sfondo card e pannelli principali      |
 
 ---
 
@@ -32,33 +32,33 @@ Questi quattro colori sono la base di tutto. Non usare altri colori senza motiva
 
 | Variabile     | Valore    | Derivazione / uso                              |
 |---------------|-----------|------------------------------------------------|
-| `--bg`        | `#f0ede6` | Bianco caldo derivato dalla palette — body bg  |
-| `--surface`   | `#DBDBDB` | **PALETTE** — header, drawer, sidebar, card    |
-| `--surface-2` | `#d0ccc5` | Superficie secondaria                          |
-| `--surface-3` | `#c8c3bb` | Superficie terziaria — messaggi sistema        |
-| `--border`    | `#bfbbb3` | Bordo sottile                                  |
-| `--border-s`  | `#A08963` | **PALETTE** — bordo enfatizzato, scrollbar     |
+| `--bg`        | `#f5eed8` | Crema chiara derivata dalla palette — body bg  |
+| `--surface`   | `#E4D6A9` | **PALETTE** — header, drawer, sidebar, card    |
+| `--surface-2` | `#d8ca98` | Superficie secondaria                          |
+| `--surface-3` | `#cfc08a` | Superficie terziaria — messaggi sistema        |
+| `--border`    | `#c4b47a` | Bordo sottile                                  |
+| `--border-s`  | `#978F66` | **PALETTE** — bordo enfatizzato, scrollbar     |
 
 ### Testo
 
 | Variabile      | Valore    | Uso                                             |
 |----------------|-----------|------------------------------------------------ |
-| `--text`       | `#1a1916` | Quasi-nero caldo — testo principale             |
-| `--text-muted` | `#706D54` | **PALETTE** — testo secondario, label, desc     |
-| `--text-faint` | `#A08963` | **PALETTE** — label mono uppercase, placeholder |
+| `--text`       | `#1e0c04` | Quasi-nero caldo — testo principale             |
+| `--text-muted` | `#622B14` | **PALETTE** — testo secondario, label, desc     |
+| `--text-faint` | `#995F2F` | **PALETTE** — label mono uppercase, placeholder |
 
 > `#A08963` ha contrasto ~2.4:1 su `--surface` — usarlo solo per elementi decorativi (label, non corpo testo).  
 > `#706D54` ha contrasto ~4.4:1 su `--bg` — accettabile per testo secondario.
 
 ### Accento
 
-| Variabile      | Valore               | Uso                                        |
-|----------------|----------------------|--------------------------------------------|
-| `--accent`     | `#706D54`            | **PALETTE** — bottoni primari, stat-turn   |
-| `--accent-dim` | `rgba(112,109,84,.1)`| Sfondo msg utente, tag cluster selezionato |
+| Variabile      | Valore              | Uso                                        |
+|----------------|---------------------|--------------------------------------------|
+| `--accent`     | `#622B14`           | **PALETTE** — bottoni primari, stat-turn   |
+| `--accent-dim` | `rgba(98,43,20,.1)` | Sfondo msg utente, tag cluster selezionato |
 
-Testo sui bottoni `--accent`: `#f5f2ec` (bianco caldo, contrasto ~4.4:1).  
-Hover bottone: `#5a5844` (oliva più scura).
+Testo sui bottoni `--accent`: `#f5f2ec` (bianco caldo, contrasto ~10:1).  
+Hover bottone: `#4a1c0a` (mogano più scuro).
 
 ### Colori funzionali (status / feedback)
 
@@ -77,13 +77,13 @@ Hover bottone: `#5a5844` (oliva più scura).
 
 Cinque accenti distinti, desaturati/earthy per armonizzare con la palette calda.
 
-| Cluster | `--ca`    | `--ca-rgb`   | Tono           |
-|---------|-----------|--------------|----------------|
-| 1°      | `#8b4040` | `139,64,64`  | Terracotta     |
-| 2°      | `#706D54` | `112,109,84` | Oliva (palette)|
-| 3°      | `#3a5a88` | `58,90,136`  | Blu ardesia    |
-| 4°      | `#3d6b48` | `61,107,72`  | Verde foresta  |
-| 5°      | `#6a4880` | `106,72,128` | Malva          |
+| Cluster | `--ca`    | `--ca-rgb`   | Tono              |
+|---------|-----------|--------------|-------------------|
+| 1°      | `#8B3520` | `139,53,32`  | Terracotta        |
+| 2°      | `#622B14` | `98,43,20`   | Mogano (palette)  |
+| 3°      | `#3d5e38` | `61,94,56`   | Verde foresta     |
+| 4°      | `#344e60` | `52,78,96`   | Blu ardesia       |
+| 5°      | `#784838` | `120,72,56`  | Legno di rosa     |
 
 `--ca` controlla: bordo sinistro card, count pill, size bar fill, glow `::after`, hover `btn-ghost`.  
 `--ca-rgb` necessario per `linear-gradient(90deg, rgba(var(--ca-rgb), .04), ...)` — CSS non permette hex dentro rgba().
@@ -177,10 +177,18 @@ background-size: 28px 28px;
 
 ## Welcome screen
 
-- `#welcome::before`: radial gradient `rgba(201,177,148,.18)` → transparent al 68%  
-  (`#C9B194` = rgb 201,177,148 — palette beige caldo)
-- Mark `◈`: `font-size: 56px`, colore `var(--accent)` (`#706D54`), glow con `#C9B194`  
-- `.welcome-meta`: tre stat in `--mono 10px`, colore `--text-faint`, separati da divisori verticali `--border-s`
+- `#welcome::before`: radial gradient `rgba(153,95,47,.16)` → transparent al 68%  
+  (`#995F2F` = rgb 153,95,47 — terra bruna)
+- **Mark**: tre barre verticali (istogramma) in CSS puro — `div.welcome-mark > span.wm-bar × 3`
+  - Barra 1: altezza 52px, opacità 1.0
+  - Barra 2: altezza 33px, opacità 0.52, delay 0.26s
+  - Barra 3: altezza 18px, opacità 0.26, delay 0.52s
+  - Animazione `barBreathe`: scaleY(1) → scaleY(0.84), 2.8s ease-in-out infinite
+  - Colore: `var(--accent)` = `#622B14`
+- **h1**: `font-size: 44px`, Georgia serif, `letter-spacing: -0.03em`
+- **p**: `font-size: 16px`, `line-height: 1.65`
+- **max-width**: `560px`
+- `.welcome-meta`: tre stat in `--mono 11px`, colore `--text-faint`, separati da divisori `--border-s`
 
 ---
 
@@ -200,13 +208,13 @@ background-size: 28px 28px;
 
 5 rettangoli (`18×8px`, `border-radius: 1px`). Scala verde→rosso, integrata con la palette calda:
 
-| Classe | Colore    | Tono          |
-|--------|-----------|---------------|
-| `.d1`  | `#3a7548` | Verde foresta |
-| `.d2`  | `#7a9040` | Verde oliva   |
-| `.d3`  | `#A08963` | **PALETTE** — marrone mid |
-| `.d4`  | `#906040` | Arancio terracotta |
-| `.d5`  | `#883838` | Rosso mattone |
+| Classe | Colore    | Tono                        |
+|--------|-----------|-----------------------------|
+| `.d1`  | `#3a6b40` | Verde foresta               |
+| `.d2`  | `#6a7a38` | Verde oliva                 |
+| `.d3`  | `#995F2F` | **PALETTE** — terra bruna   |
+| `.d4`  | `#8B4020` | Arancio bruciato            |
+| `.d5`  | `#7a2828` | Rosso mattone               |
 
 Dot non attivi: `--surface-3` con bordo `--border`.
 
