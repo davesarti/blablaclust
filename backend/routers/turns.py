@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.main import get_db
 from backend.session_state import build_session_state
+from src.engine.f_apply_operations import f_apply_operations
 from src.engine.f_output import f_output
 from src.harness import ConversationContext
 from src.models import ChatSession, Cluster as DbCluster, DataPoint, Turn
@@ -127,7 +128,7 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     )
 
     try:
-        raw = f_output(state, payload, context, total_points)
+        raw, _usage = f_output(state, payload, context, total_points)
     except (json.JSONDecodeError, ValueError) as exc:
         raise HTTPException(
             status_code=502,
@@ -153,6 +154,10 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     )
     db.add(new_turn)
     db.commit()
+
+    f_apply_operations(raw, session_id=session.id, turn_number=new_turn_number, db=db)
+    db.commit()
+
     db.refresh(new_turn)
 
     return TurnRead.model_validate(new_turn, from_attributes=True)
