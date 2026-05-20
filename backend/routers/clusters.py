@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.main import get_db
 from backend.session_state import build_cluster_schemas
 from src.engine.cluster_naming import name_clusters
 from src.engine.initial_clustering import initial_clustering, silhouette_for_k, sweep_k
-from src.models import ChatSession, Cluster as DbCluster, DataPoint
-from src.schemas import Cluster as ClusterSchema
+from src.models import ChatSession, Cluster as DbCluster, DataPoint, SoftAssignment
+from src.schemas import Cluster as ClusterSchema, ClusterPointsResponse, ClusterPoint
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
 
@@ -199,3 +200,84 @@ def read_cluster(cluster_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Cluster not found")
 
     return build_cluster_schemas(db, [cluster])[0]
+
+
+@router.get("/{cluster_id}/points", response_model=ClusterPointsResponse)
+def list_cluster_points(cluster_id: str, db: Session = Depends(get_db)):
+    cluster = db.query(DbCluster).filter(DbCluster.id == cluster_id).first()
+    if cluster is None:
+        raise HTTPException(status_code=404, detail="Cluster not found")
+
+    cluster_ids = [
+        cid
+        for (cid,) in db.query(DbCluster.id)
+        .filter(DbCluster.session_id == cluster.session_id)
+        .all()
+    ]
+    if not cluster_ids:
+        return ClusterPointsResponse(
+            cluster_id=cluster_id,
+            session_id=cluster.session_id,
+            turn_number=None,
+            points=[],
+        )
+
+    latest_turn = (
+        db.query(func.max(SoftAssignment.turn_number))
+        .filter(SoftAssignment.cluster_id.in_(cluster_ids))
+        .scalar()
+    )
+    if latest_turn is None:
+        return ClusterPointsResponse(
+            cluster_id=cluster_id,
+            session_id=cluster.session_id,
+            turn_number=None,
+            points=[],
+        )
+
+    assignments = (
+        db.query(SoftAssignment)
+        .filter(
+            SoftAssignment.cluster_id.in_(cluster_ids),
+            SoftAssignment.turn_number == latest_turn,
+        )
+        .all()
+    )
+
+    best_by_point: dict[str, tuple[str, float]] = {}
+    for assignment in assignments:
+        current = best_by_point.get(assignment.data_point_id)
+        if current is None or assignment.probability > current[1]:
+            best_by_point[assignment.data_point_id] = (
+                assignment.cluster_id,
+                assignment.probability,
+            )
+
+    cluster_members = [
+        (point_id, prob)
+        for point_id, (cid, prob) in best_by_point.items()
+        if cid == cluster_id
+    ]
+    cluster_members.sort(key=lambda item: item[1], reverse=True)
+
+    point_ids = [point_id for point_id, _ in cluster_members]
+    points = (
+        db.query(DataPoint).filter(DataPoint.id.in_(point_ids)).all()
+        if point_ids
+        else []
+    )
+    data_by_id = {point.id: point.data for point in points}
+
+    return ClusterPointsResponse(
+        cluster_id=cluster_id,
+        session_id=cluster.session_id,
+        turn_number=latest_turn,
+        points=[
+            ClusterPoint(
+                id=point_id,
+                data=data_by_id.get(point_id, {}),
+                probability=probability,
+            )
+            for point_id, probability in cluster_members
+        ],
+    )

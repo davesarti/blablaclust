@@ -1,5 +1,7 @@
 import uuid
 
+from typing import Literal, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -14,6 +16,10 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 class CreateSessionRequest(BaseModel):
     dataset_name: str
+
+
+class PatchSessionStateRequest(BaseModel):
+    status: Optional[Literal["active", "converged", "closed"]] = None
 
 
 @router.get("")
@@ -64,6 +70,24 @@ def read_session_state(session_id: str, db: Session = Depends(get_db)):
     session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    return build_session_state(db, session)
+
+
+@router.patch("/{session_id}/state", response_model=ChatSessionState)
+def patch_session_state(
+    session_id: str, payload: PatchSessionStateRequest, db: Session = Depends(get_db)
+):
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if payload.status is None:
+        raise HTTPException(status_code=400, detail="No fields provided to update")
+
+    session.status = payload.status
+    db.commit()
+    db.refresh(session)
 
     return build_session_state(db, session)
 

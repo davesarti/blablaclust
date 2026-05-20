@@ -43,6 +43,19 @@ class SoftAssignment(BaseModel):
     probability: float = Field(ge=0.0, le=1.0)
 
 
+class ClusterPoint(BaseModel):
+    id: str
+    data: Dict[str, Any]
+    probability: float = Field(ge=0.0, le=1.0)
+
+
+class ClusterPointsResponse(BaseModel):
+    cluster_id: str
+    session_id: str
+    turn_number: Optional[int] = None
+    points: List[ClusterPoint]
+
+
 class DatasetUploadResponse(BaseModel):
     dataset_name: str
     inserted: int
