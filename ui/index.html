@@ -1,0 +1,1341 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conversational Clustering</title>
+  <style>
+    :root {
+      /* ── Palette ────────────────────────────────────────────────
+         #706D54  olive scuro  → accento primario, testo muted
+         #A08963  marrone mid  → testo faint, bordi forti
+         #C9B194  beige caldo  → glow, highlight, msg-diff border
+         #DBDBDB  grigio luce  → surface principale
+      ─────────────────────────────────────────────────────────── */
+      --bg:          #f0ede6;   /* bianco caldo derivato dalla palette */
+      --surface:     #DBDBDB;   /* palette — surface principale       */
+      --surface-2:   #d0ccc5;   /* surface secondaria                  */
+      --surface-3:   #c8c3bb;   /* surface terziaria (msg sistema)     */
+      --border:      #bfbbb3;   /* bordo sottile                       */
+      --border-s:    #A08963;   /* palette — bordo forte               */
+      --text:        #1a1916;   /* quasi-nero caldo per leggibilità    */
+      --text-muted:  #706D54;   /* palette — testo secondario          */
+      --text-faint:  #A08963;   /* palette — label, placeholder        */
+      --accent:      #706D54;   /* palette — accento primario          */
+      --accent-dim:  rgba(112,109,84,.1);
+      --green:       #3a7548;
+      --green-bg:    rgba(58,117,72,.09);
+      --blue:        #345888;
+      --blue-bg:     rgba(52,88,136,.09);
+      --red:         #883838;
+      --red-bg:      rgba(136,56,56,.09);
+      --header-h:    44px;
+      --drawer-col:  116px;
+      --drawer-exp:  380px;
+      --sidebar-w:   200px;
+      --r:           2px;
+      --serif:       Georgia, 'Times New Roman', serif;
+      --mono:        ui-monospace, 'SF Mono', Menlo, 'Cascadia Code', monospace;
+      --sans:        -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--sans);
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text);
+      background-color: var(--bg);
+      background-image: radial-gradient(circle at 1px 1px, rgba(112,109,84,.06) 1px, transparent 0);
+      background-size: 28px 28px;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    /* ── HEADER ── */
+    #header {
+      height: var(--header-h);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+    }
+    #header .brand {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-right: 14px;
+    }
+    #header .header-left {
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+    #header .divider {
+      width: 1px; height: 16px;
+      background: var(--border-s);
+      margin: 0 14px;
+    }
+    #header .session-name {
+      font-family: var(--serif);
+      font-weight: normal;
+      font-size: 15px;
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+    .status-badge {
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      padding: 3px 8px;
+      border-radius: 2px;
+      text-transform: uppercase;
+    }
+    .status-badge.active    { background: var(--green-bg);  color: var(--green); border: 1px solid rgba(82,168,98,.2); }
+    .status-badge.converged { background: var(--blue-bg);   color: var(--blue);  border: 1px solid rgba(72,128,188,.2); }
+    .status-badge.closed    { background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border); }
+
+    /* ── WELCOME ── */
+    #welcome {
+      display: none;
+      height: 100vh;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    #welcome.visible { display: flex; }
+    #welcome::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 60% 55% at 50% 50%, rgba(201,177,148,.18) 0%, transparent 68%);
+      pointer-events: none;
+    }
+
+    .welcome-inner {
+      text-align: center;
+      max-width: 460px;
+      position: relative;
+      z-index: 1;
+    }
+    .welcome-mark {
+      font-size: 56px;
+      margin-bottom: 28px;
+      display: block;
+      color: var(--accent);
+      line-height: 1;
+      animation: markGlow 3.2s ease-in-out infinite;
+    }
+    @keyframes markGlow {
+      0%, 100% {
+        text-shadow: 0 0 20px rgba(201,177,148,.7), 0 0 60px rgba(201,177,148,.25);
+      }
+      50% {
+        text-shadow: 0 0 30px rgba(201,177,148,.95), 0 0 90px rgba(201,177,148,.4), 0 0 150px rgba(201,177,148,.12);
+      }
+    }
+    .welcome-inner h1 {
+      font-family: var(--serif);
+      font-size: 30px;
+      font-weight: normal;
+      letter-spacing: -0.025em;
+      margin-bottom: 12px;
+      line-height: 1.2;
+      color: var(--text);
+    }
+    .welcome-inner p {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.75;
+      margin-bottom: 32px;
+    }
+    .welcome-meta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      margin-top: 22px;
+    }
+    .welcome-stat {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-faint);
+      letter-spacing: 0.05em;
+      padding: 0 16px;
+    }
+    .welcome-sep {
+      width: 1px; height: 10px;
+      background: var(--border-s);
+    }
+
+    /* ── WORKSPACE ── */
+    #workspace {
+      display: none;
+      height: 100vh;
+      padding-top: var(--header-h);
+    }
+    #workspace.visible { display: block; }
+
+    #main-area {
+      display: grid;
+      grid-template-columns: 1fr var(--sidebar-w);
+      height: calc(100vh - var(--header-h) - var(--drawer-col));
+      transition: height 0.28s cubic-bezier(0.4,0,0.2,1);
+    }
+    #main-area.drawer-open {
+      height: calc(100vh - var(--header-h) - var(--drawer-exp));
+    }
+
+    /* ── CLUSTER AREA ── */
+    #cluster-area {
+      padding: 18px 20px;
+      overflow-y: auto;
+    }
+    #cluster-area::-webkit-scrollbar { width: 3px; }
+    #cluster-area::-webkit-scrollbar-track { background: transparent; }
+    #cluster-area::-webkit-scrollbar-thumb { background: var(--border-s); border-radius: 2px; }
+
+    #cluster-area .section-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 14px;
+    }
+    .cluster-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(256px, 1fr));
+      gap: 10px;
+    }
+
+    /* per-cluster accent colors — muted/earthy, armonizzati con la palette */
+    .cluster-card:nth-child(1) { --ca: #8b4040; --ca-rgb: 139,64,64; }
+    .cluster-card:nth-child(2) { --ca: #706D54; --ca-rgb: 112,109,84; }
+    .cluster-card:nth-child(3) { --ca: #3a5a88; --ca-rgb: 58,90,136; }
+    .cluster-card:nth-child(4) { --ca: #3d6b48; --ca-rgb: 61,107,72; }
+    .cluster-card:nth-child(5) { --ca: #6a4880; --ca-rgb: 106,72,128; }
+
+    .cluster-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--ca, var(--border-s));
+      border-radius: var(--r);
+      padding: 12px 14px 11px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+    .cluster-card::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 50%;
+      background: linear-gradient(90deg, rgba(var(--ca-rgb, 128,128,128),.04) 0%, transparent 100%);
+      pointer-events: none;
+      border-radius: 0;
+    }
+    .cluster-card:hover {
+      background: var(--surface-2);
+      border-color: var(--border-s);
+      box-shadow: 0 3px 14px rgba(112,109,84,.15);
+      transform: translateY(-1px);
+    }
+    .cluster-card.selected {
+      border-left-color: var(--ca, var(--accent));
+      background: color-mix(in srgb, var(--ca, var(--accent)) 7%, var(--surface));
+      border-color: color-mix(in srgb, var(--ca, var(--accent)) 28%, var(--border));
+    }
+    .cluster-card.selected:hover {
+      background: color-mix(in srgb, var(--ca, var(--accent)) 10%, var(--surface));
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .card-header .emoji { font-size: 15px; line-height: 1; flex-shrink: 0; }
+    .card-header h3 {
+      font-size: 12px;
+      font-weight: 600;
+      flex: 1;
+      color: var(--text);
+      letter-spacing: -0.005em;
+    }
+    .count-pill {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      background: color-mix(in srgb, var(--ca, var(--border-s)) 16%, transparent);
+      color: var(--ca, var(--text-muted));
+      padding: 1px 7px;
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+    .card-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 10px;
+      flex: 1;
+    }
+
+    /* size bar */
+    .size-bar {
+      height: 2px;
+      background: var(--border);
+      border-radius: 1px;
+      margin-bottom: 9px;
+      overflow: hidden;
+    }
+    .size-fill {
+      height: 100%;
+      background: var(--ca, var(--accent));
+      border-radius: 1px;
+      opacity: 0.55;
+    }
+
+    .card-footer { text-align: right; }
+    .btn-ghost {
+      background: none; border: none;
+      color: var(--text-faint);
+      font-size: 10px;
+      font-family: var(--mono);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      cursor: pointer; padding: 0;
+      transition: color 0.12s;
+    }
+    .cluster-card:hover .btn-ghost,
+    .btn-ghost:hover { color: var(--ca, var(--accent)); }
+
+    /* ── SIDEBAR ── */
+    #sidebar {
+      border-left: 1px solid var(--border);
+      background: var(--surface);
+      padding: 16px 14px 12px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    #sidebar::-webkit-scrollbar { width: 3px; }
+    #sidebar::-webkit-scrollbar-track { background: transparent; }
+    #sidebar::-webkit-scrollbar-thumb { background: var(--border-s); border-radius: 2px; }
+
+    .sb-section {
+      padding-bottom: 14px;
+      margin-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sb-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .sb-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 8px;
+    }
+    .stat-big {
+      font-family: var(--serif);
+      font-size: 40px;
+      font-weight: normal;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      color: var(--accent);
+    }
+    .stat-unit {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text-faint);
+      margin-top: 3px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .stat-tokens {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .stat-cost {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    .load-dots { display: flex; gap: 4px; margin-top: 8px; }
+    .load-dot {
+      width: 18px; height: 8px;
+      border-radius: 1px;
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      transition: background 0.22s, border-color 0.22s;
+    }
+    .load-dot.d1 { background: #3a7548; border-color: #3a7548; }
+    .load-dot.d2 { background: #7a9040; border-color: #7a9040; }
+    .load-dot.d3 { background: #A08963; border-color: #A08963; }
+    .load-dot.d4 { background: #906040; border-color: #906040; }
+    .load-dot.d5 { background: #883838; border-color: #883838; }
+
+    .btn-outline {
+      display: block; width: 100%;
+      background: none;
+      border: 1px solid currentColor;
+      border-radius: var(--r);
+      padding: 6px 10px;
+      font-size: 11px; font-weight: 500;
+      font-family: var(--sans);
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.12s;
+      margin-bottom: 7px;
+    }
+    .btn-outline:last-child { margin-bottom: 0; }
+    .btn-outline.blue { color: var(--blue); }
+    .btn-outline.blue:hover { background: var(--blue-bg); }
+    .btn-outline.red  { color: var(--red); }
+    .btn-outline.red:hover  { background: var(--red-bg); }
+
+    /* ── DRAWER ── */
+    #drawer {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: var(--drawer-col);
+      max-height: var(--drawer-col);
+      background: var(--surface);
+      border-top: 1px solid var(--border-s);
+      display: none;
+      flex-direction: column;
+      z-index: 90;
+      transition: height 0.28s cubic-bezier(0.4,0,0.2,1),
+                  max-height 0.28s cubic-bezier(0.4,0,0.2,1);
+    }
+    #drawer.visible { display: flex; }
+    #drawer.expanded {
+      height: var(--drawer-exp);
+      max-height: var(--drawer-exp);
+    }
+
+    #drawer-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      height: 30px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #drawer-topbar .label {
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .drawer-live-dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: liveDot 2.6s ease-in-out infinite;
+    }
+    @keyframes liveDot {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.25; }
+    }
+
+    #toggle-btn {
+      background: none; border: none;
+      cursor: pointer; padding: 3px 8px;
+      font-size: 10px;
+      font-family: var(--mono);
+      color: var(--text-faint);
+      border-radius: 2px;
+      transition: background 0.1s, color 0.1s;
+    }
+    #toggle-btn:hover { background: var(--surface-3); color: var(--text-muted); }
+
+    #chat-history {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 14px 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    #chat-history::-webkit-scrollbar { width: 3px; }
+    #chat-history::-webkit-scrollbar-track { background: transparent; }
+    #chat-history::-webkit-scrollbar-thumb { background: var(--border-s); border-radius: 2px; }
+
+    .msg { max-width: 74%; }
+    .msg.user {
+      align-self: flex-end;
+      background: var(--accent-dim);
+      border: 1px solid rgba(112,109,84,.2);
+      border-radius: var(--r) var(--r) 1px var(--r);
+      padding: 7px 11px;
+      font-size: 12px;
+      line-height: 1.5;
+      animation: slideRight 0.18s ease-out;
+    }
+    .msg.system {
+      align-self: flex-start;
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      border-radius: var(--r) var(--r) var(--r) 1px;
+      padding: 7px 11px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text-muted);
+      animation: slideLeft 0.18s ease-out;
+    }
+    @keyframes slideRight {
+      from { opacity: 0; transform: translateX(6px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes slideLeft {
+      from { opacity: 0; transform: translateX(-6px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .msg-diff {
+      margin-top: 8px;
+      background: rgba(201,177,148,.15);
+      border-left: 2px solid #C9B194;
+      padding: 6px 10px;
+      font-family: var(--mono);
+      font-size: 10px;
+      white-space: pre;
+      color: var(--text-muted);
+      border-radius: 0 2px 2px 0;
+      line-height: 1.65;
+    }
+
+    /* typing indicator */
+    #typing-indicator {
+      align-self: flex-start;
+      display: none;
+      align-items: center;
+      gap: 4px;
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      border-radius: var(--r) var(--r) var(--r) 1px;
+      padding: 9px 13px;
+      animation: slideLeft 0.18s ease-out;
+    }
+    #typing-indicator.visible { display: flex; }
+    .typing-dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--text-faint);
+      animation: typingBounce 1.2s ease-in-out infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.18s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.36s; }
+    @keyframes typingBounce {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+      30%           { transform: translateY(-4px); opacity: 1; }
+    }
+
+    #drawer-input {
+      padding: 8px 14px 10px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #cluster-tag {
+      display: none;
+      align-items: center;
+      gap: 5px;
+      margin-bottom: 7px;
+      font-family: var(--mono);
+      font-size: 10px;
+      background: var(--accent-dim);
+      border: 1px solid rgba(112,109,84,.22);
+      border-radius: 2px;
+      padding: 2px 8px;
+      width: fit-content;
+      color: var(--accent);
+    }
+    #cluster-tag.visible { display: flex; }
+    #cluster-tag button {
+      background: none; border: none;
+      cursor: pointer;
+      font-size: 13px; line-height: 1;
+      color: var(--text-muted); padding: 0;
+      margin-left: 2px;
+      transition: color 0.1s;
+    }
+    #cluster-tag button:hover { color: var(--text); }
+
+    #input-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+    #chat-input {
+      flex: 1;
+      border: 1px solid var(--border-s);
+      border-radius: var(--r);
+      padding: 7px 11px;
+      font-size: 12px;
+      font-family: var(--sans);
+      resize: none;
+      line-height: 1.5;
+      outline: none;
+      background: var(--surface-2);
+      color: var(--text);
+      transition: border-color 0.14s;
+    }
+    #chat-input::placeholder { color: var(--text-faint); }
+    #chat-input:focus { border-color: rgba(112,109,84,.4); }
+
+    #send-btn {
+      background: var(--accent);
+      color: #f5f2ec;
+      border: none;
+      border-radius: var(--r);
+      padding: 7px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.12s, opacity 0.14s;
+      line-height: 1.5;
+      font-family: var(--sans);
+      letter-spacing: 0.01em;
+    }
+    #send-btn:hover   { background: #5a5844; }
+    #send-btn:disabled { opacity: 0.38; cursor: default; }
+
+    /* ── SHARED BUTTONS ── */
+    .btn-primary {
+      background: var(--accent);
+      color: #f5f2ec;
+      border: none;
+      border-radius: var(--r);
+      padding: 9px 20px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.12s;
+      font-family: var(--sans);
+    }
+    .btn-primary:hover { background: #5a5844; }
+
+    .btn-link {
+      background: none; border: none;
+      color: var(--text-faint);
+      font-size: 12px;
+      cursor: pointer;
+      padding: 0 4px;
+      transition: color 0.1s;
+    }
+    .btn-link:hover { color: var(--text-muted); }
+
+    /* ── MODALS ── */
+    .modal-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(26,25,22,.6);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(3px);
+    }
+    .modal-overlay.visible { display: flex; }
+
+    .modal-card {
+      background: var(--surface-2);
+      border-radius: var(--r);
+      padding: 24px;
+      width: 420px;
+      max-width: 95vw;
+      box-shadow: 0 12px 40px rgba(112,109,84,.18), 0 0 0 1px var(--border);
+      animation: modalIn 0.2s cubic-bezier(0.4,0,0.2,1);
+    }
+    @keyframes modalIn {
+      from { opacity: 0; transform: translateY(10px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .modal-card h2 {
+      font-family: var(--serif);
+      font-size: 19px;
+      font-weight: normal;
+      letter-spacing: -0.02em;
+      margin-bottom: 18px;
+      color: var(--text);
+    }
+    .modal-card .modal-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      line-height: 1.65;
+    }
+
+    .form-field { margin-bottom: 14px; }
+    .form-field label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      margin-bottom: 5px;
+      color: var(--text-faint);
+      text-transform: uppercase;
+    }
+    .form-field input,
+    .form-field select {
+      width: 100%;
+      border: 1px solid var(--border-s);
+      border-radius: var(--r);
+      padding: 7px 10px;
+      font-size: 12px;
+      font-family: var(--sans);
+      outline: none;
+      background: var(--surface);
+      color: var(--text);
+      transition: border-color 0.14s;
+    }
+    .form-field input::placeholder { color: var(--text-faint); }
+    .form-field input:focus,
+    .form-field select:focus { border-color: rgba(112,109,84,.45); }
+    .form-field select option { background: var(--surface-2); }
+
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      align-items: center;
+      margin-top: 20px;
+    }
+
+    .export-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .export-stack .btn-primary { text-align: center; }
+    .export-stack .btn-secondary {
+      display: block;
+      background: none;
+      border: 1px solid var(--blue);
+      color: var(--blue);
+      border-radius: var(--r);
+      padding: 8px 20px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.12s;
+      font-family: var(--sans);
+    }
+    .export-stack .btn-secondary:hover { background: var(--blue-bg); }
+
+    #modal-expand .modal-card {
+      width: 560px;
+      max-height: 78vh;
+      overflow-y: auto;
+    }
+    #modal-expand .modal-card::-webkit-scrollbar { width: 3px; }
+    #modal-expand .modal-card::-webkit-scrollbar-track { background: transparent; }
+    #modal-expand .modal-card::-webkit-scrollbar-thumb { background: var(--border-s); border-radius: 2px; }
+
+    .review-list { list-style: none; }
+    .review-list li {
+      padding: 9px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      line-height: 1.65;
+      color: var(--text-muted);
+    }
+    .review-list li:last-child { border-bottom: none; }
+
+    :focus-visible {
+      outline: 2px solid rgba(112,109,84,.45);
+      outline-offset: 2px;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<div id="header" style="display:none">
+  <div class="header-left">
+    <span class="brand">CC</span>
+    <div class="divider"></div>
+    <span class="session-name" id="header-name">—</span>
+  </div>
+  <span class="status-badge active" id="status-badge">ACTIVE</span>
+</div>
+
+<!-- ── WELCOME ── -->
+<div id="welcome" class="visible">
+  <div class="welcome-inner">
+    <span class="welcome-mark">◈</span>
+    <h1>Conversational Clustering</h1>
+    <p>Organizza iterativamente un dataset di testi in cluster<br>conversando con un'AI. Nessuna ground truth: l'oracle sei tu.</p>
+    <button class="btn-primary" onclick="openModal('modal-new-session')" aria-label="Avvia nuova sessione">
+      Avvia nuova sessione
+    </button>
+    <div class="welcome-meta">
+      <span class="welcome-stat">1.500 recensioni</span>
+      <div class="welcome-sep"></div>
+      <span class="welcome-stat">Amazon Electronics</span>
+      <div class="welcome-sep"></div>
+      <span class="welcome-stat">Clustering iterativo</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── WORKSPACE ── -->
+<div id="workspace">
+  <div id="main-area">
+
+    <!-- Cluster area -->
+    <div id="cluster-area">
+      <div class="section-label">Cluster correnti</div>
+      <div class="cluster-grid" id="cluster-grid"></div>
+    </div>
+
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <div class="sb-section">
+        <div class="sb-label">Turno</div>
+        <div class="stat-big" id="stat-turn">0</div>
+        <div class="stat-unit">turno</div>
+      </div>
+      <div class="sb-section">
+        <div class="sb-label">Token</div>
+        <div class="stat-tokens" id="stat-tokens">0 token</div>
+        <div class="stat-cost"   id="stat-cost">≈ $0.0000</div>
+      </div>
+      <div class="sb-section">
+        <div class="sb-label">Cognitive Load</div>
+        <div class="load-dots" id="load-dots" aria-label="Cognitive load score"></div>
+      </div>
+      <div class="sb-section">
+        <div class="sb-label">Azioni</div>
+        <button class="btn-outline blue" id="btn-converge" onclick="markConverged()" aria-label="Segna come Converged">
+          Segna come Converged
+        </button>
+        <button class="btn-outline red" onclick="openModal('modal-stop')" aria-label="Interrompi sessione">
+          Interrompi sessione
+        </button>
+      </div>
+    </div>
+
+  </div><!-- /main-area -->
+
+  <!-- Drawer chat -->
+  <div id="drawer" class="visible">
+    <div id="drawer-topbar">
+      <span class="label">
+        <span class="drawer-live-dot"></span>
+        Conversazione
+      </span>
+      <button id="toggle-btn" onclick="toggleDrawer()" aria-label="Espandi o collassa la chat">▲</button>
+    </div>
+    <div id="chat-history"></div>
+    <div id="typing-indicator">
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+    </div>
+    <div id="drawer-input">
+      <div id="cluster-tag">
+        <span id="cluster-tag-label"></span>
+        <button onclick="deselectCluster()" aria-label="Rimuovi selezione cluster">×</button>
+      </div>
+      <div id="input-row">
+        <textarea id="chat-input" rows="2" placeholder="Scrivi il tuo feedback sui cluster…" aria-label="Feedback oracle"></textarea>
+        <button id="send-btn" onclick="sendMessage()" aria-label="Invia messaggio">Invia</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /workspace -->
+
+
+<!-- ── MODAL: Nuova sessione ── -->
+<div class="modal-overlay" id="modal-new-session" role="dialog" aria-modal="true" aria-labelledby="lbl-new">
+  <div class="modal-card">
+    <h2 id="lbl-new">Nuova sessione</h2>
+    <div class="form-field">
+      <label for="inp-name">Nome sessione *</label>
+      <input type="text" id="inp-name" placeholder="es. Amazon Electronics – Iterazione 1" required />
+    </div>
+    <div class="form-field">
+      <label for="inp-dataset">Dataset</label>
+      <select id="inp-dataset">
+        <option value="amazon">Amazon Electronics Reviews – 1.500 testi</option>
+      </select>
+    </div>
+    <div class="form-field">
+      <label for="inp-k">Cluster iniziali suggeriti</label>
+      <input type="number" id="inp-k" value="5" min="3" max="10" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn-link" onclick="closeModal('modal-new-session')">Annulla</button>
+      <button class="btn-primary" onclick="startSession()">Avvia</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL: Interrompi sessione ── -->
+<div class="modal-overlay" id="modal-stop" role="dialog" aria-modal="true" aria-labelledby="lbl-stop">
+  <div class="modal-card">
+    <h2 id="lbl-stop">Interrompi la sessione</h2>
+    <p class="modal-desc">Vuoi esportare i cluster prima di chiudere?</p>
+    <div class="export-stack">
+      <button class="btn-primary" onclick="exportJSON()">Esporta JSON</button>
+      <button class="btn-secondary" onclick="exportCSV()">Esporta CSV</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-link" onclick="closeSessionFinal()">Chiudi senza salvare</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL: Espandi cluster ── -->
+<div class="modal-overlay" id="modal-expand" role="dialog" aria-modal="true" aria-labelledby="lbl-expand">
+  <div class="modal-card">
+    <h2 id="lbl-expand">—</h2>
+    <ul class="review-list" id="expand-list"></ul>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="closeModal('modal-expand')">Chiudi</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+// --- MOCK DATA ---
+
+const MOCK_CLUSTERS = [
+  { id: 'c1', name: 'Problemi tecnici',       description: 'Malfunzionamenti, difetti hardware, prodotti rotti alla consegna.',  count: 87,  emoji: '🔧' },
+  { id: 'c2', name: 'Elogi del prodotto',      description: 'Recensioni positive sulla qualità costruttiva e le funzionalità.',   count: 134, emoji: '⭐' },
+  { id: 'c3', name: 'Problemi di spedizione',  description: 'Ritardi, imballaggi danneggiati, consegne errate o mancanti.',       count: 56,  emoji: '🚚' },
+  { id: 'c4', name: 'Rapporto qualità-prezzo', description: 'Commenti sul prezzo, confronti con prodotti concorrenti.',           count: 98,  emoji: '💰' },
+  { id: 'c5', name: 'Assistenza clienti',      description: 'Esperienze positive o negative con il supporto post-vendita.',       count: 43,  emoji: '📞' },
+];
+
+const MOCK_REVIEWS = {
+  c1: [
+    'Il prodotto si è rotto dopo soli 3 giorni di utilizzo ordinario.',
+    'Schermo difettoso: linee orizzontali appaiono casualmente dopo 10 minuti.',
+    'La batteria si scarica in meno di un\'ora nonostante le specifiche dichiarate.',
+    'Pulsante laterale bloccato già all\'apertura della scatola, inutilizzabile.',
+    'Il software crasha continuamente su tutte e tre le versioni firmware.',
+    'Connessione Bluetooth instabile, si disconnette ogni 4–5 minuti.',
+    'Materiali scadenti: la plastica della scocca si è incrinata in una settimana.',
+    'Il caricabatterie incluso non eroga la corrente corretta, danneggia la batteria.',
+    'Surriscaldamento anomalo già dopo 20 minuti di utilizzo leggero.',
+    'Display che mostra una dominante cromatica verde non correggibile da software.',
+  ],
+  c2: [
+    'Prodotto eccellente, supera le aspettative sotto ogni aspetto. Già al secondo acquisto.',
+    'Qualità costruttiva impressionante per questa fascia di prezzo.',
+    'Funziona esattamente come descritto, molto soddisfatto dell\'acquisto.',
+    'Ottimo rapporto tra prestazioni e ingombro, perfetto per l\'uso quotidiano.',
+    'Setup in meno di 5 minuti, tutto ha funzionato immediatamente senza configurazioni.',
+    'La qualità audio è notevolmente superiore a tutti i competitor testati.',
+    'Design elegante e sobrio, si abbina bene a qualsiasi ambiente.',
+    'Prestazioni costanti anche dopo sei mesi di utilizzo quotidiano intensivo.',
+    'Imballaggio curato, si percepisce la cura nel dettaglio anche prima di aprire.',
+    'Consiglio vivamente a chiunque cerchi qualità senza compromessi in questa fascia.',
+  ],
+  c3: [
+    'Pacco arrivato completamente schiacciato, prodotto con angolo del display rotto.',
+    'Consegna in ritardo di 10 giorni senza alcuna comunicazione proattiva.',
+    'Prodotto sbagliato nella scatola: ho ricevuto un modello diverso da quello ordinato.',
+    'Imballaggio del tutto inadeguato per un oggetto fragile di questo valore.',
+    'Il corriere ha lasciato il pacco sotto la pioggia per tutto il pomeriggio.',
+    'Tracking non aggiornato per 4 giorni: impossibile sapere dove si trovasse il pacco.',
+    'Arrivato con sigillo aperto e con segni evidenti di manomissione.',
+    'Il venditore ha spedito la versione EU quando avevo ordinato quella IT.',
+    'Tre settimane di attesa quando la consegna era stimata in 2–3 giorni lavorativi.',
+    'Nessuna protezione interna: il prodotto era avvolto solo in un foglio di carta velina.',
+  ],
+  c4: [
+    'Per il prezzo richiesto mi aspettavo decisamente qualcosa di meglio.',
+    'Lo stesso prodotto è disponibile su altri store a quasi la metà del prezzo.',
+    'Vale assolutamente ogni centesimo: acquisto più che consigliato.',
+    'Il prezzo è giustificato dalla qualità, ma rimane un investimento importante.',
+    'Rispetto alla concorrenza diretta offre di più a parità di costo.',
+    'Con il coupon applicato al checkout è diventato un ottimo affare.',
+    'Non riesco a capire come mai costi così tanto per le funzionalità offerte.',
+    'Il prezzo riflette la qualità premium: soddisfatto della spesa.',
+    'Ho aspettato il Prime Day per comprarlo: risparmio del 35%, ottima scelta.',
+    'Costoso, ma la durata nel tempo è superiore a tutto ciò che ho usato prima.',
+  ],
+  c5: [
+    'L\'assistenza ha risposto entro 20 minuti e ha risolto il problema immediatamente.',
+    'Nessuno risponde alle email da due settimane: servizio clienti completamente assente.',
+    'Reso approvato in automatico senza dover fornire fotografie o spiegazioni.',
+    'Mi hanno fatto rimandare il prodotto tre volte senza mai risolvere il difetto.',
+    'L\'operatore è stato gentilissimo e competente: esperienza di supporto eccellente.',
+    'La richiesta di rimborso è rimasta ignorata per tre settimane consecutive.',
+    'Amazon ha sostituito il prodotto difettoso senza richiedere prove o documentazione.',
+    'Il venditore terzo non risponde; solo il supporto Amazon mi ha aiutato davvero.',
+    'La chat live è stata utilissima: problema risolto in circa 5 minuti.',
+    'La policy di reso è chiarissima e rispettata: zero problemi nel restituire l\'articolo.',
+  ],
+};
+
+const MOCK_SYSTEM_RESPONSES = [
+  {
+    text: 'Ho aggiornato il clustering in base al tuo feedback. I cluster sono stati riorganizzati per riflettere meglio le distinzioni che hai indicato.',
+    diff: null,
+  },
+  {
+    text: 'Ho diviso il cluster in due sottogruppi distinti come richiesto.',
+    diff: 'SPLIT: "Problemi tecnici" →\n  + "Difetti hardware"         (51 recensioni)\n  + "Bug e problemi software"  (36 recensioni)',
+  },
+  {
+    text: 'Ho unito i due cluster in un unico gruppo più coerente.',
+    diff: 'MERGE: "Elogi" + "Qualità premium" →\n  → "Feedback positivo"        (218 recensioni)',
+  },
+  {
+    text: 'Ho spostato le recensioni indicate nel cluster più appropriato.',
+    diff: 'REASSIGN: 14 recensioni\n  da  "Problemi tecnici"\n  →   "Assistenza clienti"',
+  },
+  {
+    text: 'Ho rinominato il cluster e aggiornato la descrizione per renderla più precisa.',
+    diff: 'RELABEL: "Problemi spedizione" →\n  → "Logistica e consegna"',
+  },
+];
+
+
+// --- STATE ---
+
+const state = {
+  view: 'welcome',
+  session: {
+    name: '',
+    dataset: 'Amazon Electronics Reviews – 1.500 testi',
+    status: 'active',   // active | converged | closed
+    turn: 0,
+    tokens: 0,
+    cognitiveLoad: 1,
+  },
+  clusters: [],
+  chat: [],
+  selectedClusterId: null,
+  drawerExpanded: false,
+  mockRespIdx: 0,
+};
+
+
+// --- RENDER ---
+
+function renderClusters() {
+  const grid = document.getElementById('cluster-grid');
+  const maxCount = Math.max(...state.clusters.map(c => c.count));
+  grid.innerHTML = state.clusters.map(c => `
+    <div class="cluster-card ${state.selectedClusterId === c.id ? 'selected' : ''}"
+         onclick="selectCluster('${c.id}')"
+         tabindex="0"
+         role="button"
+         aria-pressed="${state.selectedClusterId === c.id}"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectCluster('${c.id}')}">
+      <div class="card-header">
+        <span class="emoji">${c.emoji}</span>
+        <h3>${c.name}</h3>
+        <span class="count-pill">${c.count}</span>
+      </div>
+      <p class="card-desc">${c.description}</p>
+      <div class="size-bar"><div class="size-fill" style="width:${Math.round((c.count/maxCount)*100)}%"></div></div>
+      <div class="card-footer">
+        <button class="btn-ghost"
+                onclick="event.stopPropagation(); expandCluster('${c.id}')"
+                aria-label="Espandi cluster ${c.name}">
+          espandi →
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderSidebar() {
+  document.getElementById('stat-turn').textContent   = state.session.turn;
+  document.getElementById('stat-tokens').textContent = state.session.tokens.toLocaleString('it-IT') + ' token';
+  document.getElementById('stat-cost').textContent   = '≈ $' + (state.session.tokens * 0.000003).toFixed(4);
+
+  const dotClasses = ['d1','d2','d3','d4','d5'];
+  document.getElementById('load-dots').innerHTML = Array.from({ length: 5 }, (_, i) =>
+    `<div class="load-dot ${i < state.session.cognitiveLoad ? dotClasses[i] : ''}" title="Load ${i+1}"></div>`
+  ).join('');
+
+  const badge = document.getElementById('status-badge');
+  badge.textContent  = state.session.status.toUpperCase();
+  badge.className    = 'status-badge ' + state.session.status;
+
+  document.getElementById('btn-converge').style.display =
+    state.session.status === 'active' ? 'block' : 'none';
+}
+
+function renderChat() {
+  const history = document.getElementById('chat-history');
+  history.innerHTML = state.chat.map(m => `
+    <div class="msg ${m.role}">
+      ${m.text}
+      ${m.diff ? `<div class="msg-diff">${m.diff}</div>` : ''}
+    </div>
+  `).join('');
+  history.scrollTop = history.scrollHeight;
+}
+
+function renderClusterTag() {
+  const tag   = document.getElementById('cluster-tag');
+  const label = document.getElementById('cluster-tag-label');
+  const c     = state.clusters.find(c => c.id === state.selectedClusterId);
+  if (c) {
+    label.textContent = '📌 ' + c.name;
+    tag.classList.add('visible');
+  } else {
+    tag.classList.remove('visible');
+  }
+}
+
+function renderAll() {
+  renderClusters();
+  renderSidebar();
+  renderChat();
+  renderClusterTag();
+}
+
+
+// --- EVENTS ---
+
+function selectCluster(id) {
+  state.selectedClusterId = state.selectedClusterId === id ? null : id;
+  renderClusters();
+  renderClusterTag();
+}
+
+function deselectCluster() {
+  state.selectedClusterId = null;
+  renderClusters();
+  renderClusterTag();
+}
+
+function toggleDrawer() {
+  state.drawerExpanded = !state.drawerExpanded;
+  const drawer   = document.getElementById('drawer');
+  const mainArea = document.getElementById('main-area');
+  const toggle   = document.getElementById('toggle-btn');
+  drawer.classList.toggle('expanded', state.drawerExpanded);
+  mainArea.classList.toggle('drawer-open', state.drawerExpanded);
+  toggle.textContent = state.drawerExpanded ? '▼' : '▲';
+  if (state.drawerExpanded) {
+    setTimeout(() => {
+      const h = document.getElementById('chat-history');
+      h.scrollTop = h.scrollHeight;
+    }, 270);
+  }
+}
+
+function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const text  = input.value.trim();
+  if (!text) return;
+
+  // TODO: replace with fetch('/api/sessions/' + sessionId + '/turns', {
+  //   method: 'POST',
+  //   headers: { 'Content-Type': 'application/json' },
+  //   body: JSON.stringify({
+  //     session_id: sessionId,
+  //     raw_text: text,
+  //     feedback_type: 'global',
+  //     target_cluster_id: state.selectedClusterId,
+  //     target_point_ids: [],
+  //     metadata: {}
+  //   })
+  // }).then(r => r.json()).then(handleSystemTurn)
+
+  state.chat.push({ role: 'user', text });
+  input.value = '';
+  deselectCluster();
+  renderChat();
+
+  if (!state.drawerExpanded) toggleDrawer();
+
+  const btn = document.getElementById('send-btn');
+  btn.disabled    = true;
+  btn.textContent = '…';
+
+  document.getElementById('typing-indicator').classList.add('visible');
+
+  setTimeout(() => {
+    document.getElementById('typing-indicator').classList.remove('visible');
+
+    const resp = MOCK_SYSTEM_RESPONSES[state.mockRespIdx % MOCK_SYSTEM_RESPONSES.length];
+    state.mockRespIdx++;
+    state.chat.push({ role: 'system', text: resp.text, diff: resp.diff });
+    state.session.turn++;
+    state.session.tokens      += Math.floor(Math.random() * 900 + 350);
+    state.session.cognitiveLoad = Math.min(5, state.session.cognitiveLoad + (Math.random() > 0.55 ? 1 : 0));
+
+    btn.disabled    = false;
+    btn.textContent = 'Invia';
+    renderChat();
+    renderSidebar();
+  }, 800);
+}
+
+document.getElementById('chat-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+function markConverged() {
+  state.session.status = 'converged';
+  renderSidebar();
+}
+
+
+// --- MODALS ---
+
+function openModal(id)  { document.getElementById(id).classList.add('visible');    }
+function closeModal(id) { document.getElementById(id).classList.remove('visible'); }
+
+function startSession() {
+  const name = document.getElementById('inp-name').value.trim();
+  if (!name) { document.getElementById('inp-name').focus(); return; }
+
+  // TODO: replace with fetch('/api/sessions', {
+  //   method: 'POST',
+  //   headers: { 'Content-Type': 'application/json' },
+  //   body: JSON.stringify({ dataset_name: 'amazon_reviews_train' })
+  // }).then(r => r.json()).then(data => { sessionId = data.id; loadInitialState(); })
+
+  state.session.name          = name;
+  state.session.status        = 'active';
+  state.session.turn          = 0;
+  state.session.tokens        = 0;
+  state.session.cognitiveLoad = 1;
+  state.clusters              = JSON.parse(JSON.stringify(MOCK_CLUSTERS));
+  state.chat                  = [
+    { role: 'system', text: 'Ho analizzato 1.500 recensioni e proposto 5 cluster iniziali. Seleziona un cluster per contestualizzare il tuo feedback, oppure scrivi liberamente.', diff: null },
+  ];
+  state.selectedClusterId     = null;
+  state.mockRespIdx           = 0;
+
+  closeModal('modal-new-session');
+
+  document.getElementById('header-name').textContent = name;
+  document.getElementById('header').style.display    = 'flex';
+  document.getElementById('welcome').classList.remove('visible');
+  document.getElementById('workspace').classList.add('visible');
+  document.getElementById('drawer').classList.add('visible');
+
+  renderAll();
+}
+
+function expandCluster(id) {
+  const c = state.clusters.find(c => c.id === id);
+  if (!c) return;
+
+  // TODO: replace with fetch('/api/sessions/' + sessionId + '/clusters/' + id + '/points')
+  //   .then(r => r.json()).then(renderExpandModal)
+
+  document.getElementById('lbl-expand').textContent = `${c.emoji} ${c.name} (${c.count} recensioni)`;
+  const reviews = MOCK_REVIEWS[id] || [];
+  document.getElementById('expand-list').innerHTML =
+    reviews.map(r => `<li>${r}</li>`).join('');
+  openModal('modal-expand');
+}
+
+function closeSessionFinal() {
+  closeModal('modal-stop');
+  state.session.status = 'closed';
+  document.getElementById('header').style.display = 'none';
+  document.getElementById('workspace').classList.remove('visible');
+  document.getElementById('drawer').classList.remove('visible');
+  document.getElementById('welcome').classList.add('visible');
+  document.getElementById('inp-name').value = '';
+  state.drawerExpanded = false;
+  document.getElementById('drawer').classList.remove('expanded');
+  document.getElementById('main-area').classList.remove('drawer-open');
+  document.getElementById('toggle-btn').textContent = '▲';
+}
+
+// Close modals on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.classList.remove('visible');
+  });
+});
+
+
+// --- EXPORT ---
+
+function exportJSON() {
+  // TODO: replace with GET /api/sessions/{id}/state for live cluster data
+  const payload = {
+    session:  { name: state.session.name, dataset: state.session.dataset, turns: state.session.turn },
+    clusters: state.clusters.map(({ id, name, description, count }) => ({ id, name, description, count })),
+  };
+  _download(
+    `clusters_${_slug(state.session.name)}.json`,
+    JSON.stringify(payload, null, 2),
+    'application/json'
+  );
+  closeModal('modal-stop');
+}
+
+function exportCSV() {
+  // TODO: replace with GET /api/sessions/{id}/state + data points for live data
+  const rows = [['cluster_id', 'cluster_name', 'review_text']];
+  state.clusters.forEach(c => {
+    (MOCK_REVIEWS[c.id] || []).forEach(text => {
+      rows.push([c.id, `"${c.name}"`, `"${text.replace(/"/g, '""')}"`]);
+    });
+  });
+  _download(
+    `clusters_${_slug(state.session.name)}.csv`,
+    rows.map(r => r.join(',')).join('\n'),
+    'text/csv'
+  );
+  closeModal('modal-stop');
+}
+
+function _download(filename, content, mime) {
+  const a = document.createElement('a');
+  a.href  = URL.createObjectURL(new Blob([content], { type: mime }));
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function _slug(str) {
+  return str.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '');
+}
+</script>
+</body>
+</html>
