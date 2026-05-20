@@ -39,7 +39,7 @@ class ChatSessionState(BaseModel):
 class SoftAssignment(BaseModel):
     data_point_id: str
     cluster_id: str
-    turn_number: int = Field(ge=1)
+    turn_number: int = Field(ge=0)
     probability: float = Field(ge=0.0, le=1.0)
 
 
