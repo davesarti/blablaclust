@@ -2,7 +2,7 @@ import os
 
 from fastapi import FastAPI
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker
 
 from src.models import Base
 
@@ -21,9 +21,13 @@ def get_db():
 
 
 # Router imports must come after get_db is defined so the circular reference resolves
+from backend.routers.clusters import router as clusters_router
 from backend.routers.datasets import router as datasets_router
 from backend.routers.sessions import router as sessions_router
+from backend.routers.turns import router as turns_router
 
 app = FastAPI()
 app.include_router(datasets_router)
 app.include_router(sessions_router)
+app.include_router(turns_router)
+app.include_router(clusters_router)
