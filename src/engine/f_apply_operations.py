@@ -1,136 +1,95 @@
-"""Persist cluster and soft-assignment changes from a Claude f_output response.
+"""Dispatch Claude's structured operations to the actual clustering functions.
 
-Called after each turn by the turns router.  The `raw` dict is the parsed
-JSON object returned by f_output; this function is the only place that writes
-cluster metadata or SoftAssignment rows post-initial-clustering.
+After f_output returns a list of operations (merge, split, rename), this
+function routes each one to the corresponding P2 function that executes the
+real embedding-based reassignment.
+
+Transaction model (mirrors cluster_operations.py)
+--------------------------------------------------
+Does NOT call db.commit() — the caller owns the transaction so a turn that
+applies several operations stays atomic. On any error the caller's session is
+still clean and can be rolled back.
+
+turn_number handling
+--------------------
+P2's merge and split functions require turn_number to be strictly greater than
+the latest existing snapshot. If a single oracle turn triggers multiple
+operations that write new snapshots (e.g. merge + split), each needs its own
+incrementing turn_number. This function starts at the given turn_number and
+increments by 1 for each snapshot-writing operation (merge, split). Rename
+never writes a new snapshot so it never consumes a turn_number.
+
+The final turn_number used is returned so the caller can record it.
 """
 
-import uuid
-
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from src.models import Cluster as DbCluster, SoftAssignment as DbSoftAssignment
+from src.engine.cluster_operations import merge_clusters, rename_cluster, split_cluster
 
 
 def f_apply_operations(
-    raw: dict,
+    operations: list[dict],
     session_id: str,
     turn_number: int,
     db: Session,
-) -> None:
-    """Apply Claude's clustering decision to the DB.
+) -> int:
+    """Route each operation from Claude's response to the right clustering function.
 
-    No-op for explain/no_change or when clusters_updated is empty.
-    For relabel: updates cluster name/description in place.
-    For split/merge/reassign: dissolves old clusters, creates new ones, and
-    writes new SoftAssignment rows at turn_number by redistributing the
-    dissolved clusters' probability mass equally across the replacement clusters.
+    Args:
+        operations: List of operation dicts from Claude's JSON response.
+                    Each must have a "type" key: "merge", "split", or "rename".
+                    Unknown types are silently skipped.
+        session_id: The session these operations belong to.
+        turn_number: Starting turn number for snapshot-writing operations.
+                     Must be strictly greater than the latest existing snapshot.
+        db: SQLAlchemy session. No commit is made here — caller's responsibility.
+
+    Returns:
+        The next available turn_number after all operations. If no snapshot-writing
+        operations ran (empty list, only renames, or only unknown types) this
+        equals the input turn_number unchanged.
+
+    Raises:
+        ValueError: propagated from merge/split/rename when an operation is
+                    invalid (unknown cluster, already dissolved, stale turn_number).
+                    The DB session is untouched so the caller can roll back.
+        KeyError: if a required field is missing from an operation dict.
     """
-    action = raw.get("action", "no_change")
-    clusters_updated = raw.get("clusters_updated", [])
+    current_turn = turn_number
 
-    if action in ("explain", "no_change") or not clusters_updated:
-        return
+    for op in operations:
+        op_type = op.get("type")
 
-    # ------------------------------------------------------------------
-    # 1. Resolve IDs: map "new_<label>" slugs to real UUIDs
-    # ------------------------------------------------------------------
-    id_map: dict[str, str] = {}
-    for c in clusters_updated:
-        raw_id = c["id"]
-        id_map[raw_id] = str(uuid.uuid4()) if raw_id.startswith("new_") else raw_id
-
-    # ------------------------------------------------------------------
-    # 2. Load active clusters; determine which are dissolved
-    # ------------------------------------------------------------------
-    active_clusters = (
-        db.query(DbCluster)
-        .filter(DbCluster.session_id == session_id, DbCluster.dissolved_at_turn.is_(None))
-        .all()
-    )
-    active_by_id: dict[str, DbCluster] = {c.id: c for c in active_clusters}
-    updated_real_ids = set(id_map.values())
-    dissolved_ids = set(active_by_id.keys()) - updated_real_ids
-
-    # ------------------------------------------------------------------
-    # 3. Apply cluster metadata changes
-    # ------------------------------------------------------------------
-    for c_data in clusters_updated:
-        raw_id = c_data["id"]
-        real_id = id_map[raw_id]
-        if raw_id.startswith("new_"):
-            db.add(DbCluster(
-                id=real_id,
+        if op_type == "merge":
+            # Writes a full soft-assignment snapshot → consumes a turn_number.
+            merge_clusters(
+                cluster_ids=op["cluster_ids"],
                 session_id=session_id,
-                name=c_data["name"],
-                description=c_data["description"],
-                created_at_turn=turn_number,
-            ))
-        else:
-            cluster = active_by_id.get(real_id)
-            if cluster:
-                cluster.name = c_data["name"]
-                cluster.description = c_data["description"]
+                turn_number=current_turn,
+                db=db,
+            )
+            current_turn += 1
 
-    for cid in dissolved_ids:
-        active_by_id[cid].dissolved_at_turn = turn_number
+        elif op_type == "split":
+            # Writes a full soft-assignment snapshot → consumes a turn_number.
+            split_cluster(
+                cluster_id=op["cluster_id"],
+                session_id=session_id,
+                turn_number=current_turn,
+                db=db,
+            )
+            current_turn += 1
 
-    if not dissolved_ids:
-        return  # pure relabel — no point reassignment needed
+        elif op_type == "rename":
+            # Only updates name/description — no new snapshot, no turn_number needed.
+            rename_cluster(
+                cluster_id=op["cluster_id"],
+                new_name=op.get("new_name", ""),
+                new_description=op.get("new_description", ""),
+                db=db,
+            )
 
-    # ------------------------------------------------------------------
-    # 4. Redistribute SoftAssignments to new clusters at turn_number
-    # ------------------------------------------------------------------
-    all_active_ids = list(active_by_id.keys())
-    latest_turn = (
-        db.query(func.max(DbSoftAssignment.turn_number))
-        .filter(DbSoftAssignment.cluster_id.in_(all_active_ids))
-        .scalar()
-    )
-    if latest_turn is None:
-        return
+        # Unknown types are silently skipped — Claude may return op types we
+        # don't support yet and that must never crash a turn.
 
-    existing = (
-        db.query(DbSoftAssignment)
-        .filter(
-            DbSoftAssignment.cluster_id.in_(all_active_ids),
-            DbSoftAssignment.turn_number == latest_turn,
-        )
-        .all()
-    )
-
-    # Build per-point probability dict from existing assignments
-    by_point: dict[str, dict[str, float]] = {}
-    for a in existing:
-        by_point.setdefault(a.data_point_id, {})[a.cluster_id] = a.probability
-
-    new_cluster_ids = [id_map[c["id"]] for c in clusters_updated if c["id"].startswith("new_")]
-    surviving_ids = updated_real_ids - set(new_cluster_ids)
-    n_new = len(new_cluster_ids) or 1
-
-    new_rows: list[DbSoftAssignment] = []
-    for point_id, probs in by_point.items():
-        # Copy surviving cluster assignments forward unchanged
-        for cid in surviving_ids:
-            if cid in probs:
-                new_rows.append(DbSoftAssignment(
-                    data_point_id=point_id,
-                    cluster_id=cid,
-                    turn_number=turn_number,
-                    probability=probs[cid],
-                ))
-        # Distribute dissolved-cluster probability equally across replacement clusters
-        dissolved_prob = sum(probs.get(cid, 0.0) for cid in dissolved_ids)
-        if dissolved_prob > 0.0 and new_cluster_ids:
-            per_new = dissolved_prob / n_new
-            for new_cid in new_cluster_ids:
-                new_rows.append(DbSoftAssignment(
-                    data_point_id=point_id,
-                    cluster_id=new_cid,
-                    turn_number=turn_number,
-                    probability=per_new,
-                ))
-
-    for row in new_rows:
-        db.add(row)
+    return current_turn
