@@ -7,9 +7,11 @@ from sqlalchemy.orm import Session
 from backend.main import get_db
 from backend.session_state import build_session_state
 from src.engine.f_apply_operations import f_apply_operations
+from src.engine.f_next_best_step import f_next_best_step
 from src.engine.f_output import f_output
+from src.engine.f_uncertainty import f_uncertainty
 from src.harness import ConversationContext
-from src.models import ChatSession, Cluster as DbCluster, DataPoint, Turn
+from src.models import ChatSession, Cluster as DbCluster, DataPoint, SoftAssignment, Turn
 from src.schemas import InputOracle, TurnRead
 
 router = APIRouter(prefix="/turns", tags=["turns"])
@@ -70,9 +72,9 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     """Run one engine interaction step and persist it as a turn.
 
     Applies the oracle's feedback to the current clustering by calling the
-    executor (f_output -> LLM) and stores the raw engine response as the turn's
-    system_output. Records the turn only — it does not mutate the clusters or
-    soft_assignments tables.
+    executor (f_output -> LLM), stores the raw engine response as the turn's
+    system_output, and applies any returned operations to clusters and
+    soft_assignments.
     """
     session = (
         db.query(ChatSession).filter(ChatSession.id == payload.session_id).first()
@@ -155,7 +157,42 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     db.add(new_turn)
     db.commit()
 
-    f_apply_operations(raw, session_id=session.id, turn_number=new_turn_number, db=db)
+    if isinstance(raw, list):
+        operations = raw
+    else:
+        operations = raw.get("operations", [])
+
+    if operations:
+        latest_snapshot_turn = (
+            db.query(func.max(SoftAssignment.turn_number))
+            .filter(SoftAssignment.cluster_id.in_([c.id for c in clusters]))
+            .scalar()
+        )
+        start_turn = new_turn_number
+        if latest_snapshot_turn is not None and latest_snapshot_turn >= start_turn:
+            start_turn = latest_snapshot_turn + 1
+
+        f_apply_operations(
+            operations,
+            session_id=session.id,
+            turn_number=start_turn,
+            db=db,
+        )
+        db.commit()
+
+    updated_state = build_session_state(db, session)
+    uncertainty = f_uncertainty(session.id, db)
+    system_turn = f_next_best_step(updated_state, uncertainty, context)
+    system_turn.clusters_updated = bool(operations)
+
+    raw_display = raw.get("display") if isinstance(raw, dict) else None
+    if isinstance(raw_display, str) and system_turn.action == "show":
+        system_turn.display.content = raw_display
+
+    if operations:
+        system_turn.state_snapshot["operations"] = operations
+
+    new_turn.system_output = system_turn.model_dump()
     db.commit()
 
     db.refresh(new_turn)

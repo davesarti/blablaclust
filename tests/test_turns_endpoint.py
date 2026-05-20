@@ -86,9 +86,9 @@ def test_create_turn_persists_and_returns(client):
     assert body["session_id"] == "sess-1"
     assert body["turn_number"] == 1
     assert body["oracle_input"]["raw_text"] == "merge these"
-    # dry-run engine output is stored verbatim as system_output
     assert "display" in body["system_output"]
-    assert body["system_output"]["action"] == "no_change"
+    assert body["system_output"]["display"]["content"]
+    assert body["system_output"]["action"] == "show"
 
 
 def test_turn_number_increments(client):
