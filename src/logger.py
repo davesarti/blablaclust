@@ -24,7 +24,7 @@ class UnexpectedDeviation(Exception):
 
 
 def deviation(msg: str, **kwargs) -> None:
-    """Call instead of print() whenever something unexpected happens in the system."""
+    #Call instead of print() whenever something unexpected happens in the system.
     if STRICT:
         raise UnexpectedDeviation(f"{msg} | {kwargs}")
     log.warning(msg, extra={"details": kwargs})
@@ -37,7 +37,7 @@ def log_llm_call(
     usage: dict,
     cost_usd: float,
 ) -> None:
-    """Append one line to logs/llm_calls.jsonl for every Claude API call."""
+    #Append one line to logs/llm_calls.jsonl for every Claude API call.
     entry = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "session_id": session_id,
