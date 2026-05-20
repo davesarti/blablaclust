@@ -6,9 +6,9 @@
 - **Soft assignments**: each data point gets a probability for every cluster, computed as `softmax(-squared_distance_to_centroid)`. Probabilities sum to 1 per point — this is what the `SoftAssignment` table expects and what P3's `f_uncertainty` needs to find boundary points.
 - **k tuning with silhouette score**: `silhouette_for_k(data_points, k)` and `sweep_k(data_points, k_min, k_max)` — diagnostics that score how well-separated the clusters are, to help the oracle pick a sensible k before clustering.
 - **Cluster naming via LLM**: `src/engine/cluster_naming.py` + `prompts/cluster_naming.txt` — `name_clusters()` sends the 8 most representative points of each cluster to the LLM (via the harness) and gets back a name + description. Best-effort: a failed LLM call or unparseable output leaves the `Cluster N` placeholder instead of aborting.
-- **Endpoints** (`backend/routers/sessions.py`):
-  - `POST /sessions/{id}/clustering` — body `{k, generate_names}`. Runs clustering + naming, persists clusters and soft_assignments, returns sizes + silhouette score. Returns 409 if clustering already exists.
-  - `GET /sessions/{id}/clustering/suggest-k` — silhouette sweep, returns a recommended k.
+- **Endpoints** (`backend/routers/clusters.py` — a dedicated P2-owned router, registered in `backend/main.py`):
+  - `POST /clusters/{session_id}` — body `{k, generate_names}`. Runs clustering + naming, persists clusters and soft_assignments, returns sizes + silhouette score. Returns 409 if clustering already exists.
+  - `GET /clusters/{session_id}/suggest-k` — silhouette sweep, returns a recommended k.
 - **requirements.txt**: added `scikit-learn` and `numpy` (dependencies introduced by this layer).
 
 ## Results

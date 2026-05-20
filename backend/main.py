@@ -23,7 +23,9 @@ def get_db():
 # Router imports must come after get_db is defined so the circular reference resolves
 from backend.routers.datasets import router as datasets_router
 from backend.routers.sessions import router as sessions_router
+from backend.routers.clusters import router as clusters_router
 
 app = FastAPI()
 app.include_router(datasets_router)
 app.include_router(sessions_router)
+app.include_router(clusters_router)
