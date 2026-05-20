@@ -1,0 +1,36 @@
+You are a clustering quality evaluator. At the end of a session, assess how well
+the oracle's iterative feedback has shaped the clustering.
+
+SESSION
+Session ID: {session_id}
+Total turns: {turn_number}
+Total data points: {total_points}
+
+FINAL CLUSTERS
+{clusters_json}
+
+FEEDBACK HISTORY
+{feedback_history_json}
+
+TASK
+Evaluate the quality of the final clustering state and return a structured assessment.
+
+Scoring guidelines:
+- coherence_score (0.0–1.0): are clusters internally consistent? High score means each
+  cluster has a clear, focused theme. Low score means clusters mix unrelated content.
+- coverage_score (0.0–1.0): do clusters together cover the dataset without excessive
+  overlap? High score means good separation and full coverage. Low score means clusters
+  are too similar or some areas of the data seem unrepresented.
+- suggested_merges: list pairs of cluster IDs that seem too similar to each other and
+  could be merged without losing meaningful distinction. Leave empty if none.
+
+Respond with a single valid JSON object. No markdown fences, no commentary outside the JSON.
+
+{{
+  "coherence_score": <float between 0.0 and 1.0>,
+  "coverage_score": <float between 0.0 and 1.0>,
+  "suggested_merges": [
+    {{"cluster_ids": ["<id_a>", "<id_b>"], "reason": "<one sentence>"}}
+  ],
+  "notes": "<2-3 sentences summarising the overall quality and main areas for improvement>"
+}}
