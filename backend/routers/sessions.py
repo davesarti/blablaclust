@@ -2,16 +2,12 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.main import get_db
-from src.models import ChatSession, Cluster as DbCluster, DataPoint, SoftAssignment, Turn
-from src.schemas import (
-    ChatSessionState,
-    Cluster as ClusterSchema,
-    FeedbackEntry,
-)
+from backend.session_state import build_session_state
+from src.models import ChatSession, DataPoint
+from src.schemas import ChatSessionState
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -69,77 +65,4 @@ def read_session_state(session_id: str, db: Session = Depends(get_db)):
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    latest_turn = (
-        db.query(func.max(Turn.turn_number))
-        .filter(Turn.session_id == session_id)
-        .scalar()
-    )
-    latest_turn_number = latest_turn or 0
-
-    turns = (
-        db.query(Turn)
-        .filter(Turn.session_id == session_id)
-        .order_by(Turn.turn_number.asc())
-        .all()
-    )
-    feedback_history: list[FeedbackEntry] = []
-    for turn in turns:
-        oracle_input = turn.oracle_input
-        feedback_history.append(
-            FeedbackEntry(
-                turn=turn.turn_number,
-                type=oracle_input.get("feedback_type", "global"),
-                content=oracle_input.get("raw_text", ""),
-                target_cluster_id=oracle_input.get("target_cluster_id"),
-                target_point_ids=oracle_input.get("target_point_ids") or [],
-            )
-        )
-
-    clusters = (
-        db.query(DbCluster)
-        .filter(DbCluster.session_id == session_id, DbCluster.dissolved_at_turn.is_(None))
-        .all()
-    )
-    cluster_ids = [cluster.id for cluster in clusters]
-    assignments_by_cluster: dict[str, list[tuple[str, float]]] = {}
-    if latest_turn_number > 0 and cluster_ids:
-        assignments = (
-            db.query(SoftAssignment)
-            .filter(
-                SoftAssignment.cluster_id.in_(cluster_ids),
-                SoftAssignment.turn_number == latest_turn_number,
-            )
-            .all()
-        )
-        for assignment in assignments:
-            assignments_by_cluster.setdefault(assignment.cluster_id, []).append(
-                (assignment.data_point_id, assignment.probability)
-            )
-        for cluster_id, items in assignments_by_cluster.items():
-            items.sort(key=lambda item: item[1], reverse=True)
-
-    cluster_states: list[ClusterSchema] = []
-    for cluster in clusters:
-        assignments = assignments_by_cluster.get(cluster.id, [])
-        representative_points = [point_id for point_id, _ in assignments[:3]]
-        cluster_states.append(
-            ClusterSchema(
-                id=cluster.id,
-                session_id=cluster.session_id,
-                name=cluster.name,
-                description=cluster.description,
-                created_at_turn=cluster.created_at_turn,
-                dissolved_at_turn=cluster.dissolved_at_turn,
-                size=len(assignments),
-                representative_points=representative_points,
-            )
-        )
-
-    return ChatSessionState(
-        session_id=session.id,
-        turn_number=latest_turn_number,
-        dataset_name=session.dataset_name,
-        status=session.status,
-        clusters=cluster_states,
-        feedback_history=feedback_history,
-    )
+    return build_session_state(db, session)
