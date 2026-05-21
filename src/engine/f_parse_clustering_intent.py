@@ -12,7 +12,7 @@ oracle's intent baked in from the start, rather than using an arbitrary default 
 
 import json
 
-from src.harness import call_llm, render_prompt
+from src.harness import call_llm, render_prompt, extract_json_text
 
 # Safe bounds for k — k-means below 2 is degenerate, above 20 is rarely useful
 K_MIN = 2
@@ -51,7 +51,7 @@ def f_parse_clustering_intent(
             [{"role": "user", "content": oracle_intent}],
             system=prompt,
         )
-        parsed = json.loads(response.text)
+        parsed = json.loads(extract_json_text(response.text))
 
         # Clamp k to the allowed range regardless of what Claude returned.
         k = max(k_min, min(k_max, int(parsed["k"])))

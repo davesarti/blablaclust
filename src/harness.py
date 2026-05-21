@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -64,6 +65,20 @@ def hash_prompt(name: str) -> str:
 def render_prompt(name: str, **kwargs: Any) -> str:
     template = load_prompt(name)
     return template.format(**kwargs)
+
+
+def extract_json_text(text: str) -> str:
+    """Return the raw JSON string from an LLM response, stripping markdown fences.
+
+    Some models (e.g. Gemini) wrap their JSON in ```json ... ``` even when the
+    prompt says not to.  This function handles both fenced and unfenced output
+    so callers can always pass the result straight to json.loads().
+    """
+    text = text.strip()
+    match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
+    if match:
+        return match.group(1).strip()
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -322,7 +337,17 @@ class ConversationContext:
         self._oracle_turns.append(oracle_turn)
 
     def add_system_turn(self, system_turn: dict) -> None:
-        text = system_turn.get("display", json.dumps(system_turn))
+        # display can be a string (old format) or a Display dict
+        # {"type": ..., "content": ..., "items": ...} (current SystemTurn format).
+        # All LLM providers (Anthropic, OpenAI, Groq, OpenRouter) require
+        # message content to be a plain string, so we always extract text here.
+        display = system_turn.get("display")
+        if isinstance(display, dict):
+            text = display.get("content") or json.dumps(system_turn)
+        elif isinstance(display, str):
+            text = display
+        else:
+            text = json.dumps(system_turn)
         self.turns.append({"role": "assistant", "content": text})
 
     def detect_contradiction(
@@ -388,7 +413,11 @@ class ConversationContext:
 
     def build_messages(self, model: str = DEFAULT_MODEL) -> list[dict[str, str]]:
         messages = list(self.turns)
-        if not DRY_RUN and len(messages) > 2:
+        # Token-based trimming requires the Anthropic SDK's count_tokens endpoint.
+        # Skip it for other providers — their context windows are large enough that
+        # the hard MAX_INPUT_TOKENS limit is unlikely to be hit in a normal session.
+        provider = os.environ.get("LLM_PROVIDER", "claude").lower()
+        if not DRY_RUN and provider == "claude" and len(messages) > 2:
             while count_tokens(messages, system="", model=model) > MAX_INPUT_TOKENS:
                 if len(messages) <= 2:
                     break

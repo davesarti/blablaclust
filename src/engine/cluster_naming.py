@@ -7,7 +7,7 @@ representative data points. Mutates the Cluster objects in place.
 
 import json
 
-from src.harness import call_llm, render_prompt
+from src.harness import call_llm, render_prompt, extract_json_text
 from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoftAssignment
 
 REPRESENTATIVE_SAMPLE_SIZE = 8
@@ -62,7 +62,7 @@ def name_clusters(
                 [{"role": "user", "content": "Name this cluster."}],
                 system=prompt,
             )
-            parsed = json.loads(response.text)
+            parsed = json.loads(extract_json_text(response.text))
             cluster.name = str(parsed["name"])[:255]
             cluster.description = str(parsed["description"])
         except Exception:
