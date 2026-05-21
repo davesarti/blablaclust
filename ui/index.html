@@ -1106,7 +1106,13 @@ function handleSystemTurn(turnData) {
   const out  = turnData.system_output;
   const text = out.display?.content || '';
   const items = out.display?.items;
-  const diff = items?.length ? items.join('\n') : null;
+  const diff = items?.length
+    ? items.map(item => {
+        if (item.text_preview) return `• "${item.text_preview.slice(0, 90)}" (uncertainty ${item.uncertainty_score?.toFixed(2)})`;
+        if (item.name)         return `• ${item.name}: ${item.size} points`;
+        return JSON.stringify(item);
+      }).join('\n')
+    : null;
   state.chat.push({ role: 'system', text, diff });
 
   state.session.turn = turnData.turn_number;
