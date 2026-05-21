@@ -25,6 +25,8 @@ The final turn_number used is returned so the caller can record it.
 from sqlalchemy.orm import Session
 
 from src.engine.cluster_operations import merge_clusters, rename_cluster, split_cluster
+from src.engine.cluster_naming import name_clusters
+from src.models import DataPoint, SoftAssignment
 
 
 def f_apply_operations(
@@ -50,10 +52,14 @@ def f_apply_operations(
         equals the input turn_number unchanged.
 
     Raises:
-        ValueError: propagated from merge/split/rename when an operation is
-                    invalid (unknown cluster, already dissolved, stale turn_number).
-                    The DB session is untouched so the caller can roll back.
-        KeyError: if a required field is missing from an operation dict.
+        ValueError: propagated from merge/split/rename when the LLM emits an
+            invalid op (unknown cluster_id, already-dissolved cluster, stale
+            turn_number).  The caller is expected to convert this into a 4xx
+            HTTP response so the failure is visible to the oracle — silent
+            skipping is forbidden because it hides real bugs in the prompt or
+            the LLM's output.
+        KeyError: when an operation dict is missing a required field
+            (e.g. cluster_ids on a merge).  Same rationale.
     """
     current_turn = turn_number
 
@@ -68,16 +74,39 @@ def f_apply_operations(
                 turn_number=current_turn,
                 db=db,
             )
+            # Flush so the next operation in this same turn sees the updated
+            # snapshot rows and dissolved cluster state.  The session uses
+            # autoflush=False, so without this the second split/merge would
+            # read the pre-operation DB state and carry forward wrong clusters.
+            db.flush()
             current_turn += 1
 
         elif op_type == "split":
             # Writes a full soft-assignment snapshot → consumes a turn_number.
-            split_cluster(
+            new_clusters = split_cluster(
                 cluster_id=op["cluster_id"],
                 session_id=session_id,
                 turn_number=current_turn,
                 db=db,
             )
+            # Same flush reason as merge above.
+            db.flush()
+
+            # Ask the LLM to name the two new sub-clusters from their
+            # representative points, replacing the generic "part 1/2" labels.
+            new_cluster_ids = [c.id for c in new_clusters]
+            sub_assignments = (
+                db.query(SoftAssignment)
+                .filter(
+                    SoftAssignment.cluster_id.in_(new_cluster_ids),
+                    SoftAssignment.turn_number == current_turn,
+                )
+                .all()
+            )
+            point_ids = list({a.data_point_id for a in sub_assignments})
+            sub_points = db.query(DataPoint).filter(DataPoint.id.in_(point_ids)).all()
+            name_clusters(new_clusters, sub_assignments, sub_points)
+
             current_turn += 1
 
         elif op_type == "rename":
@@ -89,7 +118,9 @@ def f_apply_operations(
                 db=db,
             )
 
-        # Unknown types are silently skipped — Claude may return op types we
-        # don't support yet and that must never crash a turn.
+        # Unknown op_type values are skipped intentionally so a future protocol
+        # extension does not crash older clients.  Missing op_type, however, is
+        # treated as a structural error and falls through to the KeyError
+        # raised by the dispatch above (or by op["..."] field accesses).
 
     return current_turn
