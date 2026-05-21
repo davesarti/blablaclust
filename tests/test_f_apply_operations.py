@@ -123,7 +123,17 @@ def test_multiple_ops_turn_number_increments_correctly():
 
 
 def test_value_error_from_merge_propagates():
+    """A bad merge (e.g. already-dissolved cluster) must propagate so the router
+    can surface it as HTTP 422.  Silent skipping is forbidden — it would hide
+    real prompt/LLM bugs behind apparent success."""
     op = {"type": "merge", "cluster_ids": ["c1", "c2"]}
     with patch(f"{MOD}.merge_clusters", side_effect=ValueError("already dissolved")):
         with pytest.raises(ValueError, match="already dissolved"):
             f_apply_operations([op], session_id="s1", turn_number=3, db=_db())
+
+
+def test_missing_required_field_raises_key_error():
+    """A malformed merge op (missing cluster_ids) must raise KeyError, not pass silently."""
+    op = {"type": "merge"}  # cluster_ids missing
+    with pytest.raises(KeyError):
+        f_apply_operations([op], session_id="s1", turn_number=3, db=_db())

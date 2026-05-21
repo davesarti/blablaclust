@@ -172,13 +172,26 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
         if latest_snapshot_turn is not None and latest_snapshot_turn >= start_turn:
             start_turn = latest_snapshot_turn + 1
 
-        f_apply_operations(
-            operations,
-            session_id=session.id,
-            turn_number=start_turn,
-            db=db,
-        )
-        db.commit()
+        # Engine errors (bad cluster_id, missing fields, dissolved cluster, …)
+        # propagate out of f_apply_operations on purpose — we surface them as
+        # HTTP 422 with the original message so the oracle (and the dev) can
+        # see exactly what went wrong rather than getting a bare "500 Internal
+        # Server Error".  The in-progress transaction rolls back when the
+        # session closes, so no partial cluster state ever reaches the DB.
+        try:
+            f_apply_operations(
+                operations,
+                session_id=session.id,
+                turn_number=start_turn,
+                db=db,
+            )
+            db.commit()
+        except (ValueError, KeyError) as exc:
+            db.rollback()
+            raise HTTPException(
+                status_code=422,
+                detail=f"Engine produced an invalid operation: {exc}",
+            )
 
     updated_state = build_session_state(db, session)
     uncertainty = f_uncertainty(session.id, db)

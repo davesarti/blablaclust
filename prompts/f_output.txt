@@ -48,7 +48,9 @@ Respond with a single valid JSON object. No markdown fences, no commentary outsi
 }}
 
 CONSTRAINTS
-- Use only cluster IDs present in the provided clusters. Do not invent IDs.
+- Use only cluster IDs present in the provided CURRENT CLUSTERS list. Do not invent IDs.
+- NEVER use a cluster name as a cluster_id. cluster_id must always be the UUID string from the list above.
+- You cannot reference a cluster created by an earlier operation in the same list (e.g. after a merge you do not know the new cluster's UUID). If you need to merge then split, just emit the merge — the oracle will ask for the split in the next turn.
 - operations can be an empty array when action is "no_change" or "explain".
 - Each operation must have a "type" field: merge | split | rename.
 - If feedback_type is "explain", set action to "explain" and leave operations empty.
