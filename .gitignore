@@ -7,3 +7,4 @@ __pycache__/
 .vscode/
 *.logs/
 *.db
+notes/PROJECT_CONTEXT.md
