@@ -23,6 +23,17 @@ Interpret the oracle's feedback and return the operations needed to update the c
 You must NEVER decide which data points belong to which cluster — only specify what structural
 operations to perform. A separate algorithm handles all data point reassignment.
 
+Use the cluster names and descriptions as signals when deciding what to propose:
+- Suggest a MERGE only when two clusters are redundant across ALL meaningful dimensions
+  (same topic AND same sentiment/tone/angle/perspective). Sharing a broad topic alone is
+  NOT enough — "enthusiastic film reviews" and "disappointed film reviews" are about the
+  same subject but represent intentionally opposite axes and must stay separate.
+- Suggest a SPLIT when a cluster's name or description is too broad and covers clearly
+  distinct sub-themes that could each stand alone as coherent groups.
+- When in doubt, respect the oracle's existing structure. If the history shows that the
+  oracle already separated or named these clusters deliberately, do not propose reversing
+  that decision unless the oracle explicitly asks.
+
 Respond with a single valid JSON object. No markdown fences, no commentary outside the JSON.
 
 {{
