@@ -20,7 +20,10 @@ from src.schemas import ChatSessionState, Display, SystemTurn
 from src.harness import ConversationContext
 
 # A point with uncertainty >= this value is worth asking the oracle about.
-ASK_THRESHOLD = 0.4
+# Raised from 0.4 to 0.45 to avoid asking too frequently after initial clustering,
+# when many points naturally land near cluster boundaries with uncertainty ~0.5.
+# 0.45 means "only ask for points that are genuinely ambiguous (>45% split between clusters)".
+ASK_THRESHOLD = 0.45
 
 # After this many turns the session is likely to have converged.
 MAX_TURNS = 20
