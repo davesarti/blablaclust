@@ -144,6 +144,7 @@ def build_session_state(db: Session, session: ChatSession) -> ChatSessionState:
         session_id=session.id,
         turn_number=latest_turn_number,
         dataset_name=session.dataset_name,
+        embedding_model=session.embedding_model,
         status=session.status,
         clusters=cluster_states,
         feedback_history=feedback_history,

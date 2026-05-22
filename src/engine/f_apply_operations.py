@@ -24,7 +24,12 @@ The final turn_number used is returned so the caller can record it.
 
 from sqlalchemy.orm import Session
 
-from src.engine.cluster_operations import merge_clusters, rename_cluster, split_cluster
+from src.engine.cluster_operations import (
+    merge_clusters,
+    move_points,
+    rename_cluster,
+    split_cluster,
+)
 from src.engine.cluster_naming import name_clusters
 from src.models import DataPoint, SoftAssignment
 
@@ -107,6 +112,19 @@ def f_apply_operations(
             sub_points = db.query(DataPoint).filter(DataPoint.id.in_(point_ids)).all()
             name_clusters(new_clusters, sub_assignments, sub_points)
 
+            current_turn += 1
+
+        elif op_type == "move":
+            # Writes a full soft-assignment snapshot → consumes a turn_number.
+            move_points(
+                point_ids=op["point_ids"],
+                target_cluster_id=op["target_cluster_id"],
+                session_id=session_id,
+                turn_number=current_turn,
+                db=db,
+            )
+            # Same flush reason as merge/split above.
+            db.flush()
             current_turn += 1
 
         elif op_type == "rename":

@@ -13,6 +13,7 @@ ORACLE INPUT
 Feedback type: {feedback_type}
 Text: {oracle_raw_text}
 Target clusters: {target_cluster_ids}
+Target points: {target_point_ids}
 
 CONVERSATION HISTORY
 {history_summary}
@@ -25,7 +26,7 @@ operations to perform. A separate algorithm handles all data point reassignment.
 Respond with a single valid JSON object. No markdown fences, no commentary outside the JSON.
 
 {{
-  "action": "<one of: merge | split | rename | no_change | explain>",
+  "action": "<one of: merge | split | rename | move | no_change | explain>",
   "operations": [
     {{
       "type": "merge",
@@ -40,6 +41,11 @@ Respond with a single valid JSON object. No markdown fences, no commentary outsi
       "type": "rename",
       "cluster_id": "<existing cluster id>",
       "new_name": "<short label, max 40 chars>"
+    }},
+    {{
+      "type": "move",
+      "point_ids": ["<data_point_id_1>", "<data_point_id_2>"],
+      "target_cluster_id": "<existing cluster id>"
     }}
   ],
   "display": "<plain English explanation of what changed and why, max 3 sentences, shown directly to oracle>",
@@ -52,7 +58,8 @@ CONSTRAINTS
 - NEVER use a cluster name as a cluster_id. cluster_id must always be the UUID string from the list above.
 - You cannot reference a cluster created by an earlier operation in the same list (e.g. after a merge you do not know the new cluster's UUID). If you need to merge then split, just emit the merge — the oracle will ask for the split in the next turn.
 - operations can be an empty array when action is "no_change" or "explain".
-- Each operation must have a "type" field: merge | split | rename.
+- Each operation must have a "type" field: merge | split | rename | move.
+- For "move", point_ids may ONLY contain data point IDs the oracle explicitly referenced (see Target points above, or IDs named earlier in the conversation). NEVER invent point IDs or move points the oracle did not name — bulk reassignment is the clustering algorithm's job, not yours. Use "move" for point-level feedback such as resolving a boundary point or correcting a single misplaced point.
 - If feedback_type is "explain", set action to "explain" and leave operations empty.
 - If contradiction_detected is true, briefly note the conflict in the display field.
 - cognitive_load_score reflects how much information the oracle must process this turn (1=trivial, 5=overwhelming).

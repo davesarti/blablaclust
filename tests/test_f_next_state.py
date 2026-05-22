@@ -25,6 +25,7 @@ def make_state(clusters: list[Cluster] | None = None) -> ChatSessionState:
         session_id="sess-1",
         turn_number=1,
         dataset_name="test_dataset",
+        embedding_model="default",
         status="active",
         clusters=clusters or [make_cluster("c1"), make_cluster("c2")],
         feedback_history=[],

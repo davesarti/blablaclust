@@ -10,7 +10,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from src.engine.cluster_operations import merge_clusters, rename_cluster, split_cluster
+from src.engine.cluster_operations import (
+    merge_clusters,
+    move_points,
+    rename_cluster,
+    split_cluster,
+)
 from src.engine.initial_clustering import initial_clustering
 from src.models import Base, ChatSession, Cluster, DataPoint, SoftAssignment
 
@@ -244,6 +249,104 @@ def test_split_rejects_cluster_with_one_point(db):
 
     with pytest.raises(ValueError):
         split_cluster("solo-c", "solo", turn_number=1, db=db)
+
+
+# --- move_points ------------------------------------------------------------
+
+
+def test_move_reassigns_point_to_target(db):
+    hard0 = _hard_clusters(db, turn=0)
+    # Pick a point and a different active cluster to move it into.
+    point_id, source = next(iter(hard0.items()))
+    target = next(cid for cid in set(hard0.values()) if cid != source)
+
+    returned = move_points([point_id], target, SESSION_ID, turn_number=1, db=db)
+    db.commit()
+
+    assert returned.id == target
+    hard1 = _hard_clusters(db, turn=1)
+    assert hard1[point_id] == target
+    # The moved point is now 100% in the target cluster.
+    rows = (
+        db.query(SoftAssignment)
+        .filter(
+            SoftAssignment.data_point_id == point_id,
+            SoftAssignment.turn_number == 1,
+        )
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].cluster_id == target
+    assert rows[0].probability == 1.0
+
+
+def test_move_carries_other_points_forward(db):
+    hard0 = _hard_clusters(db, turn=0)
+    point_id, source = next(iter(hard0.items()))
+    target = next(cid for cid in set(hard0.values()) if cid != source)
+    others = {pid for pid in hard0 if pid != point_id}
+
+    move_points([point_id], target, SESSION_ID, turn_number=1, db=db)
+    db.commit()
+
+    hard1 = _hard_clusters(db, turn=1)
+    # Snapshot stays complete and untouched points keep their cluster.
+    assert set(hard1) == set(hard0)
+    for pid in others:
+        assert hard1[pid] == hard0[pid]
+
+
+def test_move_keeps_source_with_residual_soft_mass(db):
+    hard0 = _hard_clusters(db, turn=0)
+    # Take a whole cluster's hard membership and move all of it into another cluster.
+    source = next(iter(set(hard0.values())))
+    members = [pid for pid, cid in hard0.items() if cid == source]
+    target = next(cid for cid in set(hard0.values()) if cid != source)
+
+    move_points(members, target, SESSION_ID, turn_number=1, db=db)
+    db.commit()
+
+    # Soft assignments leave residual probability on every cluster, so even with
+    # no hard members the source still holds mass — it must NOT be dissolved.
+    survivor = db.query(Cluster).filter(Cluster.id == source).first()
+    assert survivor.dissolved_at_turn is None
+    assert source in {c.id for c in _active_clusters(db)}
+    # The source still appears in the turn-1 snapshot via that residual mass.
+    turn1 = db.query(SoftAssignment).filter(SoftAssignment.turn_number == 1).all()
+    assert any(a.cluster_id == source for a in turn1)
+    # No point is hard-assigned to the source any more — they all moved to target.
+    hard1 = _hard_clusters(db, turn=1)
+    assert all(cid != source for cid in hard1.values())
+    # The target survives and absorbed the moved points.
+    assert target in {c.id for c in _active_clusters(db)}
+    for pid in members:
+        assert hard1[pid] == target
+
+
+def test_move_rejects_empty_point_list(db):
+    target = _active_clusters(db)[0].id
+    with pytest.raises(ValueError):
+        move_points([], target, SESSION_ID, turn_number=1, db=db)
+
+
+def test_move_rejects_unknown_target(db):
+    point_id = next(iter(_hard_clusters(db, turn=0)))
+    with pytest.raises(ValueError):
+        move_points([point_id], "does-not-exist", SESSION_ID, turn_number=1, db=db)
+
+
+def test_move_rejects_unknown_point(db):
+    target = _active_clusters(db)[0].id
+    with pytest.raises(ValueError):
+        move_points(["does-not-exist"], target, SESSION_ID, turn_number=1, db=db)
+
+
+def test_move_rejects_stale_turn_number(db):
+    hard0 = _hard_clusters(db, turn=0)
+    point_id, source = next(iter(hard0.items()))
+    target = next(cid for cid in set(hard0.values()) if cid != source)
+    with pytest.raises(ValueError):
+        move_points([point_id], target, SESSION_ID, turn_number=0, db=db)
 
 
 # --- rename_cluster ---------------------------------------------------------

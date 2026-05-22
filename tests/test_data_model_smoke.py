@@ -117,9 +117,9 @@ def test_deleting_session_cascades_to_children(db):
         ),
         (
             lambda: Turn(
-                session_id="sess-1", turn_number=0, oracle_input={}, system_output={}
+                session_id="sess-1", turn_number=-1, oracle_input={}, system_output={}
             ),
-            "ck_turns_turn_number: oracle turns start at 1",
+            "ck_turns_turn_number: turn number must be >= 0",
         ),
         (
             lambda: SoftAssignment(

@@ -24,6 +24,7 @@ def _make_state(turn_number=1, n_clusters=3, contradictions=None):
         session_id="s1",
         turn_number=turn_number,
         dataset_name="test",
+        embedding_model="default",
         status="active",
         clusters=clusters,
         feedback_history=[],

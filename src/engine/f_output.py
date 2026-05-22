@@ -22,6 +22,7 @@ def f_output(
         feedback_type=oracle_turn.feedback_type,
         oracle_raw_text=oracle_turn.raw_text,
         target_cluster_ids=json.dumps(oracle_turn.target_cluster_ids),
+        target_point_ids=json.dumps(oracle_turn.target_point_ids),
         history_summary=json.dumps([f.model_dump() for f in state.feedback_history]),
     )
 

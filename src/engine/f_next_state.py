@@ -54,6 +54,7 @@ def f_next_state(
         session_id=state.session_id,
         turn_number=state.turn_number + 1,
         dataset_name=state.dataset_name,
+        embedding_model=state.embedding_model,
         status=state.status,
         clusters=updated_clusters,
         feedback_history=state.feedback_history + [new_feedback],

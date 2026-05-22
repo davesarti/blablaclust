@@ -148,15 +148,6 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     )
     new_turn_number = (latest_turn or 0) + 1
 
-    new_turn = Turn(
-        session_id=session.id,
-        turn_number=new_turn_number,
-        oracle_input=payload.model_dump(),
-        system_output=raw,
-    )
-    db.add(new_turn)
-    db.commit()
-
     if isinstance(raw, list):
         operations = raw
     else:
@@ -205,9 +196,18 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     if operations:
         system_turn.state_snapshot["operations"] = operations
 
-    new_turn.system_output = system_turn.model_dump()
+    # Persist the turn once, with the final SystemTurn as system_output. Creating
+    # the row only here (rather than up-front with the raw engine output) keeps
+    # the stored shape always valid against TurnRead/SystemTurn, and means a turn
+    # that fails mid-processing never lands a half-baked row in the DB.
+    new_turn = Turn(
+        session_id=session.id,
+        turn_number=new_turn_number,
+        oracle_input=payload.model_dump(),
+        system_output=system_turn.model_dump(),
+    )
+    db.add(new_turn)
     db.commit()
-
     db.refresh(new_turn)
 
     return TurnRead.model_validate(new_turn, from_attributes=True)

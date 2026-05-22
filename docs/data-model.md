@@ -99,7 +99,7 @@ One exchange in the oracle conversation.
 | Column | Type | Notes |
 |---|---|---|
 | `session_id` | `String(36)` | PK part, FK → `sessions.id`. |
-| `turn_number` | `Integer` | PK part. **Constraint** `ck_turns_turn_number`: `>= 1`. |
+| `turn_number` | `Integer` | PK part. **Constraint** `ck_turns_turn_number`: `>= 0`. |
 | `oracle_input` | `JSON` | What the oracle said. |
 | `system_output` | `JSON` | What the system replied (display payload). |
 
@@ -109,8 +109,10 @@ Relationship: `session` (many-to-one).
 
 `turn_number` is the spine of the whole model, and it means two related things:
 
-- **`Turn.turn_number` starts at 1** (`ck_turns_turn_number`) — oracle turns are
-  1, 2, 3, …
+- **`Turn.turn_number` starts at 1** in practice — oracle turns are 1, 2, 3, …
+  The `ck_turns_turn_number` constraint only enforces `>= 0`, matching the
+  soft-assignment floor; the "first oracle turn is 1" rule lives in the
+  `create_turn` endpoint, not the schema.
 - **`SoftAssignment.turn_number` starts at 0** (`ck_soft_assignments_turn_number`).
   Turn **0** is the *pre-oracle* state: the initial k-means clustering recorded
   before any conversation. Oracle-driven re-clusterings are written at turns 1+.

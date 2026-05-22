@@ -50,7 +50,7 @@ class ChatSession(Base):
 class Turn(Base):
 	__tablename__ = "turns"
 	__table_args__ = (
-		CheckConstraint("turn_number >= 1", name="ck_turns_turn_number"),
+		CheckConstraint("turn_number >= 0", name="ck_turns_turn_number"),
 	)
 
 	session_id: Mapped[str] = mapped_column(

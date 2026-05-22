@@ -28,19 +28,13 @@ class FeedbackEntry(BaseModel):
 
 class ChatSessionState(BaseModel):
     session_id: str
-    turn_number: int
+    turn_number: int = Field(ge=0)
     dataset_name: str
+    embedding_model: str
     status: Literal["active", "converged", "closed"]
     clusters: List[Cluster]
     feedback_history: List[FeedbackEntry]
     contradictions: List[Any] = Field(default_factory=list)
-
-
-class SoftAssignment(BaseModel):
-    data_point_id: str
-    cluster_id: str
-    turn_number: int = Field(ge=0)
-    probability: float = Field(ge=0.0, le=1.0)
 
 
 class ClusterPoint(BaseModel):
@@ -52,7 +46,7 @@ class ClusterPoint(BaseModel):
 class ClusterPointsResponse(BaseModel):
     cluster_id: str
     session_id: str
-    turn_number: Optional[int] = None
+    turn_number: Optional[int] = Field(default=None, ge=0)
     points: List[ClusterPoint]
 
 
@@ -73,23 +67,21 @@ class InputOracle(BaseModel):
 
 
 class Display(BaseModel):
-    type: str
+    type: Literal["text"] = "text"
     content: str
-    items: List[Any] = Field(default_factory=list)
+    items: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class SystemTurn(BaseModel):
     session_id: str
-    turn_number: int
-    action: Literal["show", "ask", "stop"] #necessary?
+    turn_number: int = Field(ge=0)
+    action: Literal["show", "ask", "stop"]
     clusters_updated: bool
     display: Display
     contradiction_detected: bool
     contradiction_detail: Optional[str] = None
     cognitive_load_score: int = Field(ge=1, le=5)
     state_snapshot: Dict[str, Any] = Field(default_factory=dict)
-    token_usage: Optional[Dict[str, int]] = None
-    cost_usd: Optional[float] = None
 
 
 class TurnRead(BaseModel):
