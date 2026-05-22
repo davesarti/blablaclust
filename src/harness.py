@@ -9,8 +9,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import anthropic
-from anthropic import APIConnectionError, APIStatusError, RateLimitError
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -94,6 +92,7 @@ Controlla se un'eccezione lanciata dall'API di Anthropic è "temporanea" (come R
 Se è temporanea, significa che la richiesta può essere riprovata e restituisce True.
 '''
 def _is_transient_error(exc: Exception) -> bool:
+    from anthropic import APIConnectionError, APIStatusError, RateLimitError
     if isinstance(exc, (RateLimitError, APIConnectionError)):
         return True
     if isinstance(exc, APIStatusError):
@@ -178,6 +177,7 @@ def call_claude(
     if DRY_RUN:
         return _make_dry_run_response(model)
 
+    import anthropic
     client = anthropic.Anthropic()
 
     def _call() -> anthropic.types.Message:
@@ -204,6 +204,7 @@ async def call_claude_async(
     if DRY_RUN:
         return _make_dry_run_response(model)
 
+    import anthropic
     client = anthropic.AsyncAnthropic()
 
     async def _call() -> anthropic.types.Message:
@@ -258,6 +259,7 @@ def count_tokens(
 ) -> int:
     if DRY_RUN:
         return 0
+    import anthropic
     client = anthropic.Anthropic()
     response = client.messages.count_tokens(
         model=model,
@@ -269,7 +271,7 @@ def count_tokens(
 '''
 Prende l'oggetto Message di Anthropic e restituisce un dizionario con i conteggi dei token di input/output.
 '''
-def extract_usage(message: anthropic.types.Message) -> dict[str, int]:
+def extract_usage(message: "anthropic.types.Message") -> dict[str, int]:
     u = message.usage
     return {
         "input_tokens": getattr(u, "input_tokens", 0) or 0,
