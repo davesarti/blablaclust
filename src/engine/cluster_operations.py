@@ -195,23 +195,35 @@ def split_cluster(
     session_id: str,
     turn_number: int,
     db: Session,
+    k: int = 2,
 ) -> list[DbCluster]:
-    """Split one cluster into two using k-means on its members.
+    """Split one cluster into ``k`` sub-clusters using k-means on its members.
 
     Takes the data points whose hard assignment is ``cluster_id``, dissolves
-    that cluster, runs real k-means (k=2) on the subset, and writes a fresh
-    soft-assignment snapshot at ``turn_number``: subset points get the k=2
-    probabilities, every other point is carried forward (re-normalised after
-    dropping the dissolved cluster).
+    that cluster, runs real k-means with the requested ``k`` on the subset,
+    and writes a fresh soft-assignment snapshot at ``turn_number``: subset
+    points get the new k-means probabilities, every other point is carried
+    forward (re-normalised after dropping the dissolved cluster).
 
-    Returns the two new clusters. Does not commit — the caller owns the
-    transaction.
+    Args:
+        cluster_id: ID of the cluster to split.
+        session_id: Session that owns the cluster.
+        turn_number: Turn at which the split is recorded. Must be strictly
+            greater than the latest existing snapshot turn.
+        db: SQLAlchemy session (changes staged but not committed).
+        k: Number of sub-clusters to produce. Must be >= 2 (default: 2).
+
+    Returns:
+        The ``k`` newly created child clusters.
 
     Raises:
-        ValueError: unknown or already-dissolved cluster; fewer than 2 points
-            assigned to it; no existing clustering; or a ``turn_number`` that
-            is not strictly after the latest snapshot.
+        ValueError: ``k`` is less than 2; unknown or already-dissolved
+            cluster; fewer than ``k`` points assigned to it; no existing
+            clustering; or a ``turn_number`` that is not strictly after the
+            latest snapshot.
     """
+    if k < 2:
+        raise ValueError(f"k must be at least 2, got {k}")
     cluster = (
         db.query(DbCluster)
         .filter(DbCluster.id == cluster_id, DbCluster.session_id == session_id)
@@ -232,19 +244,19 @@ def split_cluster(
     subset_ids = [
         pid for pid, dist in snapshot.items() if _hard_cluster(dist) == cluster_id
     ]
-    if len(subset_ids) < 2:
+    if len(subset_ids) < k:
         raise ValueError(
             f"cannot split cluster '{cluster_id}': {len(subset_ids)} point(s) "
-            "assigned to it (need at least 2)"
+            f"assigned to it (need at least {k})"
         )
 
     subset_points = db.query(DataPoint).filter(DataPoint.id.in_(subset_ids)).all()
 
-    # Real k-means (k=2) on the subset — initial_clustering builds the two
+    # Real k-means on the subset — initial_clustering builds the k new
     # clusters and their soft assignments at turn_number.
     new_clusters, subset_assignments = initial_clustering(
         data_points=subset_points,
-        k=2,
+        k=k,
         session_id=session_id,
         turn_number=turn_number,
     )

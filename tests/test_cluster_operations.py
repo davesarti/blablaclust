@@ -20,6 +20,7 @@ from src.engine.initial_clustering import initial_clustering
 from src.models import Base, ChatSession, Cluster, DataPoint, SoftAssignment
 
 SESSION_ID = "sess-ops"
+SESSION_BIG = "sess-big"
 
 # Six 2-D points in three well-separated groups → k-means k=3 finds them cleanly,
 # two points per cluster.
@@ -68,6 +69,62 @@ def db():
         session.add(cluster)
     for assignment in assignments:
         session.add(assignment)
+    session.commit()
+
+    yield session
+    session.close()
+
+
+@pytest.fixture
+def db_big_cluster():
+    """DB with one session and one cluster containing all six well-separated points.
+
+    Used for testing split with k > 2: real k-means on these three distinct
+    groups should find k=3 sub-clusters cleanly.
+    """
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    session = Session()
+
+    session.add(
+        ChatSession(
+            id=SESSION_BIG,
+            dataset_name="ds",
+            embedding_model="default",
+            status="active",
+        )
+    )
+    session.add(
+        Cluster(
+            id="big-c",
+            session_id=SESSION_BIG,
+            name="Big Cluster",
+            description="",
+            created_at_turn=0,
+        )
+    )
+    for point_id, embedding in _POINTS.items():
+        session.add(
+            DataPoint(
+                id=f"{point_id}-big",
+                dataset_name="ds",
+                data={"text": point_id},
+                embedding=embedding,
+            )
+        )
+        session.add(
+            SoftAssignment(
+                data_point_id=f"{point_id}-big",
+                cluster_id="big-c",
+                turn_number=0,
+                probability=1.0,
+            )
+        )
     session.commit()
 
     yield session
@@ -249,6 +306,37 @@ def test_split_rejects_cluster_with_one_point(db):
 
     with pytest.raises(ValueError):
         split_cluster("solo-c", "solo", turn_number=1, db=db)
+
+
+def test_split_rejects_k_less_than_2(db):
+    cluster_id = _active_clusters(db)[0].id
+    with pytest.raises(ValueError, match="k must be at least 2"):
+        split_cluster(cluster_id, SESSION_ID, turn_number=1, db=db, k=1)
+
+
+def test_split_k3_creates_three_children(db_big_cluster):
+    db = db_big_cluster
+    children = split_cluster("big-c", SESSION_BIG, turn_number=1, db=db, k=3)
+    db.commit()
+
+    assert len(children) == 3
+    parent = db.query(Cluster).filter(Cluster.id == "big-c").first()
+    assert parent.dissolved_at_turn == 1
+    for child in children:
+        assert child.created_at_turn == 1
+        assert child.dissolved_at_turn is None
+
+    # All six points are reassigned; every child cluster actually gets members.
+    hard1 = _hard_clusters(db, turn=1)
+    child_ids = {c.id for c in children}
+    assert set(hard1.values()) == child_ids
+
+
+def test_split_rejects_k_exceeds_point_count(db):
+    # Each cluster in the default fixture has exactly 2 points; k=3 requires ≥ 3.
+    target, _ = _target_with_two_points(db)
+    with pytest.raises(ValueError, match="need at least 3"):
+        split_cluster(target, SESSION_ID, turn_number=1, db=db, k=3)
 
 
 # --- move_points ------------------------------------------------------------
