@@ -1,8 +1,8 @@
 """LLM-generated names and descriptions for clusters.
 
 Takes the clusters and soft assignments produced by `initial_clustering` and
-asks the LLM (via the harness) to label each cluster from its most
-representative data points. Mutates the Cluster objects in place.
+asks the LLM (via the harness) to label all clusters in a single call.
+Mutates the Cluster objects in place.
 """
 
 import json
@@ -25,12 +25,19 @@ def name_clusters(
     data_points: list[DataPoint],
     sample_size: int = REPRESENTATIVE_SAMPLE_SIZE,
 ) -> list[DbCluster]:
-    """Fill in name and description for each cluster using the LLM.
+    """Fill in name and description for all clusters in a single LLM call.
+
+    All clusters are described together in one prompt, which produces more
+    consistent names and reduces latency compared to one call per cluster.
 
     For each cluster, the `sample_size` data points with the highest assignment
-    probability are sent to the LLM as representative examples. If the LLM call
-    fails or returns unparseable output, that cluster keeps its placeholder
-    name — naming a cluster never aborts the whole operation.
+    probability are selected as representative examples. Clusters with no
+    usable texts are silently skipped (placeholder name kept).
+
+    If the LLM call fails or returns unparseable output, all clusters keep
+    their placeholder names. If the response omits individual cluster IDs,
+    those clusters also keep their placeholder names — naming never aborts
+    the overall clustering operation.
 
     Mutates `clusters` in place and also returns the list for convenience.
     """
@@ -39,6 +46,10 @@ def name_clusters(
     assignments_by_cluster: dict[str, list[DbSoftAssignment]] = {}
     for a in assignments:
         assignments_by_cluster.setdefault(a.cluster_id, []).append(a)
+
+    # Build one text block per cluster and remember which clusters have data.
+    cluster_blocks: list[str] = []
+    nameable_ids: list[str] = []
 
     for cluster in clusters:
         cluster_assignments = assignments_by_cluster.get(cluster.id, [])
@@ -52,20 +63,35 @@ def name_clusters(
             continue  # empty cluster — keep placeholder name
 
         reviews_block = "\n".join(f"- {t}" for t in sample_texts)
-        prompt = render_prompt("cluster_naming", reviews=reviews_block)
+        cluster_blocks.append(f"[Cluster id: {cluster.id}]\n{reviews_block}")
+        nameable_ids.append(cluster.id)
 
-        # Naming is best-effort: a failed LLM call (no API key, rate limit,
-        # unreachable) or an unparseable response must not abort clustering —
-        # the cluster simply keeps its "Cluster N" placeholder name.
-        try:
-            response = call_llm(
-                [{"role": "user", "content": "Name this cluster."}],
-                system=prompt,
-            )
-            parsed = json.loads(extract_json_text(response.text))
-            cluster.name = str(parsed["name"])[:255]
-            cluster.description = str(parsed["description"])
-        except Exception:
-            continue
+    if not cluster_blocks:
+        return clusters  # nothing to name
+
+    clusters_block = "\n\n".join(cluster_blocks)
+    prompt = render_prompt("cluster_naming", clusters_block=clusters_block)
+
+    # Naming is best-effort: a failed LLM call (no API key, rate limit,
+    # unreachable) or an unparseable response must not abort clustering.
+    try:
+        response = call_llm(
+            [{"role": "user", "content": "Name all clusters."}],
+            system=prompt,
+        )
+        parsed = json.loads(extract_json_text(response.text))
+
+        clusters_by_id = {c.id: c for c in clusters}
+        for cluster_id in nameable_ids:
+            entry = parsed.get(cluster_id)
+            if not isinstance(entry, dict):
+                continue  # missing or malformed entry — keep placeholder
+            cluster = clusters_by_id[cluster_id]
+            if name := entry.get("name"):
+                cluster.name = str(name)[:255]
+            if description := entry.get("description"):
+                cluster.description = str(description)
+    except Exception:
+        pass  # entire call failed — all clusters keep placeholder names
 
     return clusters

@@ -1,19 +1,21 @@
-You are labeling a cluster of customer reviews. The reviews below were grouped
-together by an embedding-based clustering algorithm — your job is to find what
-they have in common and give the group a clear, human-readable label.
+You are labeling clusters of customer reviews. Each cluster was grouped together
+by an embedding-based clustering algorithm — your job is to find what the reviews
+in each cluster have in common and give each group a clear, human-readable label.
 
-REPRESENTATIVE REVIEWS
-{reviews}
+CLUSTERS
+{clusters_block}
 
 TASK
-Produce a short, specific name and a one-sentence description that capture the
-shared theme of these reviews. Be concrete: prefer "Shipping delays and damage"
+For each cluster, produce a short, specific name and a one-sentence description
+that capture the shared theme. Be concrete: prefer "Shipping delays and damage"
 over a vague label like "Negative reviews".
 
-Respond with a single valid JSON object. No markdown fences, no commentary
-outside the JSON.
+Respond with a single valid JSON object mapping each cluster id to its label.
+No markdown fences, no commentary outside the JSON.
 
 {{
-  "name": "<short label, max 40 chars>",
-  "description": "<one sentence describing what unites this cluster>"
+  "<cluster_id>": {{
+    "name": "<short label, max 40 chars>",
+    "description": "<one sentence describing what unites this cluster>"
+  }}
 }}
