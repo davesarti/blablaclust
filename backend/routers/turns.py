@@ -10,7 +10,7 @@ from src.engine.f_apply_operations import f_apply_operations
 from src.engine.f_next_best_step import f_next_best_step
 from src.engine.f_output import f_output
 from src.engine.f_uncertainty import f_uncertainty
-from src.harness import ConversationContext
+from src.harness import ConversationContext, estimate_cost_usd
 from src.models import ChatSession, Cluster as DbCluster, DataPoint, SoftAssignment, Turn
 from src.schemas import InputOracle, TurnRead
 

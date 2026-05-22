@@ -30,8 +30,6 @@ from src.engine.cluster_operations import (
     rename_cluster,
     split_cluster,
 )
-from src.engine.cluster_naming import name_clusters
-from src.models import DataPoint, SoftAssignment
 
 
 def f_apply_operations(
@@ -88,7 +86,7 @@ def f_apply_operations(
 
         elif op_type == "split":
             # Writes a full soft-assignment snapshot → consumes a turn_number.
-            new_clusters = split_cluster(
+            split_cluster(
                 cluster_id=op["cluster_id"],
                 session_id=session_id,
                 turn_number=current_turn,
@@ -96,22 +94,6 @@ def f_apply_operations(
             )
             # Same flush reason as merge above.
             db.flush()
-
-            # Ask the LLM to name the two new sub-clusters from their
-            # representative points, replacing the generic "part 1/2" labels.
-            new_cluster_ids = [c.id for c in new_clusters]
-            sub_assignments = (
-                db.query(SoftAssignment)
-                .filter(
-                    SoftAssignment.cluster_id.in_(new_cluster_ids),
-                    SoftAssignment.turn_number == current_turn,
-                )
-                .all()
-            )
-            point_ids = list({a.data_point_id for a in sub_assignments})
-            sub_points = db.query(DataPoint).filter(DataPoint.id.in_(point_ids)).all()
-            name_clusters(new_clusters, sub_assignments, sub_points)
-
             current_turn += 1
 
         elif op_type == "move":

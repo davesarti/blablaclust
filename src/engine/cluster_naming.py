@@ -8,6 +8,7 @@ Mutates the Cluster objects in place.
 import json
 
 from src.harness import call_llm, render_prompt, extract_json_text
+from src.logger import log
 from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoftAssignment
 
 REPRESENTATIVE_SAMPLE_SIZE = 8
@@ -91,7 +92,7 @@ def name_clusters(
                 cluster.name = str(name)[:255]
             if description := entry.get("description"):
                 cluster.description = str(description)
-    except Exception:
-        pass  # entire call failed — all clusters keep placeholder names
+    except Exception as e:
+        log.warning(f"cluster_naming: LLM call failed or returned invalid JSON, keeping placeholder names for all clusters. Error: {e}")
 
     return clusters

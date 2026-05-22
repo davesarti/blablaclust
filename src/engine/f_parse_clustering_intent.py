@@ -13,6 +13,7 @@ oracle's intent baked in from the start, rather than using an arbitrary default 
 import json
 
 from src.harness import call_llm, render_prompt, extract_json_text
+from src.logger import log
 
 # Safe bounds for k — k-means below 2 is degenerate, above 20 is rarely useful
 K_MIN = 2
@@ -62,9 +63,8 @@ def f_parse_clustering_intent(
             "reasoning": str(parsed.get("reasoning", "")),
         }
 
-    except Exception:
-        # Parsing failed (bad JSON, missing key, API error) — use safe defaults
-        # so the caller can always proceed with clustering.
+    except Exception as e:
+        log.warning(f"f_parse_clustering_intent: Failed to parse oracle intent, using fallback defaults (k=5, axis='semantic similarity'). Error: {e}")
         return {
             "k": 5,
             "axis": "semantic similarity",
