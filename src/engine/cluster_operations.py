@@ -33,6 +33,7 @@ import uuid
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from src.engine.cluster_naming import name_clusters
 from src.engine.initial_clustering import initial_clustering
 from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoftAssignment
 
@@ -93,6 +94,7 @@ def merge_clusters(
     session_id: str,
     turn_number: int,
     db: Session,
+    auto_name: bool = True,
 ) -> DbCluster:
     """Merge two or more clusters into one.
 
@@ -102,7 +104,20 @@ def merge_clusters(
     with probability 1.0, every other point is carried forward (its probability
     mass on the merged clusters is folded into the new cluster).
 
-    Returns the new cluster. Does not commit — the caller owns the transaction.
+    Args:
+        cluster_ids: IDs of the clusters to merge (at least 2 distinct).
+        session_id: Session that owns the clusters.
+        turn_number: Turn at which the merge is recorded. Must be strictly
+            greater than the latest existing snapshot turn.
+        db: SQLAlchemy session (changes staged but not committed).
+        auto_name: When True (default), the merged cluster is labelled by the
+            LLM (via ``name_clusters``) from its pooled points, so it is named
+            at the moment of creation. When False the cluster keeps the generic
+            ``"Merge of A + B"`` placeholder. Naming is best-effort — a failed
+            LLM call leaves the placeholder and never aborts the merge.
+
+    Returns:
+        The new cluster.
 
     Raises:
         ValueError: fewer than 2 distinct clusters; an unknown or
@@ -187,6 +202,18 @@ def merge_clusters(
     db.add(new_cluster)
     for assignment in new_assignments:
         db.add(assignment)
+
+    # Name the merged cluster at creation time so naming is propagated by the
+    # operation itself, not bolted on afterwards by the caller.
+    if auto_name:
+        merged_point_ids = [
+            a.data_point_id for a in new_assignments if a.cluster_id == new_cluster.id
+        ]
+        merged_points = (
+            db.query(DataPoint).filter(DataPoint.id.in_(merged_point_ids)).all()
+        )
+        name_clusters([new_cluster], new_assignments, merged_points)
+
     return new_cluster
 
 
@@ -196,6 +223,7 @@ def split_cluster(
     turn_number: int,
     db: Session,
     k: int = 2,
+    auto_name: bool = True,
 ) -> list[DbCluster]:
     """Split one cluster into ``k`` sub-clusters using k-means on its members.
 
@@ -212,6 +240,12 @@ def split_cluster(
             greater than the latest existing snapshot turn.
         db: SQLAlchemy session (changes staged but not committed).
         k: Number of sub-clusters to produce. Must be >= 2 (default: 2).
+        auto_name: When True (default), the child clusters are labelled by the
+            LLM (via ``name_clusters``) from their representative points, so
+            they are named at the moment of creation. When False the children
+            keep the generic ``"<parent> - part N"`` placeholder. Naming is
+            best-effort — a failed LLM call leaves the placeholders and never
+            aborts the split.
 
     Returns:
         The ``k`` newly created child clusters.
@@ -262,6 +296,12 @@ def split_cluster(
     )
     for index, child in enumerate(new_clusters, start=1):
         child.name = f"{cluster.name} - part {index}"[:255]
+
+    # Name the children at creation time so naming is propagated by the
+    # operation itself; the "part N" labels above are the fallback if the LLM
+    # call fails. subset_assignments / subset_points are already in memory.
+    if auto_name:
+        name_clusters(new_clusters, subset_assignments, subset_points)
 
     # Dissolve the parent cluster as of this turn.
     cluster.dissolved_at_turn = turn_number

@@ -5,6 +5,8 @@ clustering maths (k-means via initial_clustering) and the DB persistence are
 both exercised for real.
 """
 
+from unittest.mock import patch
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -156,7 +158,9 @@ def test_merge_dissolves_old_and_creates_new(db):
     assert len(cluster_ids) == 3
     merge_ids = cluster_ids[:2]
 
-    new_cluster = merge_clusters(merge_ids, SESSION_ID, turn_number=1, db=db)
+    new_cluster = merge_clusters(
+        merge_ids, SESSION_ID, turn_number=1, db=db, auto_name=False
+    )
     db.commit()
 
     # the two merged clusters are dissolved as of the operation's turn
@@ -177,7 +181,9 @@ def test_merge_creates_full_snapshot_at_turn(db):
     merge_ids = cluster_ids[:2]
     hard_before = _hard_clusters(db, turn=0)
 
-    new_cluster = merge_clusters(merge_ids, SESSION_ID, turn_number=1, db=db)
+    new_cluster = merge_clusters(
+        merge_ids, SESSION_ID, turn_number=1, db=db, auto_name=False
+    )
     db.commit()
 
     # every point present at turn 0 still has assignments at turn 1 (complete snapshot)
@@ -241,7 +247,7 @@ def _target_with_two_points(db) -> tuple[str, set[str]]:
 def test_split_creates_two_clusters_with_real_kmeans(db):
     target, subset = _target_with_two_points(db)
 
-    children = split_cluster(target, SESSION_ID, turn_number=1, db=db)
+    children = split_cluster(target, SESSION_ID, turn_number=1, db=db, auto_name=False)
     db.commit()
 
     assert len(children) == 2
@@ -264,7 +270,7 @@ def test_split_carries_other_points_forward(db):
     hard0 = _hard_clusters(db, turn=0)
     others = {pid for pid in hard0 if pid not in subset}
 
-    split_cluster(target, SESSION_ID, turn_number=1, db=db)
+    split_cluster(target, SESSION_ID, turn_number=1, db=db, auto_name=False)
     db.commit()
 
     hard1 = _hard_clusters(db, turn=1)
@@ -316,7 +322,9 @@ def test_split_rejects_k_less_than_2(db):
 
 def test_split_k3_creates_three_children(db_big_cluster):
     db = db_big_cluster
-    children = split_cluster("big-c", SESSION_BIG, turn_number=1, db=db, k=3)
+    children = split_cluster(
+        "big-c", SESSION_BIG, turn_number=1, db=db, k=3, auto_name=False
+    )
     db.commit()
 
     assert len(children) == 3
@@ -337,6 +345,74 @@ def test_split_rejects_k_exceeds_point_count(db):
     target, _ = _target_with_two_points(db)
     with pytest.raises(ValueError, match="need at least 3"):
         split_cluster(target, SESSION_ID, turn_number=1, db=db, k=3)
+
+
+# --- naming propagation -----------------------------------------------------
+#
+# merge_clusters / split_cluster name the clusters they create via name_clusters.
+# These tests patch name_clusters (its own behaviour is covered by
+# test_cluster_naming.py) and only check that the operations wire it correctly.
+
+
+def test_merge_names_cluster_by_default(db):
+    cluster_ids = [c.id for c in _active_clusters(db)]
+
+    def fake_name(clusters, assignments, data_points, **kwargs):
+        for c in clusters:
+            c.name = "Named by LLM"
+            c.description = "LLM description"
+        return clusters
+
+    with patch(
+        "src.engine.cluster_operations.name_clusters", side_effect=fake_name
+    ) as mock_name:
+        new_cluster = merge_clusters(cluster_ids[:2], SESSION_ID, turn_number=1, db=db)
+
+    mock_name.assert_called_once()
+    # the merged cluster is the one handed to the namer
+    named = mock_name.call_args.args[0]
+    assert len(named) == 1 and named[0] is new_cluster
+    assert new_cluster.name == "Named by LLM"
+    assert new_cluster.description == "LLM description"
+
+
+def test_merge_skips_naming_when_auto_name_false(db):
+    cluster_ids = [c.id for c in _active_clusters(db)]
+    with patch("src.engine.cluster_operations.name_clusters") as mock_name:
+        new_cluster = merge_clusters(
+            cluster_ids[:2], SESSION_ID, turn_number=1, db=db, auto_name=False
+        )
+    mock_name.assert_not_called()
+    assert new_cluster.name.startswith("Merge of")  # generic placeholder kept
+
+
+def test_split_names_children_by_default(db):
+    target, _ = _target_with_two_points(db)
+
+    def fake_name(clusters, assignments, data_points, **kwargs):
+        for i, c in enumerate(clusters):
+            c.name = f"Named child {i}"
+        return clusters
+
+    with patch(
+        "src.engine.cluster_operations.name_clusters", side_effect=fake_name
+    ) as mock_name:
+        children = split_cluster(target, SESSION_ID, turn_number=1, db=db)
+
+    mock_name.assert_called_once()
+    assert mock_name.call_args.args[0] is children
+    assert {c.name for c in children} == {"Named child 0", "Named child 1"}
+
+
+def test_split_skips_naming_when_auto_name_false(db):
+    target, _ = _target_with_two_points(db)
+    with patch("src.engine.cluster_operations.name_clusters") as mock_name:
+        children = split_cluster(
+            target, SESSION_ID, turn_number=1, db=db, auto_name=False
+        )
+    mock_name.assert_not_called()
+    # children keep the generic "<parent> - part N" placeholder
+    assert all(" - part " in c.name for c in children)
 
 
 # --- move_points ------------------------------------------------------------
