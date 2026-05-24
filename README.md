@@ -1,96 +1,126 @@
-# Conversational Clustering
+# Conversational Clustering (BlaBlaClust)
 
-An AI system that helps a user (the *oracle*) iteratively define how a text dataset should be grouped. There is no fixed ground truth — the oracle is the objective. The system proposes a clustering, explains its choices, and refines through dialogue.
+An AI system that helps a user (the *oracle*) iteratively define how a text dataset should be grouped. There is no fixed ground truth — the oracle is the objective. The system proposes a clustering, explains its choices, and refines it through dialogue (merge / split / move / rename operations driven by the oracle's feedback).
 
-## Setup
-
-### 1. Clone and create environment
+## Quick start
 
 ```bash
-git clone <repo-url>
-cd vibe-coders
-
+# 1. Environment
 conda create -n vibe-coders python=3.11
 conda activate vibe-coders
 pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
-```
 
-### 2. Configure environment variables
-
-```bash
+# 2. Configure (defaults to the OpenRouter provider)
 cp .env.example .env
+#   edit .env and set the API key for your chosen LLM_PROVIDER
+
+# 3. Run — auto-seeds the demo dataset on first launch, then serves the UI
+PYTHONPATH=. python scripts/serve_ui.py
 ```
 
-Edit `.env` and fill in at minimum:
+Then open:
 
-```
-ANTHROPIC_API_KEY=your_key_here
-```
+- **UI:**  http://localhost:8000/ui
+- **API docs:**  http://localhost:8000/docs
 
-### 3. Seed the database
+On the **first** run the database is empty, so `serve_ui.py` loads `data/train.csv`
+(~1,200 Amazon Electronics reviews) and generates sentence-transformer embeddings
+with `all-MiniLM-L6-v2` (~60 s on CPU, model auto-downloads). Every later run sees a
+populated DB and starts immediately.
+
+## Other ways to run
 
 ```bash
-python seed_data.py
-```
-
-This loads 1500 Amazon Reviews (1200 train + 300 frozen eval) into `data/demo_database.db`.
-
-### 4. Generate embeddings
-
-```bash
-python generate_embeddings.py
-```
-
-Uses `all-MiniLM-L6-v2` to embed all data points and store them in the DB.
-
-### 5. Start the API
-
-```bash
+# API only (no auto-seed — seed manually first, see below)
 uvicorn backend.main:app --reload
+
+# Interactive terminal client against a running server
+python scripts/cli.py                       # uses default dataset
+python scripts/cli.py --session <id>        # resume an existing session
 ```
 
-API available at `http://localhost:8000`. Docs at `http://localhost:8000/docs`.
+### Manual dataset seeding
+
+`serve_ui.py` auto-seeds, so you normally don't need this. To seed by hand (e.g. when
+running the bare API), use the helpers in `src/dataset_processing/`, or upload a dataset
+at runtime via `POST /datasets/upload` (handles insert + embedding in one call).
 
 ## Project structure
 
 ```
 ├── backend/
-│   └── main.py              # FastAPI app
+│   ├── main.py                # FastAPI app + SQLite engine/session setup
+│   ├── session_state.py       # Builds ChatSessionState from DB rows
+│   └── routers/
+│       ├── datasets.py        # upload / list datasets
+│       ├── sessions.py        # create / read sessions, initial clustering
+│       ├── turns.py           # the main oracle-interaction loop endpoint
+│       └── clusters.py        # read clusters and their points
+├── scripts/
+│   ├── serve_ui.py            # auto-seed + serve UI (recommended entrypoint)
+│   └── cli.py                 # interactive terminal client
+├── ui/
+│   ├── index.html             # single-file web UI (served at /ui)
+│   └── DESIGN.md
 ├── data/
-│   ├── train.csv            # 1200 training records
-│   └── frozen_eval.csv      # 300 evaluation records — do not modify
-├── prompts/                 # One file per LLM prompt (versioned)
-│   └── f_output.txt
+│   ├── train.csv              # 1200 training records (demo dataset)
+│   ├── frozen_eval.csv        # 300 evaluation records — do not modify
+│   └── demo_database.db       # SQLite DB (created/seeded on first run)
+├── prompts/                   # One .txt file per LLM prompt (versioned)
+│   ├── f_output.txt
+│   ├── f_next_best_step.txt
+│   ├── f_eval.txt
+│   ├── cluster_naming.txt
+│   └── parse_clustering_intent.txt
 ├── src/
-│   ├── engine/              # Core clustering logic (P3)
-│   │   ├── f_output.py      # Generate cluster names and descriptions
-│   │   ├── f_next_state.py  # Apply oracle feedback to update clustering
-│   │   ├── f_next_best_step.py  # Decide: show / ask / stop
-│   │   ├── f_uncertainty.py # Score data points by cluster ambiguity
-│   │   └── f_eval.py        # Self-assess clustering quality
-│   ├── harness.py           # LLM wrapper — all Claude calls go through here
-│   ├── models.py            # SQLAlchemy ORM models
-│   ├── schemas.py           # Pydantic schemas (shared contracts)
-│   └── text_cleaning.py     # Text preprocessing before embedding
-├── notes/                   # Sprint notes per person
-├── .env.example             # Environment variable template
+│   ├── engine/                # Core clustering logic (P3)
+│   │   ├── f_output.py              # Executor: LLM → structured operations + usage
+│   │   ├── f_apply_operations.py    # Dispatch operations to cluster_operations
+│   │   ├── f_next_state.py          # Wrap f_output → rebuild ChatSessionState
+│   │   ├── f_next_best_step.py      # Decide: show / ask / stop
+│   │   ├── f_uncertainty.py         # Score data points by cluster ambiguity
+│   │   ├── f_parse_clustering_intent.py  # Free text → k + clustering axis
+│   │   ├── f_eval.py                # Self-assess clustering quality
+│   │   ├── initial_clustering.py    # k-means + soft assignments
+│   │   ├── cluster_operations.py    # merge / split / move / rename executors
+│   │   └── cluster_naming.py        # LLM-generated cluster names + descriptions
+│   ├── harness.py             # LLM wrapper (Claude) + provider dispatch
+│   ├── harness_openai.py      # OpenAI-compatible provider (OpenAI / Groq)
+│   ├── harness_openrouter.py  # OpenRouter provider
+│   ├── logger.py              # Logging + structured LLM call log
+│   ├── models.py              # SQLAlchemy ORM models
+│   ├── schemas.py             # Pydantic schemas (shared contracts)
+│   └── dataset_processing/    # CSV ingest, embeddings, text cleaning
+├── notes/                     # Sprint notes per person
+├── AGENTS.md                  # Planner/Executor architecture (grading component)
+├── .env.example               # Environment variable template
 └── requirements.txt
 ```
 
 ## Environment variables
 
+The provider is selected by `LLM_PROVIDER`; only the keys for the chosen provider are required.
+
 | Variable | Default | Description |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | — | Required |
-| `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | Model to use |
-| `HARNESS_DRY_RUN` | `false` | Set to `true` to skip real API calls |
+| `LLM_PROVIDER` | `openrouter` | `claude` \| `openai` \| `openrouter` |
+| `ANTHROPIC_API_KEY` | — | Required when `LLM_PROVIDER=claude` |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | Claude model |
+| `OPENAI_API_KEY` | — | Required for `openai` (also used for Groq via `OPENAI_BASE_URL`) |
+| `OPENAI_MODEL` | `gpt-4o` | OpenAI-compatible model |
+| `OPENAI_BASE_URL` | OpenAI default | Override to point at Groq, etc. |
+| `OPENROUTER_API_KEY` | — | Required when `LLM_PROVIDER=openrouter` |
+| `OPENROUTER_MODEL` | see `.env.example` | OpenRouter model slug |
+| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | OpenRouter endpoint |
+| `HARNESS_DRY_RUN` | `false` | `true` skips real API calls |
 | `HARNESS_MAX_RETRIES` | `4` | Retries on transient API errors |
-| `MAX_INPUT_TOKENS_PER_TURN` | `8000` | Context window budget per turn |
-| `LLM_PROVIDER` | `claude` | `claude` or `openai` |
+| `MAX_INPUT_TOKENS_PER_TURN` | `8000` | Context budget per turn (Claude only) |
 
 ## Development notes
 
-- **Do not modify** `data/frozen_eval.csv` — reserved for final evaluation
-- All LLM calls go through `src/harness.py` — never import `anthropic` directly in engine code
-- Prompts live in `prompts/` as `.txt` files — never hardcode them as f-strings in Python
-- The DB layer is SQLite in dev; PostgreSQL in production
+- **Do not modify** `data/frozen_eval.csv` — reserved for final evaluation.
+- All LLM calls go through `src/harness.py` — never import a provider SDK (`anthropic`, `openai`) directly in engine code.
+- Prompts live in `prompts/` as `.txt` files — never hardcode them as f-strings in Python.
+- Engine functions never call `db.commit()` — the caller (the API router) owns the transaction so a turn that applies several operations stays atomic.
+- Engine errors propagate (no silent skipping); the API surfaces them as HTTP 422 so failures are visible to the oracle.
+- The DB layer is SQLite in dev; PostgreSQL in production.
