@@ -11,7 +11,13 @@ import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 
+from src.engine.clustering_log import log_clustering_run
 from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoftAssignment
+
+# Random seed used by k-means. Logged with every clustering run for
+# reproducibility — change this and runs become non-comparable.
+KMEANS_RANDOM_STATE = 42
+KMEANS_BACKEND = "kmeans"
 
 
 def _embedding_matrix(data_points: list[DataPoint]) -> tuple[list[DataPoint], np.ndarray]:
@@ -34,7 +40,7 @@ def _fit_kmeans(X: np.ndarray, k: int) -> KMeans:
         raise ValueError("k must be >= 1")
     if k > len(X):
         raise ValueError(f"k={k} exceeds number of embedded points ({len(X)})")
-    model = KMeans(n_clusters=k, random_state=42, n_init="auto")
+    model = KMeans(n_clusters=k, random_state=KMEANS_RANDOM_STATE, n_init="auto")
     model.fit(X)
     return model
 
@@ -96,6 +102,21 @@ def initial_clustering(
         for i, dp in enumerate(points)
         for j in range(k)
     ]
+
+    # Structured log of this run. Silhouette is undefined for k < 2 or
+    # k >= n_points; we record None in those cases rather than crashing.
+    silhouette: float | None = None
+    if 2 <= k < len(points):
+        silhouette = float(silhouette_score(X, model.labels_))
+    log_clustering_run(
+        session_id=session_id,
+        k=k,
+        backend=KMEANS_BACKEND,
+        seed=KMEANS_RANDOM_STATE,
+        n_points=len(points),
+        silhouette=silhouette,
+        turn_number=turn_number,
+    )
 
     return db_clusters, db_assignments
 
