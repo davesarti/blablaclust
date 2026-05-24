@@ -2,9 +2,9 @@
 
 ## What I built
 
-Sprint 3 for P2 was a focused pass on two issues against the existing
-clustering code — both resolved entirely within P2-owned files, no cross-team
-edits.
+Sprint 3 for P2 covered three issues against the clustering code plus one
+sprint-omnibus task. All work landed entirely within P2-owned files — no
+cross-team edits.
 
 ### 1. Centralised cluster naming — one LLM call instead of N
 
@@ -46,45 +46,111 @@ Added `k: int = 2` to the signature and wired it through. The function now:
 
 The default of 2 keeps every existing caller behaving exactly as before.
 
+### 3. Naming as a first-class step in merge and split
+
+`src/engine/cluster_operations.py`.
+
+Naming was previously bolted on by the caller *after* a cluster was created
+(P3 explicitly called `name_clusters` in `f_apply_operations` after each
+split, and a merged cluster was never named at all). The "first-class naming"
+issue asked to push naming into the operations themselves.
+
+Added `auto_name: bool = True` to both `merge_clusters` and `split_cluster`.
+When True (the default), the operation calls `name_clusters` internally on
+the cluster(s) it creates, using the pooled points (for merge) or the
+k-means subset (for split) as representative examples. Best-effort: a failed
+LLM call keeps the generic placeholder (`"Merge of A + B"` /
+`"<parent> - part N"`), the operation never aborts on naming.
+
+This filled the real gap on merge (no naming before) and let P3 remove
+the duplicate `name_clusters` call from `f_apply_operations`.
+
+The issue's other half — using cluster names to *drive* split/merge
+*decisions* — lives in P4's `prompts/f_output.txt` and P3's orchestration,
+outside my files. P3 and P4 picked up their slices (commits `b334364` and
+`64fd820`); the prompt now instructs the model to use cluster name +
+description as signals (e.g. only merge when "redundant across ALL meaningful
+dimensions"). With those three slices the issue is closed across the team.
+
+### 4. Structured logging of every clustering run (Sprint 3 task)
+
+`src/engine/clustering_log.py` (new) + `src/engine/initial_clustering.py`
++ `tests/conftest.py` (new).
+
+Sprint 3 asked for one JSONL line per clustering run with `seed`, `k`,
+`backend`, `silhouette`, `n_points`. New helper `log_clustering_run` (mirrors
+P5's `log_llm_call` shape) appends to `logs/clustering_runs.jsonl`;
+`initial_clustering` calls it at the end, computing silhouette on the spot
+from `model.labels_` (None when `k < 2` or `k >= n_points`). Logging is
+best-effort — an `OSError` is swallowed so a broken log file can never abort
+a clustering run.
+
+Covers both initial clustering and the runs triggered internally by
+`split_cluster` (which goes through `initial_clustering`). Diagnostic
+functions (`silhouette_for_k`, `sweep_k`) stay silent — they're for
+k-selection, not real runs.
+
+The helper lives in `src/engine/clustering_log.py` rather than `src/logger.py`
+because the central logger is P5's file. The shape is intentionally identical
+to `log_llm_call` so P5 can fold it in trivially — follow-up issue dropped
+in `notes/p2/issue-for-p5-logger.md`.
+
+A new `tests/conftest.py` autouse fixture redirects the log path to a
+per-test tmp file, so the suite never pollutes `logs/clustering_runs.jsonl`.
+
 ## Results
 
 | Check | Result |
 |---|---|
-| `test_cluster_naming.py` (new, 12 tests) | all pass |
-| `test_cluster_operations.py` (21 tests, 18 pre-existing + 3 new) | all pass |
-| `test_f_apply_operations.py` (P3, uses both changed functions) | still passes |
+| `test_cluster_naming.py` (12 tests) | all pass |
+| `test_cluster_operations.py` (25 tests: 18 pre-existing + 7 new) | all pass |
+| `test_clustering_log.py` (7 tests, new) | all pass |
+| `test_f_apply_operations.py` (P3, uses changed P2 functions) | still passes |
 | Single LLM call regardless of cluster count | verified (mock asserts 1 call) |
 | `split_cluster(k=3)` on a 6-point cluster | 3 children, parent dissolved |
 | `split_cluster(k=1)` / `k` exceeding point count | raise `ValueError` |
+| `merge_clusters` / `split_cluster` self-name children | verified (mock asserts call) |
+| `initial_clustering` writes all 5 required log fields | verified |
+| Test suite leaves real `logs/clustering_runs.jsonl` untouched | verified |
 
-The 3 new split tests use a `db_big_cluster` fixture (six well-separated points
-in one cluster) so real k-means can be exercised for k > 2; the naming tests
-mock `call_llm`, so no API key is needed to run them.
-
-Suite-wide note: 7 tests in `test_f_next_state.py` fail in the local env with
-`ModuleNotFoundError: tiktoken` (imported by `harness_openrouter.py`). This is a
-pre-existing environment gap, unrelated to these changes.
+Full P2-relevant suite: 93 tests pass. 7 tests in `test_f_next_state.py` fail
+in the local env with `ModuleNotFoundError: tiktoken` (imported by
+`harness_openrouter.py`) — pre-existing environment gap, unrelated to these
+changes.
 
 ## What I changed in other people's files
 
-Nothing. Both issues were fully solvable inside P2-owned files
-(`cluster_naming.py`, `cluster_operations.py`, `prompts/cluster_naming.txt`,
-and the two test files).
+Nothing. Every piece of work was solvable inside P2-owned files. Where the
+issue genuinely required cross-file work (naming-driven split/merge
+*decisions* in P3/P4 territory, or moving the new logger into `src/logger.py`),
+I flagged it as a follow-up rather than touching another P's file.
 
 ## What I need from others
 
-- **P3** — `f_apply_operations.py` calls `split_cluster(...)` without passing
-  `k`, so it currently always splits in two. The *capability* for k > 2 now
-  exists in `split_cluster`; wiring it to an oracle request like "split into
-  three" is a separate change in P3's file. Not a defect — just a heads-up if
-  end-to-end variable-arity split is wanted for the demo.
-- **P4** — `prompts/cluster_naming.txt` changed shape (now takes a
-  `{clusters_block}` variable and returns an id-keyed JSON object). If P4 keeps
-  a prompt-versioning registry, the hash for this prompt needs refreshing.
+- **P5** — absorb `src/engine/clustering_log.py` into `src/logger.py` and
+  update the one import in `initial_clustering.py`. Full instructions in
+  `notes/p2/issue-for-p5-logger.md`.
+- **P3** — `f_apply_operations` calls `split_cluster` without passing `k`,
+  so it currently always splits in two. The *capability* for k > 2 now
+  exists in P2; wiring it to an oracle request like "split into three" is
+  a separate change in P3's file. Heads-up if end-to-end variable-arity
+  split is wanted for the demo.
+- **P4** — `prompts/cluster_naming.txt` changed shape this sprint (now
+  takes `{clusters_block}` and returns an id-keyed JSON object). If P4
+  keeps a prompt-versioning registry, the hash for this prompt needs
+  refreshing.
+- **Cosmetic, P3/P4** — `f_output.txt` shows merge ops can include a
+  `"new_name"` field, but `f_apply_operations` doesn't pass it to
+  `merge_clusters` (which now auto-names from pooled content anyway).
+  Either drop the field from the prompt or honour it — currently the LLM
+  produces a name that is silently discarded.
 
 ## Commits
 
 - `5e0f300` — refactor: name all clusters in a single LLM call
 - `2fdb8f6` — feat: add k parameter to split_cluster
+- `af10bdd` — feat: auto-name clusters created by merge and split
+- `7f1002f` — docs: issue for P5 to absorb clustering_log into src/logger.py
+- `6bc7cfd` — structured logging of every clustering run
 
-Both pushed to `origin/main`.
+All pushed to `origin/main`.
