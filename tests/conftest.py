@@ -8,10 +8,10 @@ patch wins).
 
 import pytest
 
-from src.engine import clustering_log
+import src.logger as logger
 
 
 @pytest.fixture(autouse=True)
 def _isolate_clustering_log(tmp_path_factory, monkeypatch):
     target = tmp_path_factory.mktemp("clog") / "clustering_runs.jsonl"
-    monkeypatch.setattr(clustering_log, "_path", target)
+    monkeypatch.setattr(logger, "_clustering_log_path", target)

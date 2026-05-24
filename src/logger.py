@@ -15,6 +15,9 @@ LOGS_DIR.mkdir(exist_ok=True)
 # One JSONL file for LLM calls — one JSON object per line.
 _llm_log_path = LOGS_DIR / "llm_calls.jsonl"
 
+# One JSONL file for clustering runs — one JSON object per line.
+_clustering_log_path: Path = LOGS_DIR / "clustering_runs.jsonl"
+
 logging.basicConfig(level=logging.WARNING)
 log = logging.getLogger(__name__)
 
@@ -52,3 +55,30 @@ def log_llm_call(
     }
     with _llm_log_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
+
+
+def log_clustering_run(
+    session_id: str,
+    k: int,
+    backend: str,
+    seed: int,
+    n_points: int,
+    silhouette: float | None,
+    turn_number: int,
+) -> None:
+    #Append one line to logs/clustering_runs.jsonl for every clustering run.
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "session_id": session_id,
+        "k": k,
+        "backend": backend,
+        "seed": seed,
+        "n_points": n_points,
+        "silhouette": silhouette,
+        "turn_number": turn_number,
+    }
+    try:
+        with _clustering_log_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+    except OSError:
+        pass

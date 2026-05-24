@@ -11,7 +11,7 @@ import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 
-from src.engine.clustering_log import log_clustering_run
+from src.logger import log_clustering_run
 from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoftAssignment
 
 # Random seed used by k-means. Logged with every clustering run for

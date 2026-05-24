@@ -9,7 +9,7 @@ import json
 import numpy as np
 import pytest
 
-from src.engine import clustering_log
+import src.logger as logger
 from src.engine.initial_clustering import (
     KMEANS_BACKEND,
     KMEANS_RANDOM_STATE,
@@ -20,9 +20,9 @@ from src.models import DataPoint
 
 @pytest.fixture
 def log_path(tmp_path, monkeypatch):
-    """Redirect clustering_log._path to a tmp file for the test."""
+    """Redirect logger._clustering_log_path to a tmp file for the test."""
     target = tmp_path / "clustering_runs.jsonl"
-    monkeypatch.setattr(clustering_log, "_path", target)
+    monkeypatch.setattr(logger, "_clustering_log_path", target)
     return target
 
 
@@ -38,7 +38,7 @@ def _read_lines(path) -> list[dict]:
 
 
 def test_log_writes_all_fields(log_path):
-    clustering_log.log_clustering_run(
+    logger.log_clustering_run(
         session_id="sess-1",
         k=4,
         backend="kmeans",
@@ -63,7 +63,7 @@ def test_log_writes_all_fields(log_path):
 
 def test_log_appends_one_line_per_call(log_path):
     for i in range(3):
-        clustering_log.log_clustering_run(
+        logger.log_clustering_run(
             session_id=f"sess-{i}",
             k=2,
             backend="kmeans",
@@ -77,7 +77,7 @@ def test_log_appends_one_line_per_call(log_path):
 
 
 def test_log_handles_none_silhouette(log_path):
-    clustering_log.log_clustering_run(
+    logger.log_clustering_run(
         session_id="s",
         k=1,
         backend="kmeans",
@@ -93,9 +93,9 @@ def test_log_swallows_io_errors(monkeypatch):
     """A broken file path must not raise — clustering runs come first."""
     from pathlib import Path
     bad = Path("/no/such/dir/forbidden.jsonl")
-    monkeypatch.setattr(clustering_log, "_path", bad)
+    monkeypatch.setattr(logger, "_clustering_log_path", bad)
     # Should NOT raise even though the parent directory does not exist.
-    clustering_log.log_clustering_run(
+    logger.log_clustering_run(
         session_id="s", k=2, backend="kmeans", seed=42,
         n_points=10, silhouette=0.5, turn_number=0,
     )
