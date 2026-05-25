@@ -2,40 +2,38 @@
 
 ## Consegnato questo sprint
 
-- `src/logger.py`: logging JSONL + `deviation()` ✅
-- `scripts/cli.py`: CLI interattiva (create/resume sessione, invia turni via
-  `/sessions/{id}/turns`, gestisce action="stop") ✅
-- `ui/index.html`: interfaccia web base + `ui/TODO.md` con gap da colmare ✅
+### UI web — `ui/index.html` ✅
+Prima versione funzionante dell'interfaccia web BlaBlaClust:
+- Layout a tre zone: header fisso, area cluster, drawer chat espandibile
+- Chiamate API reali a tutti gli endpoint: `POST /sessions`, `POST /clusters/{id}`,
+  `GET /clusters/active`, `POST /turns`, `GET /clusters/{id}/points`
+- Rendering delle cluster card con nome, descrizione, contatore, barra proporzionale
+- Drawer chat con messaggi utente/sistema, typing indicator, invio con Enter
+- Export JSON/CSV dei cluster finali
+- Servita via `scripts/serve_ui.py` su `http://localhost:8000/ui`
+- Palette editoriale crema/marrone; `ui/TODO.md` con gap da colmare (successivo sprint)
+
+### Logger aggiornato — `src/logger.py` ✅
+Aggiornamenti minori al logger per allinearlo all'integrazione con il server:
+- `serve_ui.py` aggiornato per servire la UI dalla root corretta
+- Database demo aggiornato con dati seed per test manuali
 
 ## Problemi aperti / osservazioni
 
-### Il loop non è ancora chiuso
-Al momento il feedback dell'oracle non ri-clusterizza il DB e `f_next_best_step`
-non è sul path API. La CLI restituisce 404 sull'endpoint di turn (non ancora
-wired). Priorità sprint 3: chiudere questo loop.
+### Il loop non era ancora chiuso (risolto in sprint 3)
+Al momento del delivery il feedback dell'oracle non ri-clusterizzava il DB
+e `f_next_best_step` non era sul path API. La CLI restituiva 404. Chiuso in
+sprint 3 con il fix dei routers da parte del team.
 
 ### Operazioni strutturali vs. intent semantici
 Merge / split / move / rename operano sulla topologia dei cluster, non sul
 contenuto semantico. L'oracle può dire "fai un cluster con le recensioni più
 arrabbiate" e il sistema non ha strumenti per eseguirlo.
 
-Ho scritto una proposta architetturale dettagliata in
-`docs/semantic-reembed-proposal.md`. Riassunto: al Turn 1 estrarre l'asse
-semantico dell'oracle → re-embed tutti i punti in uno spazio ibrido
-(originale + asse) → ricalcolare k-means. I turni successivi operano su una
-geometria già orientata semanticamente.
-
-## Piano sprint 3 (P5)
-
-- [ ] `scripts/smoke_test.sh` — obbligatorio dal corso, ancora da fare
-- [ ] Harness LLM-as-oracle: script che fa girare una sessione completa con un
-      oracle LLM (DeepSeek via OpenRouter) invece di un umano — produce log JSONL
-      per l'evaluation
-- [ ] Metriche: turns-to-convergence, oracle_satisfaction_score,
-      target_alignment_score, costo in token per sessione
-- [ ] Notebook Jupyter con grafici finali (settimana 3)
-- [ ] UI: alta priorità dal TODO.md — distinguere ask/show/stop, mostrare
-      contradiction_detected
+Proposta architetturale documentata in `docs/semantic-reembed-proposal.md`:
+al Turn 1 estrarre l'asse semantico dell'oracle → re-embed tutti i punti in
+uno spazio ibrido (originale + asse) → ricalcolare k-means. I turni successivi
+operano su una geometria già orientata semanticamente.
 
 ## Decisioni da portare in riunione di gruppo
 
