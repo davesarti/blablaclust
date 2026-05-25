@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,16 +13,16 @@
          #978F66  oliva/cachi   → bordi, superfici terziarie
          #E4D6A9  crema calda   → surface principale
       ─────────────────────────────────────────────────────────── */
-      --bg:          #f5eed8;   /* crema chiara derivata dalla palette */
-      --surface:     #E4D6A9;   /* palette — surface principale        */
-      --surface-2:   #d8ca98;   /* surface secondaria                  */
-      --surface-3:   #cfc08a;   /* surface terziaria (msg sistema)     */
-      --border:      #c4b47a;   /* bordo sottile                       */
-      --border-s:    #978F66;   /* palette — bordo forte               */
-      --text:        #1e0c04;   /* quasi-nero caldo per leggibilità    */
-      --text-muted:  #622B14;   /* palette — testo secondario          */
-      --text-faint:  #995F2F;   /* palette — label, placeholder        */
-      --accent:      #622B14;   /* palette — accento primario          */
+      --bg:          #f5eed8;
+      --surface:     #E4D6A9;
+      --surface-2:   #d8ca98;
+      --surface-3:   #cfc08a;
+      --border:      #c4b47a;
+      --border-s:    #978F66;
+      --text:        #1e0c04;
+      --text-muted:  #622B14;
+      --text-faint:  #995F2F;
+      --accent:      #622B14;
       --accent-dim:  rgba(98,43,20,.1);
       --green:       #3a6b40;
       --green-bg:    rgba(58,107,64,.09);
@@ -51,6 +52,7 @@
       background-size: 28px 28px;
       overflow: hidden;
       height: 100vh;
+      height: 100dvh;
     }
 
     /* ── HEADER ── */
@@ -109,8 +111,10 @@
     #welcome {
       display: none;
       height: 100vh;
+      height: 100dvh;
       align-items: center;
       justify-content: center;
+      flex-direction: column;
       position: relative;
     }
     #welcome.visible { display: flex; }
@@ -125,6 +129,8 @@
     .welcome-inner {
       text-align: center;
       max-width: 560px;
+      width: 100%;
+      padding: 0 20px;
       position: relative;
       z-index: 1;
     }
@@ -183,10 +189,76 @@
       background: var(--border-s);
     }
 
+    /* ── SESSION LIST (welcome) ── */
+    #session-list {
+      display: none;
+      margin-top: 28px;
+      max-width: 440px;
+      width: 100%;
+      text-align: left;
+      position: relative;
+      z-index: 1;
+    }
+    #session-list.visible { display: block; }
+    .session-list-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 10px;
+    }
+    .session-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: rgba(228,214,169,.7);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      margin-bottom: 6px;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    .session-row:last-child { margin-bottom: 0; }
+    .session-row:hover { background: var(--surface-2); border-color: var(--border-s); }
+    .session-row .sr-info { flex: 1; min-width: 0; }
+    .session-row .sr-dataset {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-faint);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .session-row .sr-id {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .btn-resume {
+      background: none;
+      border: 1px solid var(--border-s);
+      border-radius: var(--r);
+      padding: 4px 10px;
+      font-size: 11px;
+      font-family: var(--mono);
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+      letter-spacing: 0.04em;
+    }
+    .btn-resume:hover { background: var(--accent-dim); color: var(--accent); border-color: rgba(98,43,20,.35); }
+
     /* ── WORKSPACE ── */
     #workspace {
       display: none;
       height: 100vh;
+      height: 100dvh;
       padding-top: var(--header-h);
     }
     #workspace.visible { display: block; }
@@ -195,10 +267,12 @@
       display: grid;
       grid-template-columns: 1fr var(--sidebar-w);
       height: calc(100vh - var(--header-h) - var(--drawer-col));
+      height: calc(100dvh - var(--header-h) - var(--drawer-col));
       transition: height 0.28s cubic-bezier(0.4,0,0.2,1);
     }
     #main-area.drawer-open {
       height: calc(100vh - var(--header-h) - var(--drawer-exp));
+      height: calc(100dvh - var(--header-h) - var(--drawer-exp));
     }
 
     /* ── CLUSTER AREA ── */
@@ -225,7 +299,7 @@
       gap: 10px;
     }
 
-    /* per-cluster accent colors — earthen, armonizzati con la palette */
+    /* per-cluster accent colors */
     .cluster-card:nth-child(1) { --ca: #8B3520; --ca-rgb: 139,53,32; }
     .cluster-card:nth-child(2) { --ca: #622B14; --ca-rgb: 98,43,20; }
     .cluster-card:nth-child(3) { --ca: #3d5e38; --ca-rgb: 61,94,56; }
@@ -256,13 +330,14 @@
     .cluster-card:hover {
       background: var(--surface-2);
       border-color: var(--border-s);
-      box-shadow: 0 3px 14px rgba(98,43,20,.14);
+      box-shadow: 0 4px 16px rgba(98,43,20,.12), 0 1px 4px rgba(98,43,20,.08);
       transform: translateY(-1px);
     }
     .cluster-card.selected {
       border-left-color: var(--ca, var(--accent));
       background: color-mix(in srgb, var(--ca, var(--accent)) 7%, var(--surface));
       border-color: color-mix(in srgb, var(--ca, var(--accent)) 28%, var(--border));
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--ca, var(--accent)) 20%, transparent);
     }
     .cluster-card.selected:hover {
       background: color-mix(in srgb, var(--ca, var(--accent)) 10%, var(--surface));
@@ -300,7 +375,6 @@
       flex: 1;
     }
 
-    /* size bar */
     .size-bar {
       height: 2px;
       background: var(--border);
@@ -568,30 +642,36 @@
       border-top: 1px solid var(--border);
       flex-shrink: 0;
     }
+
+    /* ── MULTI-CLUSTER CHIPS ── */
     #cluster-tag {
       display: none;
-      align-items: center;
+      flex-wrap: wrap;
       gap: 5px;
       margin-bottom: 7px;
+    }
+    #cluster-tag.visible { display: flex; }
+    .cluster-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       font-family: var(--mono);
       font-size: 10px;
       background: var(--accent-dim);
       border: 1px solid rgba(98,43,20,.22);
       border-radius: 2px;
-      padding: 2px 8px;
-      width: fit-content;
+      padding: 2px 7px;
       color: var(--accent);
     }
-    #cluster-tag.visible { display: flex; }
-    #cluster-tag button {
+    .cluster-chip button {
       background: none; border: none;
       cursor: pointer;
       font-size: 13px; line-height: 1;
       color: var(--text-muted); padding: 0;
-      margin-left: 2px;
+      margin-left: 1px;
       transition: color 0.1s;
     }
-    #cluster-tag button:hover { color: var(--text); }
+    .cluster-chip button:hover { color: var(--text); }
 
     #input-row {
       display: flex;
@@ -767,6 +847,43 @@
     #modal-expand .modal-card::-webkit-scrollbar-track { background: transparent; }
     #modal-expand .modal-card::-webkit-scrollbar-thumb { background: var(--border-s); border-radius: 2px; }
 
+    /* ── MODAL SEARCH ── */
+    .modal-search {
+      width: 100%;
+      border: 1px solid var(--border-s);
+      border-radius: var(--r);
+      padding: 7px 10px 7px 30px;
+      font-size: 12px;
+      font-family: var(--sans);
+      outline: none;
+      background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23995F2F' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E") no-repeat 9px center;
+      color: var(--text);
+      margin-bottom: 12px;
+      transition: border-color 0.14s;
+    }
+    .modal-search::placeholder { color: var(--text-faint); }
+    .modal-search:focus { border-color: rgba(98,43,20,.42); }
+
+    .expand-footer {
+      text-align: center;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+      margin-top: 4px;
+    }
+    .btn-show-all {
+      background: none; border: none;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      color: var(--text-faint);
+      cursor: pointer;
+      padding: 4px 10px;
+      border-radius: 2px;
+      transition: color 0.12s, background 0.12s;
+    }
+    .btn-show-all:hover { color: var(--accent); background: var(--accent-dim); }
+
     .review-list { list-style: none; }
     .review-list li {
       padding: 9px 0;
@@ -776,6 +893,33 @@
       color: var(--text-muted);
     }
     .review-list li:last-child { border-bottom: none; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 580px) {
+      #main-area {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+      #sidebar {
+        border-left: none;
+        border-top: 1px solid var(--border);
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 16px;
+        padding: 10px 14px;
+        overflow-y: visible;
+      }
+      #sidebar .sb-section {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+        min-width: 80px;
+      }
+      .stat-big { font-size: 28px; }
+      #cluster-area { padding: 14px; }
+      .cluster-grid { grid-template-columns: 1fr; }
+    }
 
     :focus-visible {
       outline: 2px solid rgba(98,43,20,.4);
@@ -816,6 +960,10 @@
       <div class="welcome-sep"></div>
       <span class="welcome-stat">Iterative clustering</span>
     </div>
+  </div>
+  <div id="session-list">
+    <div class="session-list-label">Resume a session</div>
+    <div id="session-list-inner"></div>
   </div>
 </div>
 
@@ -874,10 +1022,7 @@
       <div class="typing-dot"></div>
     </div>
     <div id="drawer-input">
-      <div id="cluster-tag">
-        <span id="cluster-tag-label"></span>
-        <button onclick="deselectCluster()" aria-label="Deselect cluster">×</button>
-      </div>
+      <div id="cluster-tag" aria-label="Selected clusters"></div>
       <div id="input-row">
         <textarea id="chat-input" rows="2" placeholder="Share your feedback on the clusters…" aria-label="Oracle feedback"></textarea>
         <button id="send-btn" onclick="sendMessage()" aria-label="Send message">Send</button>
@@ -899,7 +1044,7 @@
     <div class="form-field">
       <label for="inp-dataset">Dataset</label>
       <select id="inp-dataset">
-        <option value="amazon">amazon (Amazon Electronics Reviews)</option>
+        <option value="amazon_reviews_train">amazon_reviews_train (Amazon Electronics Reviews)</option>
       </select>
     </div>
     <div class="form-field">
@@ -932,7 +1077,11 @@
 <div class="modal-overlay" id="modal-expand" role="dialog" aria-modal="true" aria-labelledby="lbl-expand">
   <div class="modal-card">
     <h2 id="lbl-expand">—</h2>
+    <input type="search" id="expand-search" class="modal-search" placeholder="Filter by keyword…" aria-label="Filter items">
     <ul class="review-list" id="expand-list"></ul>
+    <div class="expand-footer" id="expand-footer" style="display:none">
+      <button class="btn-show-all" onclick="expandShowAll()"></button>
+    </div>
     <div class="modal-actions">
       <button class="btn-primary" onclick="closeModal('modal-expand')">Close</button>
     </div>
@@ -958,9 +1107,13 @@ const state = {
   },
   clusters: [],
   chat: [],
-  selectedClusterId: null,
+  selectedClusterIds: new Set(),
   drawerExpanded: false,
 };
+
+// expand modal cache
+let _expandPoints = [];
+let _expandShowAll = false;
 
 // Map API cluster (has size, no emoji) → UI cluster (has count, emoji)
 function mapCluster(c, idx) {
@@ -980,11 +1133,11 @@ function renderClusters() {
   const grid     = document.getElementById('cluster-grid');
   const maxCount = Math.max(...state.clusters.map(c => c.count), 1);
   grid.innerHTML = state.clusters.map(c => `
-    <div class="cluster-card ${state.selectedClusterId === c.id ? 'selected' : ''}"
+    <div class="cluster-card ${state.selectedClusterIds.has(c.id) ? 'selected' : ''}"
          onclick="selectCluster('${c.id}')"
          tabindex="0"
          role="button"
-         aria-pressed="${state.selectedClusterId === c.id}"
+         aria-pressed="${state.selectedClusterIds.has(c.id)}"
          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectCluster('${c.id}')}">
       <div class="card-header">
         <span class="emoji">${c.emoji}</span>
@@ -1034,13 +1187,18 @@ function renderChat() {
 }
 
 function renderClusterTag() {
-  const tag   = document.getElementById('cluster-tag');
-  const label = document.getElementById('cluster-tag-label');
-  const c     = state.clusters.find(c => c.id === state.selectedClusterId);
-  if (c) {
-    label.textContent = '📌 ' + c.name;
+  const tag = document.getElementById('cluster-tag');
+  const selected = state.clusters.filter(c => state.selectedClusterIds.has(c.id));
+  if (selected.length) {
+    tag.innerHTML = selected.map(c => `
+      <span class="cluster-chip">
+        📌 ${c.name}
+        <button onclick="deselectCluster('${c.id}')" aria-label="Deselect ${c.name}">×</button>
+      </span>
+    `).join('');
     tag.classList.add('visible');
   } else {
+    tag.innerHTML = '';
     tag.classList.remove('visible');
   }
 }
@@ -1056,13 +1214,21 @@ function renderAll() {
 // ── CLUSTER INTERACTION ────────────────────────────────────────────────────
 
 function selectCluster(id) {
-  state.selectedClusterId = state.selectedClusterId === id ? null : id;
+  if (state.selectedClusterIds.has(id)) {
+    state.selectedClusterIds.delete(id);
+  } else {
+    state.selectedClusterIds.add(id);
+  }
   renderClusters();
   renderClusterTag();
 }
 
-function deselectCluster() {
-  state.selectedClusterId = null;
+function deselectCluster(id) {
+  if (id) {
+    state.selectedClusterIds.delete(id);
+  } else {
+    state.selectedClusterIds.clear();
+  }
   renderClusters();
   renderClusterTag();
 }
@@ -1136,7 +1302,79 @@ async function loadDatasets() {
     if (!list.length) return;
     const sel = document.getElementById('inp-dataset');
     sel.innerHTML = list.map(d => `<option value="${d.dataset_name}">${d.dataset_name}</option>`).join('');
+    const trainOpt = [...sel.options].find(o => o.value.includes('train'));
+    if (trainOpt) sel.value = trainOpt.value;
   } catch (_) { /* keep default option */ }
+}
+
+
+// ── SESSION RESUME ─────────────────────────────────────────────────────────
+
+async function loadRecentSessions() {
+  try {
+    const res = await fetch('/sessions');
+    if (!res.ok) return;
+    const sessions = await res.json();
+    const relevant = sessions.filter(s => s.status !== 'closed');
+    if (!relevant.length) return;
+    renderSessionList(relevant);
+  } catch (_) {}
+}
+
+function renderSessionList(sessions) {
+  const container = document.getElementById('session-list');
+  const inner     = document.getElementById('session-list-inner');
+  inner.innerHTML = sessions.map(s => `
+    <div class="session-row">
+      <div class="sr-info">
+        <div class="sr-dataset">${s.dataset_name}</div>
+        <div class="sr-id">${s.id.slice(0, 8)}…</div>
+      </div>
+      <span class="status-badge ${s.status}">${s.status.toUpperCase()}</span>
+      <button class="btn-resume" onclick="resumeSession('${s.id}', '${s.dataset_name}', '${s.status}')">Resume →</button>
+    </div>
+  `).join('');
+  container.classList.add('visible');
+}
+
+async function resumeSession(sessionId, datasetName, status) {
+  try {
+    const [acRes, stateRes] = await Promise.all([
+      fetch(`/clusters/active?session_id=${sessionId}`),
+      fetch(`/sessions/${sessionId}/state`),
+    ]);
+    if (!acRes.ok) throw new Error('Could not load clusters');
+    const activeClusters = await acRes.json();
+
+    let turnNumber = 0;
+    if (stateRes.ok) {
+      const sessionState = await stateRes.json();
+      turnNumber = sessionState.turn_number ?? 0;
+    }
+
+    state.sessionId              = sessionId;
+    state.session.name           = datasetName;
+    state.session.dataset        = datasetName;
+    state.session.status         = status;
+    state.session.turn           = turnNumber;
+    state.session.tokens         = 0;
+    state.session.cost           = 0;
+    state.session.cognitiveLoad  = 1;
+    state.clusters               = activeClusters.map(mapCluster);
+    state.chat                   = [
+      { role: 'system', text: `Session resumed — turn ${turnNumber}, ${activeClusters.length} active clusters.`, diff: null },
+    ];
+    state.selectedClusterIds = new Set();
+
+    document.getElementById('header-name').textContent = datasetName;
+    document.getElementById('header').style.display    = 'flex';
+    document.getElementById('welcome').classList.remove('visible');
+    document.getElementById('workspace').classList.add('visible');
+    document.getElementById('drawer').classList.add('visible');
+    renderAll();
+  } catch (e) {
+    console.error('Resume failed:', e.message);
+  }
 }
 
 
@@ -1147,12 +1385,14 @@ async function sendMessage() {
   const text  = input.value.trim();
   if (!text) return;
 
-  const targetClusterId = state.selectedClusterId;
+  const targetClusterIds = [...state.selectedClusterIds];
 
   state.chat.push({ role: 'user', text });
   input.value = '';
-  deselectCluster();
+  state.selectedClusterIds.clear();
   renderChat();
+  renderClusters();
+  renderClusterTag();
 
   if (!state.drawerExpanded) toggleDrawer();
 
@@ -1168,8 +1408,8 @@ async function sendMessage() {
       body:    JSON.stringify({
         session_id:         state.sessionId,
         raw_text:           text,
-        feedback_type:      targetClusterId ? 'cluster' : 'global',
-        target_cluster_ids: targetClusterId ? [targetClusterId] : [],
+        feedback_type:      targetClusterIds.length ? 'cluster' : 'global',
+        target_cluster_ids: targetClusterIds,
         target_point_ids:   [],
         metadata:           {},
       }),
@@ -1230,10 +1470,9 @@ async function startSession() {
 
   const btn = document.querySelector('#modal-new-session .btn-primary');
   btn.disabled    = true;
-  btn.textContent = '…';
+  btn.textContent = 'Creating session…';
 
   try {
-    // 1. Create session
     const sessRes = await fetch('/sessions', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1241,25 +1480,32 @@ async function startSession() {
     });
     if (!sessRes.ok) {
       const err = await sessRes.json().catch(() => ({}));
-      throw new Error(err.detail || 'Failed to create session');
+      throw new Error(err.detail || `Session creation failed (HTTP ${sessRes.status})`);
     }
-    const sessData   = await sessRes.json();
-    state.sessionId  = sessData.id;
+    const sessData  = await sessRes.json();
+    state.sessionId = sessData.id;
 
-    // 2. Run initial clustering (LLM names each cluster — may take a moment)
-    const clRes = await fetch(`/clusters/${state.sessionId}`, {
+    btn.textContent = 'Clustering…';
+    let clRes = await fetch(`/clusters/${state.sessionId}`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ k, generate_names: true }),
     });
     if (!clRes.ok) {
+      clRes = await fetch(`/clusters/${state.sessionId}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ k, generate_names: false }),
+      });
+    }
+    if (!clRes.ok) {
       const err = await clRes.json().catch(() => ({}));
-      throw new Error(err.detail || 'Initial clustering failed');
+      throw new Error(err.detail || `Clustering failed (HTTP ${clRes.status})`);
     }
 
-    // 3. Load active clusters
+    btn.textContent = 'Loading clusters…';
     const acRes = await fetch(`/clusters/active?session_id=${state.sessionId}`);
-    if (!acRes.ok) throw new Error('Could not load clusters');
+    if (!acRes.ok) throw new Error(`Could not load clusters (HTTP ${acRes.status})`);
     const activeClusters = await acRes.json();
 
     const totalPoints = activeClusters.reduce((s, c) => s + (c.size || 0), 0);
@@ -1275,7 +1521,7 @@ async function startSession() {
     state.chat                  = [
       { role: 'system', text: `Analysed ${totalPoints.toLocaleString('en-US')} data points and proposed ${activeClusters.length} initial clusters. Select a cluster to contextualise your feedback, or write freely.`, diff: null },
     ];
-    state.selectedClusterId = null;
+    state.selectedClusterIds = new Set();
 
     closeModal('modal-new-session');
     document.getElementById('header-name').textContent = name;
@@ -1286,7 +1532,7 @@ async function startSession() {
     renderAll();
 
   } catch (e) {
-    alert('Error: ' + e.message);
+    showError(e.message);
     state.sessionId = null;
   } finally {
     btn.disabled    = false;
@@ -1294,33 +1540,73 @@ async function startSession() {
   }
 }
 
+
+// ── EXPAND CLUSTER ─────────────────────────────────────────────────────────
+
+function _pointText(p) {
+  return p.data.text ?? p.data.review ?? p.data.content ?? p.data.body
+    ?? Object.values(p.data).find(v => typeof v === 'string')
+    ?? JSON.stringify(p.data);
+}
+
+function _renderExpandList(filter) {
+  const lower    = filter.trim().toLowerCase();
+  const filtered = lower
+    ? _expandPoints.filter(p => _pointText(p).toLowerCase().includes(lower))
+    : _expandPoints;
+
+  const shown   = (_expandShowAll || lower) ? filtered : filtered.slice(0, 5);
+  const hasMore = !lower && !_expandShowAll && filtered.length > 5;
+
+  document.getElementById('expand-list').innerHTML = shown.length
+    ? shown.map(p => `<li>${_pointText(p)}</li>`).join('')
+    : '<li>No results.</li>';
+
+  const footer = document.getElementById('expand-footer');
+  if (hasMore) {
+    footer.style.display = 'block';
+    footer.querySelector('.btn-show-all').textContent = `Show all ${filtered.length} items`;
+  } else {
+    footer.style.display = 'none';
+  }
+}
+
+function expandShowAll() {
+  _expandShowAll = true;
+  _renderExpandList(document.getElementById('expand-search').value);
+}
+
 async function expandCluster(id) {
   const c = state.clusters.find(c => c.id === id);
   if (!c) return;
 
+  _expandPoints  = [];
+  _expandShowAll = false;
   document.getElementById('lbl-expand').textContent = `${c.emoji} ${c.name}`;
+  document.getElementById('expand-search').value    = '';
   document.getElementById('expand-list').innerHTML  = '<li>Loading…</li>';
+  document.getElementById('expand-footer').style.display = 'none';
   openModal('modal-expand');
 
   try {
     const res = await fetch(`/clusters/${id}/points`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data   = await res.json();
-    const points = data.points || [];
+    const data = await res.json();
+    _expandPoints = data.points || [];
 
-    document.getElementById('lbl-expand').textContent = `${c.emoji} ${c.name} (${points.length} reviews)`;
-    document.getElementById('expand-list').innerHTML  = points.length
-      ? points.map(p => {
-          const text = p.data.text ?? p.data.review ?? p.data.content ?? p.data.body
-            ?? Object.values(p.data).find(v => typeof v === 'string')
-            ?? JSON.stringify(p.data);
-          return `<li>${text}</li>`;
-        }).join('')
-      : '<li>No data points found for this cluster.</li>';
+    document.getElementById('lbl-expand').textContent = `${c.emoji} ${c.name} (${_expandPoints.length} reviews)`;
+    _renderExpandList('');
   } catch (e) {
     document.getElementById('expand-list').innerHTML = `<li>Error: ${e.message}</li>`;
   }
 }
+
+document.getElementById('expand-search').addEventListener('input', e => {
+  _renderExpandList(e.target.value);
+});
+
+
+// ── SESSION CLOSE ──────────────────────────────────────────────────────────
 
 async function closeSessionFinal() {
   closeModal('modal-stop');
@@ -1332,11 +1618,12 @@ async function closeSessionFinal() {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ status: 'closed' }),
       });
-    } catch (_) { /* best-effort */ }
+    } catch (_) {}
   }
 
   state.sessionId      = null;
   state.session.status = 'closed';
+  state.selectedClusterIds.clear();
   document.getElementById('header').style.display = 'none';
   document.getElementById('workspace').classList.remove('visible');
   document.getElementById('drawer').classList.remove('visible');
@@ -1346,6 +1633,7 @@ async function closeSessionFinal() {
   document.getElementById('drawer').classList.remove('expanded');
   document.getElementById('main-area').classList.remove('drawer-open');
   document.getElementById('toggle-btn').textContent = '▲';
+  loadRecentSessions();
 }
 
 // Close modals on overlay click
@@ -1395,6 +1683,9 @@ function _download(filename, content, mime) {
 function _slug(str) {
   return str.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '');
 }
+
+// ── INIT ───────────────────────────────────────────────────────────────────
+loadRecentSessions();
 </script>
 </body>
 </html>
