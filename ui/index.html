@@ -616,25 +616,18 @@
       align-self: flex-start;
       display: none;
       align-items: center;
-      gap: 4px;
       background: var(--surface-3);
       border: 1px solid var(--border);
       border-radius: var(--r) var(--r) var(--r) 1px;
-      padding: 9px 13px;
+      padding: 8px 13px;
       animation: slideLeft 0.18s ease-out;
     }
     #typing-indicator.visible { display: flex; }
-    .typing-dot {
-      width: 5px; height: 5px;
-      border-radius: 50%;
-      background: var(--text-faint);
-      animation: typingBounce 1.2s ease-in-out infinite;
-    }
-    .typing-dot:nth-child(2) { animation-delay: 0.18s; }
-    .typing-dot:nth-child(3) { animation-delay: 0.36s; }
-    @keyframes typingBounce {
-      0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
-      30%           { transform: translateY(-4px); opacity: 1; }
+    .typing-text {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-faint);
+      letter-spacing: 0.04em;
     }
 
     #drawer-input {
@@ -1017,9 +1010,7 @@
     </div>
     <div id="chat-history"></div>
     <div id="typing-indicator">
-      <div class="typing-dot"></div>
-      <div class="typing-dot"></div>
-      <div class="typing-dot"></div>
+      <span id="typing-text" class="typing-text"></span>
     </div>
     <div id="drawer-input">
       <div id="cluster-tag" aria-label="Selected clusters"></div>
@@ -1092,6 +1083,32 @@
 <script>
 // ── CONSTANTS ──────────────────────────────────────────────────────────────
 const CLUSTER_EMOJIS = ['🔧', '⭐', '🚚', '💰', '📞', '📊', '🎯', '🔍', '💡', '🌿'];
+
+const LOADING_MESSAGES = [
+  'Vibing', 'Noodling', 'Finagling', 'Schlepping', 'Smooshing', 'Puttering',
+  'Reticulating', 'Moseying', 'Percolating', 'Shucking', 'Transmuting', 'Honking',
+  'Herding', 'Marinating', 'Stewing', 'Hustling', 'Mulling', 'Mustering',
+  'Cerebrating', 'Razzmatazzing', 'Hullaballooing', 'Whatchamacalliting',
+  'Shenaniganing', 'Tomfoolering', 'Discombobulating', 'Flibbertigibbeting',
+  'Boondoggling', 'Canoodling', 'Prestidigitating',
+];
+
+let _loadingInterval = null;
+let _loadingMsgIdx   = 0;
+
+function startLoadingMessage(el) {
+  _loadingMsgIdx = Math.floor(Math.random() * LOADING_MESSAGES.length);
+  el.textContent = LOADING_MESSAGES[_loadingMsgIdx] + '…';
+  _loadingInterval = setInterval(() => {
+    _loadingMsgIdx = (_loadingMsgIdx + 1) % LOADING_MESSAGES.length;
+    el.textContent = LOADING_MESSAGES[_loadingMsgIdx] + '…';
+  }, 1500);
+}
+
+function stopLoadingMessage() {
+  clearInterval(_loadingInterval);
+  _loadingInterval = null;
+}
 
 // ── STATE ──────────────────────────────────────────────────────────────────
 const state = {
@@ -1399,6 +1416,8 @@ async function sendMessage() {
   const btn = document.getElementById('send-btn');
   btn.disabled    = true;
   btn.textContent = '…';
+  const typingEl = document.getElementById('typing-text');
+  startLoadingMessage(typingEl);
   document.getElementById('typing-indicator').classList.add('visible');
 
   try {
@@ -1426,6 +1445,7 @@ async function sendMessage() {
   } catch (e) {
     showError(e.message);
   } finally {
+    stopLoadingMessage();
     document.getElementById('typing-indicator').classList.remove('visible');
     btn.disabled    = false;
     btn.textContent = 'Send';
@@ -1485,7 +1505,7 @@ async function startSession() {
     const sessData  = await sessRes.json();
     state.sessionId = sessData.id;
 
-    btn.textContent = 'Clustering…';
+    startLoadingMessage(btn);
     let clRes = await fetch(`/clusters/${state.sessionId}`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1503,6 +1523,7 @@ async function startSession() {
       throw new Error(err.detail || `Clustering failed (HTTP ${clRes.status})`);
     }
 
+    stopLoadingMessage();
     btn.textContent = 'Loading clusters…';
     const acRes = await fetch(`/clusters/active?session_id=${state.sessionId}`);
     if (!acRes.ok) throw new Error(`Could not load clusters (HTTP ${acRes.status})`);
@@ -1535,6 +1556,7 @@ async function startSession() {
     showError(e.message);
     state.sessionId = null;
   } finally {
+    stopLoadingMessage();
     btn.disabled    = false;
     btn.textContent = 'Start';
   }
