@@ -7,6 +7,7 @@ from sqlalchemy import (
 	String,
 	Text,
 )
+from typing import Optional
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -37,6 +38,7 @@ class ChatSession(Base):
 	)
 
 	id: Mapped[str] = mapped_column(String(36), primary_key=True)
+	name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 	dataset_name: Mapped[str] = mapped_column(String(255), index=True)
 	embedding_model: Mapped[str] = mapped_column(String(255))
 	status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")

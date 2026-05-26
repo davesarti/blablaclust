@@ -16,6 +16,7 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 class CreateSessionRequest(BaseModel):
     dataset_name: str
+    name: Optional[str] = None
 
 
 class PatchSessionStateRequest(BaseModel):
@@ -28,6 +29,7 @@ def read_sessions(db: Session = Depends(get_db)):
     return [
         {
             "id": session.id,
+            "name": session.name,
             "dataset_name": session.dataset_name,
             "embedding_model": session.embedding_model,
             "status": session.status,
@@ -50,6 +52,7 @@ def create_session(payload: CreateSessionRequest, db: Session = Depends(get_db))
         )
     new_session = ChatSession(
         id=str(uuid.uuid4()),
+        name=payload.name,
         dataset_name=payload.dataset_name,
         embedding_model="default",
         status="active",
@@ -59,6 +62,7 @@ def create_session(payload: CreateSessionRequest, db: Session = Depends(get_db))
     db.refresh(new_session)
     return {
         "id": new_session.id,
+        "name": new_session.name,
         "dataset_name": new_session.dataset_name,
         "embedding_model": new_session.embedding_model,
         "status": new_session.status,

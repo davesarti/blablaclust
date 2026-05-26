@@ -68,15 +68,6 @@
       top: 0; left: 0; right: 0;
       z-index: 100;
     }
-    #header .brand {
-      font-family: var(--mono);
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--text-faint);
-      margin-right: 14px;
-    }
     #header .header-left {
       display: flex;
       align-items: center;
@@ -87,12 +78,49 @@
       background: var(--border-s);
       margin: 0 14px;
     }
-    #header .session-name {
+    #header .header-session-info {
+      display: flex;
+      flex-direction: row;
+      align-items: baseline;
+      gap: 8px;
+    }
+    #header .header-dataset {
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    #header .header-sep {
+      color: var(--border-s);
+      font-size: 12px;
+      line-height: 1;
+    }
+    #header .header-session-name {
       font-family: var(--serif);
       font-weight: normal;
-      font-size: 15px;
+      font-size: 14px;
       color: var(--text);
       letter-spacing: -0.01em;
+    }
+    #header .btn-back {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      padding: 4px 6px;
+      border-radius: 3px;
+      transition: color 0.15s, background 0.15s;
+    }
+    #header .btn-back:hover {
+      color: var(--text);
+      background: var(--surface-2);
     }
     .status-badge {
       font-family: var(--mono);
@@ -933,9 +961,13 @@
 <!-- ── HEADER ── -->
 <div id="header" style="display:none">
   <div class="header-left">
-    <span class="brand">BBC</span>
+    <button class="btn-back" onclick="goBackToWelcome()" aria-label="Back to session selection">← Back</button>
     <div class="divider"></div>
-    <span class="session-name" id="header-name">—</span>
+    <div class="header-session-info">
+      <span class="header-dataset" id="header-dataset">—</span>
+      <span class="header-sep" aria-hidden="true">/</span>
+      <span class="header-session-name" id="header-name">—</span>
+    </div>
   </div>
   <span class="status-badge active" id="status-badge">ACTIVE</span>
 </div>
@@ -1324,20 +1356,28 @@ async function loadRecentSessions() {
 function renderSessionList(sessions) {
   const container = document.getElementById('session-list');
   const inner     = document.getElementById('session-list-inner');
-  inner.innerHTML = sessions.map(s => `
+  inner.innerHTML = sessions.map(s => {
+    const safeName    = (s.name        || '').replace(/"/g, '&quot;');
+    const safeDataset = (s.dataset_name || '').replace(/"/g, '&quot;');
+    return `
     <div class="session-row">
       <div class="sr-info">
         <div class="sr-dataset">${s.dataset_name}</div>
-        <div class="sr-id">${s.id.slice(0, 8)}…</div>
+        <div class="sr-id">${s.name || s.id.slice(0, 8) + '…'}</div>
       </div>
       <span class="status-badge ${s.status}">${s.status.toUpperCase()}</span>
-      <button class="btn-resume" onclick="resumeSession('${s.id}', '${s.dataset_name}', '${s.status}')">Resume →</button>
-    </div>
-  `).join('');
+      <button class="btn-resume"
+        data-session-id="${s.id}"
+        data-dataset="${safeDataset}"
+        data-status="${s.status}"
+        data-name="${safeName}"
+        onclick="resumeSession(this.dataset.sessionId, this.dataset.dataset, this.dataset.status, this.dataset.name)">Resume →</button>
+    </div>`;
+  }).join('');
   container.classList.add('visible');
 }
 
-async function resumeSession(sessionId, datasetName, status) {
+async function resumeSession(sessionId, datasetName, status, sessionName) {
   try {
     const [acRes, stateRes] = await Promise.all([
       fetch(`/clusters/active?session_id=${sessionId}`),
@@ -1353,7 +1393,7 @@ async function resumeSession(sessionId, datasetName, status) {
     }
 
     state.sessionId              = sessionId;
-    state.session.name           = datasetName;
+    state.session.name           = sessionName || datasetName;
     state.session.dataset        = datasetName;
     state.session.status         = status;
     state.session.turn           = turnNumber;
@@ -1366,8 +1406,9 @@ async function resumeSession(sessionId, datasetName, status) {
     ];
     state.selectedClusterIds = new Set();
 
-    document.getElementById('header-name').textContent = datasetName;
-    document.getElementById('header').style.display    = 'flex';
+    document.getElementById('header-dataset').textContent = datasetName;
+    document.getElementById('header-name').textContent    = sessionName || '—';
+    document.getElementById('header').style.display       = 'flex';
     document.getElementById('welcome').classList.remove('visible');
     document.getElementById('workspace').classList.add('visible');
     document.getElementById('drawer').classList.add('visible');
@@ -1476,7 +1517,7 @@ async function startSession() {
     const sessRes = await fetch('/sessions', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ dataset_name: dataset }),
+      body:    JSON.stringify({ dataset_name: dataset, name }),
     });
     if (!sessRes.ok) {
       const err = await sessRes.json().catch(() => ({}));
@@ -1524,8 +1565,9 @@ async function startSession() {
     state.selectedClusterIds = new Set();
 
     closeModal('modal-new-session');
-    document.getElementById('header-name').textContent = name;
-    document.getElementById('header').style.display    = 'flex';
+    document.getElementById('header-dataset').textContent = dataset;
+    document.getElementById('header-name').textContent    = name;
+    document.getElementById('header').style.display       = 'flex';
     document.getElementById('welcome').classList.remove('visible');
     document.getElementById('workspace').classList.add('visible');
     document.getElementById('drawer').classList.add('visible');
@@ -1607,6 +1649,19 @@ document.getElementById('expand-search').addEventListener('input', e => {
 
 
 // ── SESSION CLOSE ──────────────────────────────────────────────────────────
+
+function goBackToWelcome() {
+  state.sessionId = null;
+  state.selectedClusterIds.clear();
+  state.drawerExpanded = false;
+  document.getElementById('header').style.display = 'none';
+  document.getElementById('workspace').classList.remove('visible');
+  document.getElementById('drawer').classList.remove('expanded');
+  document.getElementById('main-area').classList.remove('drawer-open');
+  document.getElementById('toggle-btn').textContent = '▲';
+  document.getElementById('welcome').classList.add('visible');
+  loadRecentSessions();
+}
 
 async function closeSessionFinal() {
   closeModal('modal-stop');
