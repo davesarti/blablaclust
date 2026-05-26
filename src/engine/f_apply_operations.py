@@ -70,18 +70,38 @@ def f_apply_operations(
         op_type = op.get("type")
 
         if op_type == "merge":
-            # Writes a full soft-assignment snapshot → consumes a turn_number.
-            merge_clusters(
+            # The prompt lets the LLM put an inline new_name on a merge op so
+            # the oracle can say "merge these and call it X" in a single turn —
+            # without it the rename would need a forward-reference to a UUID
+            # that does not exist yet (forbidden, see #28).
+            inline_new_name = (op.get("new_name") or "").strip()
+            inline_new_desc = (op.get("new_description") or "").strip()
+
+            # Skip the auto-name LLM call only when the oracle already gave a
+            # name we'd just overwrite. If only a description was provided,
+            # still let auto-name fill in a sensible name.
+            new_cluster = merge_clusters(
                 cluster_ids=op["cluster_ids"],
                 session_id=session_id,
                 turn_number=current_turn,
                 db=db,
+                auto_name=not inline_new_name,
             )
             # Flush so the next operation in this same turn sees the updated
             # snapshot rows and dissolved cluster state.  The session uses
             # autoflush=False, so without this the second split/merge would
             # read the pre-operation DB state and carry forward wrong clusters.
             db.flush()
+
+            if inline_new_name or inline_new_desc:
+                # Preserve whichever side the oracle did NOT specify so we
+                # don't blow away the placeholder/auto-name we kept above.
+                rename_cluster(
+                    cluster_id=new_cluster.id,
+                    new_name=inline_new_name or (new_cluster.name or ""),
+                    new_description=inline_new_desc or (new_cluster.description or ""),
+                    db=db,
+                )
             current_turn += 1
 
         elif op_type == "split":
