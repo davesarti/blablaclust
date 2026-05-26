@@ -24,7 +24,10 @@ def hard_cluster_stats(
     cluster_ids = [
         cid
         for (cid,) in db.query(DbCluster.id)
-        .filter(DbCluster.session_id == session_id)
+        .filter(
+            DbCluster.session_id == session_id,
+            DbCluster.dissolved_at_turn.is_(None),
+        )
         .all()
     ]
     stats: dict[str, tuple[int, list[str]]] = {cid: (0, []) for cid in cluster_ids}

@@ -281,6 +281,57 @@
       letter-spacing: 0.04em;
     }
     .btn-resume:hover { background: var(--accent-dim); color: var(--accent); border-color: rgba(74,124,89,.4); }
+    .sr-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-delete-row {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-faint);
+      font-size: 13px;
+      padding: 4px 6px;
+      border-radius: var(--r);
+      line-height: 1;
+      transition: color 0.12s, background 0.12s;
+    }
+    .btn-delete-row:hover { color: var(--red); background: var(--red-bg); }
+    .sr-confirm {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+    .btn-confirm-yes {
+      background: var(--red-bg);
+      border: 1px solid rgba(138,48,48,.3);
+      border-radius: var(--r);
+      padding: 3px 9px;
+      font-size: 10px;
+      font-family: var(--mono);
+      font-weight: 700;
+      color: var(--red);
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .btn-confirm-yes:hover { background: rgba(138,48,48,.18); }
+    .btn-confirm-no {
+      background: none;
+      border: 1px solid var(--border-s);
+      border-radius: var(--r);
+      padding: 3px 9px;
+      font-size: 10px;
+      font-family: var(--mono);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .btn-confirm-no:hover { background: var(--surface-2); }
 
     /* ── WORKSPACE ── */
     #workspace {
@@ -1007,7 +1058,6 @@
       <div class="sb-section">
         <div class="sb-label">Turn</div>
         <div class="stat-big" id="stat-turn">0</div>
-        <div class="stat-unit">turn</div>
       </div>
       <div class="sb-section">
         <div class="sb-label">Token</div>
@@ -1180,8 +1230,9 @@ function mapCluster(c, idx) {
 
 function renderClusters() {
   const grid     = document.getElementById('cluster-grid');
-  const maxCount = Math.max(...state.clusters.map(c => c.count), 1);
-  grid.innerHTML = state.clusters.map(c => `
+  const visible  = state.clusters.filter(c => c.count > 0);
+  const maxCount = Math.max(...visible.map(c => c.count), 1);
+  grid.innerHTML = visible.map(c => `
     <div class="cluster-card ${state.selectedClusterIds.has(c.id) ? 'selected' : ''}"
          onclick="selectCluster('${c.id}')"
          tabindex="0"
@@ -1317,17 +1368,20 @@ async function refreshClusters() {
   renderClusters();
 }
 
+function buildDiff(items) {
+  const visible = items?.filter(item => !(item.name && !item.size));
+  if (!visible?.length) return null;
+  return visible.map(item => {
+    if (item.text_preview) return `• "${item.text_preview.slice(0, 90)}" (uncertainty ${item.uncertainty_score?.toFixed(2)})`;
+    if (item.name)         return `• ${item.name}: ${item.size} points`;
+    return JSON.stringify(item);
+  }).join('\n');
+}
+
 function handleSystemTurn(turnData) {
   const out  = turnData.system_output;
   const text = out.display?.content || '';
-  const items = out.display?.items;
-  const diff = items?.length
-    ? items.map(item => {
-        if (item.text_preview) return `• "${item.text_preview.slice(0, 90)}" (uncertainty ${item.uncertainty_score?.toFixed(2)})`;
-        if (item.name)         return `• ${item.name}: ${item.size} points`;
-        return JSON.stringify(item);
-      }).join('\n')
-    : null;
+  const diff = buildDiff(out.display?.items);
   state.chat.push({ role: 'system', text, diff });
 
   state.session.turn = turnData.turn_number;
@@ -1370,6 +1424,34 @@ async function loadRecentSessions() {
   } catch (_) {}
 }
 
+function showDeleteConfirm(sessionId) {
+  const row = document.querySelector(`.session-row[data-session-id="${sessionId}"]`);
+  if (!row) return;
+  row.querySelector('.sr-actions').innerHTML = `
+    <div class="sr-confirm">
+      Delete?
+      <button class="btn-confirm-no"  onclick="cancelDeleteConfirm('${sessionId}')">Cancel</button>
+      <button class="btn-confirm-yes" onclick="executeDelete('${sessionId}')">Delete</button>
+    </div>`;
+}
+
+function cancelDeleteConfirm(sessionId) {
+  loadRecentSessions();
+}
+
+async function executeDelete(sessionId) {
+  const row = document.querySelector(`.session-row[data-session-id="${sessionId}"]`);
+  if (row) row.style.opacity = '0.4';
+  try {
+    const res = await fetch(`/sessions/${sessionId}/delete`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`Delete failed (HTTP ${res.status})`);
+    loadRecentSessions();
+  } catch (e) {
+    if (row) row.style.opacity = '';
+    console.error('Delete failed:', e.message);
+  }
+}
+
 function renderSessionList(sessions) {
   const container = document.getElementById('session-list');
   const inner     = document.getElementById('session-list-inner');
@@ -1377,18 +1459,21 @@ function renderSessionList(sessions) {
     const safeName    = (s.name        || '').replace(/"/g, '&quot;');
     const safeDataset = (s.dataset_name || '').replace(/"/g, '&quot;');
     return `
-    <div class="session-row">
+    <div class="session-row" data-session-id="${s.id}">
       <div class="sr-info">
         <div class="sr-dataset">${s.dataset_name}</div>
         <div class="sr-id">${s.name || s.id.slice(0, 8) + '…'}</div>
       </div>
       <span class="status-badge ${s.status}">${s.status.toUpperCase()}</span>
-      <button class="btn-resume"
-        data-session-id="${s.id}"
-        data-dataset="${safeDataset}"
-        data-status="${s.status}"
-        data-name="${safeName}"
-        onclick="resumeSession(this.dataset.sessionId, this.dataset.dataset, this.dataset.status, this.dataset.name)">Resume →</button>
+      <div class="sr-actions">
+        <button class="btn-resume"
+          data-session-id="${s.id}"
+          data-dataset="${safeDataset}"
+          data-status="${s.status}"
+          data-name="${safeName}"
+          onclick="resumeSession(this.dataset.sessionId, this.dataset.dataset, this.dataset.status, this.dataset.name)">Resume →</button>
+        <button class="btn-delete-row" onclick="showDeleteConfirm('${s.id}')" aria-label="Delete session">✕</button>
+      </div>
     </div>`;
   }).join('');
   container.classList.add('visible');
@@ -1396,9 +1481,10 @@ function renderSessionList(sessions) {
 
 async function resumeSession(sessionId, datasetName, status, sessionName) {
   try {
-    const [acRes, stateRes] = await Promise.all([
+    const [acRes, stateRes, turnsRes] = await Promise.all([
       fetch(`/clusters/active?session_id=${sessionId}`),
       fetch(`/sessions/${sessionId}/state`),
+      fetch(`/turns/${sessionId}`),
     ]);
     if (!acRes.ok) throw new Error('Could not load clusters');
     const activeClusters = await acRes.json();
@@ -1407,6 +1493,25 @@ async function resumeSession(sessionId, datasetName, status, sessionName) {
     if (stateRes.ok) {
       const sessionState = await stateRes.json();
       turnNumber = sessionState.turn_number ?? 0;
+    }
+
+    let chat = [];
+    if (turnsRes.ok) {
+      const turns = await turnsRes.json();
+      chat = turns.flatMap(t => {
+        const msgs = [];
+        if (t.oracle_input?.raw_text) {
+          msgs.push({ role: 'user', text: t.oracle_input.raw_text, diff: null });
+        }
+        const out  = t.system_output;
+        const text = out?.display?.content || '';
+        const diff = buildDiff(out?.display?.items);
+        if (text || diff) msgs.push({ role: 'system', text, diff });
+        return msgs;
+      });
+    }
+    if (!chat.length) {
+      chat = [{ role: 'system', text: `Session resumed — turn ${turnNumber}, ${activeClusters.length} active clusters.`, diff: null }];
     }
 
     state.sessionId              = sessionId;
@@ -1418,9 +1523,7 @@ async function resumeSession(sessionId, datasetName, status, sessionName) {
     state.session.cost           = 0;
     state.session.cognitiveLoad  = 1;
     state.clusters               = activeClusters.map(mapCluster);
-    state.chat                   = [
-      { role: 'system', text: `Session resumed — turn ${turnNumber}, ${activeClusters.length} active clusters.`, diff: null },
-    ];
+    state.chat                   = chat;
     state.selectedClusterIds = new Set();
 
     document.getElementById('header-dataset').textContent = datasetName;
