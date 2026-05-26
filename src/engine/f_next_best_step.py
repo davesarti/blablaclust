@@ -67,38 +67,11 @@ def f_next_best_step(
             state_snapshot={"reason": "max_turns_or_load_reached"},
         )
 
-    # Rule 2: ask if there are genuinely ambiguous data points.
-    ambiguous = [p for p in uncertainty if p.uncertainty_score >= ASK_THRESHOLD]
-    if ambiguous:
-        top = ambiguous[0]  # most uncertain point
-        return SystemTurn(
-            session_id=state.session_id,
-            turn_number=state.turn_number,
-            action="ask",
-            clusters_updated=False,
-            display=Display(
-                type="text",
-                content=(
-                    f"Some data points are ambiguous between clusters. "
-                    f"For example: \"{top.text_preview[:120]}\" "
-                    f"(uncertainty {top.uncertainty_score:.2f}). "
-                    f"How should this be classified?"
-                ),
-                items=[
-                    {
-                        "point_id": p.point_id,
-                        "text_preview": p.text_preview,
-                        "uncertainty_score": p.uncertainty_score,
-                        "cluster_scores": p.cluster_scores,
-                    }
-                    for p in ambiguous[:5]  # surface top 5 to the oracle
-                ],
-            ),
-            contradiction_detected=contradiction,
-            contradiction_detail=state.contradictions[-1] if contradiction else None,
-            cognitive_load_score=cognitive_load,
-            state_snapshot={"ambiguous_count": len(ambiguous)},
-        )
+    # Rule 2 (removed): proactively asking the oracle about ambiguous boundary
+    # points was confusing — the display surfaced opaque cluster UUIDs and gave
+    # no guidance on how to respond. The oracle can always give targeted feedback
+    # on specific points when they want to; the system no longer interrupts the
+    # flow to ask unprompted.
 
     # Rule 3: show — clustering looks stable, present current state.
     return SystemTurn(

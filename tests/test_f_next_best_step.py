@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from src.engine.f_next_best_step import ASK_THRESHOLD, MAX_TURNS, f_next_best_step
+from src.engine.f_next_best_step import MAX_TURNS, f_next_best_step
 from src.engine.f_uncertainty import BoundaryPoint
 from src.schemas import ChatSessionState, Cluster, FeedbackEntry
 
@@ -64,12 +64,14 @@ def test_action_show_when_no_uncertainty():
     assert result.action == "show"
 
 
-def test_action_ask_when_high_uncertainty():
+def test_action_show_when_high_uncertainty():
+    # Rule 2 (ask on uncertainty) was removed — high uncertainty now gives show,
+    # not ask. The oracle can address ambiguous points on their own initiative.
     state = _make_state(turn_number=2)
     ctx = _make_context(load_score=1)
-    uncertain_points = [_bp(ASK_THRESHOLD + 0.1)]
+    uncertain_points = [_bp(0.9)]
     result = f_next_best_step(state, uncertain_points, ctx)
-    assert result.action == "ask"
+    assert result.action == "show"
 
 
 def test_action_stop_when_cognitive_load_high():
@@ -86,27 +88,13 @@ def test_action_stop_when_too_many_turns():
     assert result.action == "stop"
 
 
-def test_stop_takes_priority_over_ask():
+def test_stop_takes_priority_over_show():
     # Even with high uncertainty, stop wins if load is too high
     state = _make_state(turn_number=5)
     ctx = _make_context(load_score=5)
     uncertain_points = [_bp(0.9)]
     result = f_next_best_step(state, uncertain_points, ctx)
     assert result.action == "stop"
-
-
-def test_ask_surfaces_boundary_point_in_display():
-    state = _make_state()
-    ctx = _make_context()
-    bp = BoundaryPoint(
-        point_id="p1",
-        text_preview="this is ambiguous",
-        cluster_scores={"c1": 0.5, "c2": 0.5},
-        uncertainty_score=0.5,
-    )
-    result = f_next_best_step(state, [bp], ctx)
-    assert "ambiguous" in result.display.content.lower()
-    assert len(result.display.items) >= 1
 
 
 def test_contradiction_detected_flag():
@@ -130,10 +118,11 @@ def test_cognitive_load_score_in_result():
     assert result.cognitive_load_score == 3
 
 
-def test_boundary_below_threshold_gives_show():
+def test_uncertainty_always_gives_show():
+    # Any uncertainty level now gives show — ask was removed
     state = _make_state()
     ctx = _make_context()
-    # Just below the threshold — should not trigger ask
-    low_uncertainty = [_bp(ASK_THRESHOLD - 0.01)]
-    result = f_next_best_step(state, low_uncertainty, ctx)
+    result = f_next_best_step(state, [_bp(0.1)], ctx)
     assert result.action == "show"
+    result2 = f_next_best_step(state, [_bp(0.9)], ctx)
+    assert result2.action == "show"
