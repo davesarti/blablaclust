@@ -47,7 +47,8 @@ Respond with a single valid JSON object. No markdown fences, no commentary outsi
     {{
       "type": "split",
       "cluster_id": "<existing cluster id>",
-      "k": 2
+      "k": 2,
+      "new_names": ["<optional name for sub-cluster 1>", "<optional name for sub-cluster 2>"]
     }},
     {{
       "type": "rename",
@@ -74,6 +75,7 @@ CONSTRAINTS
 - operations can be an empty array when action is "no_change" or "explain".
 - Each operation must have a "type" field: merge | split | rename | move.
 - For "split", "k" is the number of sub-clusters to create (integer >= 2, default 2). Set k > 2 only when the oracle explicitly asks to split into a specific number of groups (e.g. "split into 3", "divide into 5 parts").
+- For "split", "new_names" is OPTIONAL. Include it (an array of strings, one per sub-cluster in order) ONLY when the oracle explicitly named the children — e.g. "split it into 'Music' and 'Books'". If the oracle did not name them, omit the field entirely so the system can auto-name from cluster content.
 - For "move", point_ids may ONLY contain data point IDs the oracle explicitly referenced (see Target points above, or IDs named earlier in the conversation). NEVER invent point IDs or move points the oracle did not name — bulk reassignment is the clustering algorithm's job, not yours. Use "move" for point-level feedback such as resolving a boundary point or correcting a single misplaced point.
 - If feedback_type is "explain", set action to "explain" and leave operations empty.
 - If contradiction_detected is true, briefly note the conflict in the display field.

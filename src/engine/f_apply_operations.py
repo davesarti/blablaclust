@@ -105,16 +105,44 @@ def f_apply_operations(
             current_turn += 1
 
         elif op_type == "split":
-            # Writes a full soft-assignment snapshot → consumes a turn_number.
-            split_cluster(
+            # Optional inline child names — same single-turn-naming pattern as
+            # the merge branch.  Without this, the LLM has to defer naming the
+            # children to the next turn because it cannot forward-reference
+            # not-yet-existing UUIDs (#28 rule).
+            inline_new_names = [
+                (n or "").strip()
+                for n in (op.get("new_names") or [])
+            ]
+            k = int(op.get("k", 2))
+
+            # Skip the auto-name LLM call only when the oracle named EVERY
+            # child — otherwise auto-name handles the un-named ones and we
+            # override only the ones the oracle did name.
+            skip_auto_name = len(inline_new_names) >= k and all(inline_new_names[:k])
+
+            new_clusters = split_cluster(
                 cluster_id=op["cluster_id"],
                 session_id=session_id,
                 turn_number=current_turn,
                 db=db,
-                k=int(op.get("k", 2)),
+                k=k,
+                auto_name=not skip_auto_name,
             )
             # Same flush reason as merge above.
             db.flush()
+
+            # K-means returns children in no oracle-meaningful order, so this
+            # mapping is best-effort: name[i] -> child[i].  Acceptable because
+            # the oracle can rename a misaligned child in the next turn.
+            for child, name in zip(new_clusters, inline_new_names):
+                if not name:
+                    continue
+                rename_cluster(
+                    cluster_id=child.id,
+                    new_name=name,
+                    new_description=child.description or "",
+                    db=db,
+                )
             current_turn += 1
 
         elif op_type == "move":
