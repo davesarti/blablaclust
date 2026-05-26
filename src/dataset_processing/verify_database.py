@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from sentence_transformers import SentenceTransformer
 
 from src.models import DataPoint
-from dataset_processing.text_cleaning import clean_text
+from src.dataset_processing.text_cleaning import clean_text
 
 DB_PATH = "sqlite:///./data/demo_database.db"
 MODEL_NAME = "all-MiniLM-L6-v2"
