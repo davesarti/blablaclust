@@ -231,6 +231,53 @@ def test_merge_rejects_stale_turn_number(db):
         merge_clusters(cluster_ids[:2], SESSION_ID, turn_number=0, db=db)
 
 
+def test_merge_preserves_argmax_on_flat_soft_assignments():
+    """Regression: a merge over flat soft assignments must NOT pull every
+    un-pooled point into the new cluster.
+
+    Repro from the live bug report: 5 k-means clusters, oracle merges 2 small
+    ones. With high-dim sentence-transformer embeddings the per-point softmax
+    is very flat (e.g. each cluster ~0.20). Old code folded the merged mass
+    back onto the new cluster (`merged_mass = sum(p[cid] for cid in merge_set)`),
+    which routinely exceeded any single un-merged cluster's prob → the new
+    cluster became the argmax for the entire dataset and un-merged clusters
+    dropped to 0 points.
+    """
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    db = Session()
+
+    sid = "sess-flat"
+    db.add(ChatSession(id=sid, dataset_name="ds", embedding_model="d", status="active"))
+    for i, cid in enumerate(["c1", "c2", "c3", "c4", "c5"]):
+        db.add(Cluster(id=cid, session_id=sid, name=f"C{i+1}", description="",
+                       created_at_turn=0))
+    # One point with a flat 5-way distribution. Hard cluster is c1 (0.27).
+    # Two merged clusters (c4, c5) sum to 0.18+0.17 = 0.35 — would beat c1
+    # under the buggy fold.
+    flat = {"c1": 0.27, "c2": 0.20, "c3": 0.18, "c4": 0.18, "c5": 0.17}
+    db.add(DataPoint(id="p1", dataset_name="ds", data={"text": "p"}, embedding=[0.0]))
+    for cid, prob in flat.items():
+        db.add(SoftAssignment(data_point_id="p1", cluster_id=cid,
+                              turn_number=0, probability=prob))
+    db.commit()
+
+    merge_clusters(["c4", "c5"], sid, turn_number=1, db=db, auto_name=False)
+    db.commit()
+
+    # The hard cluster of p1 must STILL be c1, not the merged cluster.
+    hard = _hard_clusters(db, turn=1)
+    assert hard["p1"] == "c1", (
+        f"p1 should stay in c1; got {hard['p1']} — merge folded mass back, bug regressed."
+    )
+    db.close()
+
+
 # --- split_cluster ----------------------------------------------------------
 
 
