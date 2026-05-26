@@ -133,6 +133,11 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     # embedding space around the specified semantic axis before anything else.
     # This replaces the f_output/f_apply_operations path for this turn.
     if new_turn_number == 1 and payload.axis_hint:
+        print(
+            f"[turns] semantic-reembed path  session={session.id}  "
+            f"axis_hint='{payload.axis_hint}'",
+            flush=True,
+        )
         all_data_points = (
             db.query(DataPoint)
             .filter(DataPoint.dataset_name == session.dataset_name)

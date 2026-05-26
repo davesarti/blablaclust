@@ -1174,6 +1174,14 @@ function renderClusters() {
   `).join('');
 }
 
+function updateInputPlaceholder() {
+  const el = document.getElementById('chat-input');
+  if (!el) return;
+  el.placeholder = state.session.turn === 0
+    ? 'Turn 1 — describe a semantic axis (e.g. "angry tone", "battery life", "positive sentiment")…'
+    : 'Share your feedback on the clusters…';
+}
+
 function renderSidebar() {
   document.getElementById('stat-turn').textContent   = state.session.turn;
   document.getElementById('stat-tokens').textContent = state.session.tokens.toLocaleString('en-US') + ' tokens';
@@ -1309,6 +1317,7 @@ function handleSystemTurn(turnData) {
 
   renderChat();
   renderSidebar();
+  updateInputPlaceholder();
 }
 
 async function loadDatasets() {
@@ -1389,6 +1398,7 @@ async function resumeSession(sessionId, datasetName, status) {
     document.getElementById('workspace').classList.add('visible');
     document.getElementById('drawer').classList.add('visible');
     renderAll();
+    updateInputPlaceholder();
   } catch (e) {
     console.error('Resume failed:', e.message);
   }
@@ -1421,17 +1431,22 @@ async function sendMessage() {
   document.getElementById('typing-indicator').classList.add('visible');
 
   try {
+    const payload = {
+      session_id:         state.sessionId,
+      raw_text:           text,
+      feedback_type:      targetClusterIds.length ? 'cluster' : 'global',
+      target_cluster_ids: targetClusterIds,
+      target_point_ids:   [],
+      metadata:           {},
+    };
+    // On the first oracle turn, also send the text as axis_hint so the backend
+    // can re-orient the embedding space around the oracle's semantic intent.
+    if (state.session.turn === 0) payload.axis_hint = text;
+
     const res = await fetch('/turns', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
-        session_id:         state.sessionId,
-        raw_text:           text,
-        feedback_type:      targetClusterIds.length ? 'cluster' : 'global',
-        target_cluster_ids: targetClusterIds,
-        target_point_ids:   [],
-        metadata:           {},
-      }),
+      body:    JSON.stringify(payload),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -1551,6 +1566,7 @@ async function startSession() {
     document.getElementById('workspace').classList.add('visible');
     document.getElementById('drawer').classList.add('visible');
     renderAll();
+    updateInputPlaceholder();
 
   } catch (e) {
     showError(e.message);

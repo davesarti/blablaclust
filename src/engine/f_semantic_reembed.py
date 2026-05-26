@@ -138,10 +138,29 @@ def reembed_for_axis(
         )
 
     cosine_scores = _cosine_axis_scores(points, axis_label)
-    if float(np.var(cosine_scores)) > COSINE_VARIANCE_THRESHOLD:
+    cosine_var = float(np.var(cosine_scores))
+    if cosine_var > COSINE_VARIANCE_THRESHOLD:
+        print(
+            f"[semantic-reembed] axis='{axis_label}'  strategy=cosine  "
+            f"variance={cosine_var:.4f}  "
+            f"scores min={cosine_scores.min():.3f} max={cosine_scores.max():.3f} "
+            f"mean={cosine_scores.mean():.3f} std={cosine_scores.std():.3f}",
+            flush=True,
+        )
         axis_scores = cosine_scores
     else:
+        print(
+            f"[semantic-reembed] axis='{axis_label}'  strategy=LLM-fallback  "
+            f"cosine_variance={cosine_var:.4f} <= threshold={COSINE_VARIANCE_THRESHOLD}",
+            flush=True,
+        )
         axis_scores = _llm_axis_scores(points, axis_label)
+        print(
+            f"[semantic-reembed] LLM scores  "
+            f"min={axis_scores.min():.1f} max={axis_scores.max():.1f} "
+            f"mean={axis_scores.mean():.2f} std={axis_scores.std():.2f}",
+            flush=True,
+        )
 
     # Normalise axis scores to zero-mean / unit-variance so they sit on the
     # same scale as the L2-normalised original embeddings.

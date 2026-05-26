@@ -116,6 +116,12 @@ def semantic_clustering(
             f"k={k} exceeds number of embedded points ({len(valid)})"
         )
 
+    print(
+        f"[semantic-clustering] session={session_id}  axis='{axis_hint}'  "
+        f"k={k}  n_embedded={len(valid)}  turn={turn_number}",
+        flush=True,
+    )
+
     # Compute the hybrid (N, D+1) embedding matrix for the full dataset.
     X = reembed_for_axis(valid, axis_hint, alpha=alpha, beta=beta)
 
@@ -157,6 +163,15 @@ def semantic_clustering(
         for j in range(k)
     ]
 
+    # Log hard-assignment sizes so we can see if k-means split the data sensibly.
+    hard_labels = model.labels_
+    cluster_sizes = {i: int((hard_labels == i).sum()) for i in range(k)}
+    print(
+        f"[semantic-clustering] k-means done  "
+        + "  ".join(f"C{i+1}={sz}" for i, sz in cluster_sizes.items()),
+        flush=True,
+    )
+
     # Name the new clusters via LLM — best-effort, a failure leaves placeholders.
     if auto_name:
         name_clusters(new_clusters, new_assignments, valid)
@@ -175,6 +190,14 @@ def semantic_clustering(
         n_points=len(valid),
         silhouette=silhouette,
         turn_number=turn_number,
+    )
+
+    sil_str = f"{silhouette:.3f}" if silhouette is not None else "N/A (k=1)"
+    cluster_names = [c.name for c in new_clusters]
+    print(
+        f"[semantic-clustering] done  silhouette={sil_str}  "
+        f"clusters={cluster_names}",
+        flush=True,
     )
 
     return new_clusters, new_assignments
