@@ -30,6 +30,7 @@ from src.engine.cluster_operations import (
     rename_cluster,
     split_cluster,
 )
+from src.models import Cluster as DbCluster
 
 
 def f_apply_operations(
@@ -160,10 +161,22 @@ def f_apply_operations(
 
         elif op_type == "rename":
             # Only updates name/description — no new snapshot, no turn_number needed.
+            # The LLM usually emits only new_name on a rename op; without this
+            # lookup, rename_cluster would clobber a meaningful auto-generated
+            # description with the empty default. Preserve whichever side the
+            # oracle did NOT explicitly set (same pattern as the inline rename
+            # branches on merge/split).
+            inline_new_name = (op.get("new_name") or "").strip()
+            inline_new_desc = (op.get("new_description") or "").strip()
+            existing = (
+                db.query(DbCluster)
+                .filter(DbCluster.id == op["cluster_id"])
+                .first()
+            )
             rename_cluster(
                 cluster_id=op["cluster_id"],
-                new_name=op.get("new_name", ""),
-                new_description=op.get("new_description", ""),
+                new_name=inline_new_name or (existing.name if existing else ""),
+                new_description=inline_new_desc or (existing.description if existing else ""),
                 db=db,
             )
 
