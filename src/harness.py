@@ -66,14 +66,19 @@ def render_prompt(name: str, **kwargs: Any) -> str:
 
 
 def extract_json_text(text: str) -> str:
-    """Return the raw JSON string from an LLM response, stripping markdown fences.
+    """Return the raw JSON string from an LLM response.
 
-    Some models (e.g. Gemini) wrap their JSON in ```json ... ``` even when the
-    prompt says not to.  This function handles both fenced and unfenced output
-    so callers can always pass the result straight to json.loads().
+    Handles three formats:
+    1. Markdown fences: ```json ... ``` or ``` ... ```
+    2. Prose-wrapped: "Here is the result: { ... }" — extracts the first {...} block
+    3. Plain JSON (no wrapping needed)
     """
     text = text.strip()
     match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
+    if match:
+        return match.group(1).strip()
+    # Fall back: extract the first top-level {...} block, ignoring surrounding prose
+    match = re.search(r"(\{[\s\S]*\})", text)
     if match:
         return match.group(1).strip()
     return text
