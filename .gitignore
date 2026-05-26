@@ -8,3 +8,5 @@ __pycache__/
 *.logs/
 *.db
 notes/PROJECT_CONTEXT.md
+scripts/oracle_smoke.py
+scripts/test_e2e.py
