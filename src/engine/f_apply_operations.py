@@ -78,15 +78,15 @@ def f_apply_operations(
             inline_new_name = (op.get("new_name") or "").strip()
             inline_new_desc = (op.get("new_description") or "").strip()
 
-            # Skip the auto-name LLM call only when the oracle already gave a
-            # name we'd just overwrite. If only a description was provided,
-            # still let auto-name fill in a sensible name.
+            # Always let auto-name run — it produces BOTH name and description
+            # from the merged content, and we want the description even when
+            # the oracle is overriding the name (otherwise the cluster ends up
+            # with the oracle's chosen name but an empty description).
             new_cluster = merge_clusters(
                 cluster_ids=op["cluster_ids"],
                 session_id=session_id,
                 turn_number=current_turn,
                 db=db,
-                auto_name=not inline_new_name,
             )
             # Flush so the next operation in this same turn sees the updated
             # snapshot rows and dissolved cluster state.  The session uses
@@ -116,18 +116,16 @@ def f_apply_operations(
             ]
             k = int(op.get("k", 2))
 
-            # Skip the auto-name LLM call only when the oracle named EVERY
-            # child — otherwise auto-name handles the un-named ones and we
-            # override only the ones the oracle did name.
-            skip_auto_name = len(inline_new_names) >= k and all(inline_new_names[:k])
-
+            # Always let auto-name run — it generates BOTH name and description
+            # per child from the actual content. We override only the name(s)
+            # below, so each child keeps a content-appropriate description even
+            # when the oracle supplied an explicit name.
             new_clusters = split_cluster(
                 cluster_id=op["cluster_id"],
                 session_id=session_id,
                 turn_number=current_turn,
                 db=db,
                 k=k,
-                auto_name=not skip_auto_name,
             )
             # Same flush reason as merge above.
             db.flush()
