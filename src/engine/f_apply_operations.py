@@ -91,6 +91,7 @@ def f_apply_operations(
                 session_id=session_id,
                 turn_number=current_turn,
                 db=db,
+                k=int(op.get("k", 2)),
             )
             # Same flush reason as merge above.
             db.flush()
