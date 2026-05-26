@@ -8,11 +8,16 @@ Two strategies and a hybrid selector:
 The hybrid tries cosine first and falls back to LLM only when the cosine
 signal has insufficient variance across the dataset.
 
-The result of reembed_for_axis is a hybrid matrix of shape (N, D+1) that
-combines the original normalised embeddings (weight alpha) with the
-normalised axis score (weight beta). This matrix is fed to k-means in
-semantic_clustering.py to produce a clustering whose geometry already
-reflects the oracle's semantic intent.
+The result of reembed_for_axis is a hybrid matrix of shape (N, D+1).
+The axis_weight parameter controls what fraction of the k-means geometry is
+driven by the semantic axis (the rest comes from the original embeddings).
+With row-normalised original embeddings and a standardised axis score, both
+parts have the same expected squared L2 distance between random pairs (~2),
+so sqrt-scaling gives exact geometric fractions:
+
+    X = [ orig_norm × sqrt(1 - axis_weight),  axis_score × sqrt(axis_weight) ]
+
+axis_weight=0.7 means 70% of clustering signal comes from the axis.
 """
 
 import json
@@ -109,10 +114,12 @@ def _llm_axis_scores(
 def reembed_for_axis(
     points: list[DataPoint],
     axis_label: str,
-    alpha: float = 0.7,
-    beta: float = 0.3,
+    axis_weight: float = 0.7,
 ) -> np.ndarray:
-    """Compute a hybrid embedding: row-normalised original × alpha || axis × beta.
+    """Compute a hybrid embedding where axis_weight controls geometric influence.
+
+    axis_weight is the exact fraction of k-means distance driven by the
+    semantic axis. axis_weight=0.7 means 70% axis, 30% original embeddings.
 
     Strategy selection:
     - Try cosine anchor poles (free, no LLM call).
@@ -122,8 +129,7 @@ def reembed_for_axis(
     Args:
         points: DataPoint rows, all must have non-None embeddings.
         axis_label: Semantic axis (e.g. "angry", "battery life").
-        alpha: Weight for the normalised original embedding component.
-        beta: Weight for the normalised axis score component.
+        axis_weight: Fraction [0, 1] of k-means signal from the axis.
 
     Returns:
         Float32 array of shape (N, D+1) where D is the original embedding dim.
@@ -162,8 +168,9 @@ def reembed_for_axis(
             flush=True,
         )
 
-    # Normalise axis scores to zero-mean / unit-variance so they sit on the
-    # same scale as the L2-normalised original embeddings.
+    # Standardise axis scores (zero-mean, unit-variance). Combined with
+    # row-normalised embeddings (unit norm), both components have expected
+    # squared pairwise distance ~2, so sqrt-scaling gives exact fractions.
     axis_norm = (axis_scores - axis_scores.mean()) / (axis_scores.std() + 1e-8)
 
     # Row-normalise the original embeddings.
@@ -171,7 +178,13 @@ def reembed_for_axis(
     row_norms = np.linalg.norm(original, axis=1, keepdims=True)
     orig_norm = original / (row_norms + 1e-8)
 
-    # Concatenate: alpha-scaled original | beta-scaled axis column.
+    orig_scale = float(np.sqrt(1.0 - axis_weight))
+    ax_scale   = float(np.sqrt(axis_weight))
+    print(
+        f"[semantic-reembed] axis_weight={axis_weight:.2f}  "
+        f"orig_scale={orig_scale:.3f}  axis_scale={ax_scale:.3f}",
+        flush=True,
+    )
     return np.hstack(
-        [orig_norm * alpha, axis_norm.reshape(-1, 1) * beta]
+        [orig_norm * orig_scale, axis_norm.reshape(-1, 1) * ax_scale]
     ).astype(np.float32)

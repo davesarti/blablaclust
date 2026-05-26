@@ -46,8 +46,7 @@ def semantic_clustering(
     turn_number: int,
     db: Session,
     k: int | None = None,
-    alpha: float = 0.7,
-    beta: float = 0.3,
+    axis_weight: float = 0.7,
     auto_name: bool = True,
 ) -> tuple[list[DbCluster], list[DbSoftAssignment]]:
     """Re-cluster the dataset in a hybrid embedding space oriented by axis_hint.
@@ -67,8 +66,9 @@ def semantic_clustering(
         db: SQLAlchemy session. Changes are staged but not committed.
         k: Number of clusters to produce. Defaults to the current number of
             active clusters in the session (preserving the oracle's original k).
-        alpha: Weight for the row-normalised original embedding (default 0.7).
-        beta: Weight for the normalised axis score (default 0.3).
+        axis_weight: Fraction [0, 1] of k-means distance signal attributed to
+            the semantic axis (default 0.7). The remaining 1-axis_weight comes
+            from the original embeddings. 0.7 means 70% axis, 30% topic.
         auto_name: When True (default), new clusters are named by the LLM via
             name_clusters. When False the generic "Cluster N" placeholders are
             kept. Naming is best-effort — a failed LLM call leaves the
@@ -123,7 +123,7 @@ def semantic_clustering(
     )
 
     # Compute the hybrid (N, D+1) embedding matrix for the full dataset.
-    X = reembed_for_axis(valid, axis_hint, alpha=alpha, beta=beta)
+    X = reembed_for_axis(valid, axis_hint, axis_weight=axis_weight)
 
     # Run k-means in the hybrid space.
     model = _fit_kmeans(X, k)

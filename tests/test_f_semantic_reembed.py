@@ -230,12 +230,12 @@ class TestReembedForAxis:
 
         mock_llm.assert_called_once()
 
-    def test_alpha_beta_column_weighting(self):
-        """First D cols are alpha-scaled; last col is beta-scaled axis."""
-        # Two points so variance is non-zero → cosine path taken
+    def test_axis_weight_column_scaling(self):
+        """Original cols are scaled by sqrt(1-w); axis col by sqrt(w)."""
+        # axis_weight=0.75 → orig_scale=sqrt(0.25)=0.5, axis_scale=sqrt(0.75)≈0.866
         dp0 = DataPoint()
         dp0.id = "p0"
-        dp0.embedding = [1.0, 0.0]  # unit vector → row-norm = 1 → stays [1, 0]
+        dp0.embedding = [1.0, 0.0]  # unit vector → row-normed [1, 0]
         dp0.data = {}
         dp0.dataset_name = "ds"
 
@@ -245,16 +245,16 @@ class TestReembedForAxis:
         dp1.data = {}
         dp1.dataset_name = "ds"
 
-        # High-variance cosine scores: 0.0 vs 5.0 → variance = 6.25 > 0.01
+        # High-variance cosine scores so cosine path is taken.
         cosine_scores = np.array([0.0, 5.0], dtype=np.float64)
 
         with patch(f"{MOD}._cosine_axis_scores", return_value=cosine_scores):
             from src.engine.f_semantic_reembed import reembed_for_axis
-            result = reembed_for_axis([dp0, dp1], "test", alpha=0.6, beta=0.4)
+            result = reembed_for_axis([dp0, dp1], "test", axis_weight=0.75)
 
         assert result.shape == (2, 3)
-        # dp0 embedding [1, 0] → row-normed [1, 0] → alpha-scaled [0.6, 0]
-        assert pytest.approx(float(result[0, 0]), abs=0.01) == 0.6
+        # dp0 embedding [1, 0] → row-normed [1, 0] → scaled by sqrt(1-0.75)=0.5
+        assert pytest.approx(float(result[0, 0]), abs=0.01) == 0.5
         assert pytest.approx(float(result[0, 1]), abs=0.01) == 0.0
 
     def test_raises_on_missing_embedding(self):
