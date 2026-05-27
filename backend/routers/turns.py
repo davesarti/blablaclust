@@ -184,6 +184,8 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
             }
         ]
         raw_display = None
+        turn_usage: dict | None = None
+        turn_cost: float | None = None
 
     # ── Normal path: structural operations via f_output ───────────────────────
     else:
@@ -252,12 +254,16 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
                 )
 
         raw_display = raw.get("display") if isinstance(raw, dict) else None
+        turn_usage = usage
+        turn_cost = cost
 
     # ── Common path: planner + persist turn ───────────────────────────────────
     updated_state = build_session_state(db, session)
     uncertainty = f_cluster_uncertainty(session.id, db)
     system_turn = f_next_best_step(updated_state, uncertainty, context)
     system_turn.clusters_updated = bool(operations)
+    system_turn.token_usage = turn_usage
+    system_turn.cost_usd = turn_cost
 
     # Surface the LLM's real display text regardless of action (show/ask/stop).
     if isinstance(raw_display, str):
