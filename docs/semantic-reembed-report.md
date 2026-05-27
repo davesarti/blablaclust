@@ -1,7 +1,7 @@
 # Report: branch `feature/semantic-reembed`
 
 **Autore:** P5 (Arianna Schiavi)
-**Ultimo aggiornamento:** 2026-05-27 (rev 3)
+**Ultimo aggiornamento:** 2026-05-27 (rev 4)
 **Stato:** implementazione completa, in test manuale
 
 ---
@@ -229,6 +229,30 @@ isolamento.
 
 ---
 
+## Problemi aperti / limitazioni osservate in test manuale
+
+### 1. Linguaggio libero non interpretato correttamente (APERTO)
+
+L'esecutore `f_output` è ottimizzato per istruzioni operative dirette
+("merge these clusters", "split into 3"). Frasi di alto livello che implicano
+un'operazione senza nominarla esplicitamente vengono interpretate in modo
+inconsistente.
+
+**Esempio osservato (2026-05-27):**
+- Stato: 3 cluster (`Very Angry`, `Neutral/Satisfied`, `Mildly Frustrated`)
+- Input oracle: `"make 5 clusters"`
+- Risultato atteso: 2 split su due cluster diversi → 5 cluster totali
+- Risultato effettivo: il LLM ha prima **mergiato tutti e 3 in uno** (`Mixed Reviews`), 
+  poi l'oracle ha dovuto dire `"split into 5"` → 2 turn invece di 1
+
+**Analisi:** il vincolo CLUSTER COUNT ARITHMETIC specifica il meccanismo (K-N split su cluster distinti) ma non è abbastanza assertivo da impedire che il LLM scelga un percorso alternativo multi-step (prima consolida, poi espande). Il modello preferisce una semantica "create from scratch" rispetto a "add to existing".
+
+**Impatto sulla valutazione:** il numero di turni necessari per convergere viene artificialmente gonfiato quando l'oracle usa linguaggio naturale non-operativo. Da tenere in conto nell'Esperimento 3 (Free NL vs Structured NL).
+
+**Possibile fix:** aggiungere al vincolo un divieto esplicito di "consolidare prima di espandere" e richiedere che il percorso sia sempre quello minimo in termini di operazioni.
+
+---
+
 ## Problemi risolti nel corso dello sviluppo
 
 | Problema | Causa | Fix |
@@ -239,5 +263,6 @@ isolamento.
 | Nomi cluster topic-based nonostante asse | `name_clusters` non riceveva `axis_hint` | Propagazione completa in tutta la catena |
 | Due merge invece di uno (5→3) | Prompt non spiegava la regola merge N-way | Aggiunto vincolo CLUSTER COUNT ARITHMETIC per la riduzione |
 | Merge invece di split (3→5 → risultato 2) | Vincolo copriva solo riduzione, il LLM applicava merge anche per aumentare | Esteso vincolo con caso INCREASE: K-N split su cluster distinti |
+| "make 5 clusters" da 3 → merge+split in 2 turni | LLM sceglie percorso multi-step (consolida→espandi) invece del minimo; vincolo non abbastanza assertivo | **APERTO** — vedi sezione "Problemi aperti" |
 | 3 test rotti in `test_f_apply_operations` | Kwarg `axis_hint=None` non previsto nei mock | Fixture aggiornate |
 | Formula peso asse sbagliata (α=0.7, β=0.3 → 15%) | Scaling lineare non considera le norme dei vettori | Sostituito con `axis_weight` e scaling `sqrt` |
