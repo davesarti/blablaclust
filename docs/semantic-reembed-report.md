@@ -1,7 +1,7 @@
 # Report: branch `feature/semantic-reembed`
 
 **Autore:** P5 (Arianna Schiavi)
-**Ultimo aggiornamento:** 2026-05-27
+**Ultimo aggiornamento:** 2026-05-27 (rev 2)
 **Stato:** implementazione completa, in test manuale
 
 ---
@@ -155,16 +155,21 @@ rather than topic labels like 'Book Reviews' or 'Electronics'.
 
 ### Vincolo aritmetico in `f_output.txt`
 
-Il prompt dell'esecutore LLM includeva un bug latente: se l'oracle chiedeva
-"passa da 5 a 3 cluster", il modello emetteva due merge da 2 ID ciascuno
-invece di uno da 3 ID, riducendo il conteggio in modo errato.
+Il prompt dell'esecutore LLM non spiegava l'aritmetica delle operazioni di
+conteggio. Due bug osservati:
 
-Aggiunto ai CONSTRAINTS:
+1. **Riduzione (5→3):** il modello emetteva due merge da 2 ID invece di uno da 3.
+2. **Aumento (3→5):** il modello emetteva un merge (riducendo a 2) invece di due split.
+
+Il CONSTRAINTS ora copre entrambi i casi:
 
 ```
-CLUSTER COUNT ARITHMETIC: if the oracle asks to go from N to K clusters, count
-carefully. To reduce from N to K in one step, emit a SINGLE merge of exactly
-(N - K + 1) cluster IDs. Verify: N - (len(cluster_ids) - 1) = K before responding.
+CLUSTER COUNT ARITHMETIC:
+- To REDUCE (K < N): emit a SINGLE merge of exactly (N - K + 1) cluster IDs.
+  Verify: N - (len(cluster_ids) - 1) = K before responding.
+- To INCREASE (K > N): emit exactly (K - N) separate split operations, each on
+  a DIFFERENT existing cluster. Verify: N + (number of split operations) = K.
+- Never mix merges and splits to hit a target count in one turn.
 ```
 
 ### UI (`ui/index.html`)
@@ -216,6 +221,7 @@ isolamento.
 | k=5 non cappato | `turns.py` passava `k=len(clusters)` esplicitamente, bypassando `if k is None` | Rimosso l'argomento `k` dalla chiamata |
 | ~48 chiamate LLM (troppo lento) | Ogni punto veniva mandato all'LLM | Sampling 200/N + propagazione NN |
 | Nomi cluster topic-based nonostante asse | `name_clusters` non riceveva `axis_hint` | Propagazione completa in tutta la catena |
-| Due merge invece di uno (N→K sbagliato) | Prompt non spiegava l'aritmetica delle operazioni | Aggiunto vincolo CLUSTER COUNT ARITHMETIC |
+| Due merge invece di uno (5→3) | Prompt non spiegava la regola merge N-way | Aggiunto vincolo CLUSTER COUNT ARITHMETIC per la riduzione |
+| Merge invece di split (3→5 → risultato 2) | Vincolo copriva solo riduzione, il LLM applicava merge anche per aumentare | Esteso vincolo con caso INCREASE: K-N split su cluster distinti |
 | 3 test rotti in `test_f_apply_operations` | Kwarg `axis_hint=None` non previsto nei mock | Fixture aggiornate |
 | Formula peso asse sbagliata (α=0.7, β=0.3 → 15%) | Scaling lineare non considera le norme dei vettori | Sostituito con `axis_weight` e scaling `sqrt` |
