@@ -40,7 +40,7 @@ def test_merge_calls_merge_clusters_with_correct_args():
     with patch(f"{MOD}.merge_clusters") as mock_merge:
         f_apply_operations([op], session_id="s1", turn_number=3, db=db)
     mock_merge.assert_called_once_with(
-        cluster_ids=["c1", "c2"], session_id="s1", turn_number=3, db=db
+        cluster_ids=["c1", "c2"], session_id="s1", turn_number=3, db=db, axis_hint=None
     )
 
 
@@ -59,7 +59,7 @@ def test_split_calls_split_cluster_with_correct_args():
     with patch(f"{MOD}.split_cluster") as mock_split:
         f_apply_operations([op], session_id="s1", turn_number=7, db=db)
     mock_split.assert_called_once_with(
-        cluster_id="c1", session_id="s1", turn_number=7, db=db
+        cluster_id="c1", session_id="s1", turn_number=7, db=db, axis_hint=None
     )
 
 
@@ -115,10 +115,12 @@ def test_multiple_ops_turn_number_increments_correctly():
         result = f_apply_operations(ops, session_id="s1", turn_number=5, db=_db())
     assert result == 7
     mock_merge.assert_called_once_with(
-        cluster_ids=["c1", "c2"], session_id="s1", turn_number=5, db=mock_merge.call_args[1]["db"]
+        cluster_ids=["c1", "c2"], session_id="s1", turn_number=5,
+        db=mock_merge.call_args[1]["db"], axis_hint=None
     )
     mock_split.assert_called_once_with(
-        cluster_id="c3", session_id="s1", turn_number=6, db=mock_split.call_args[1]["db"]
+        cluster_id="c3", session_id="s1", turn_number=6,
+        db=mock_split.call_args[1]["db"], axis_hint=None
     )
 
 
