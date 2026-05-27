@@ -1,7 +1,7 @@
 import json
 
 from src.schemas import ChatSessionState
-from src.harness import render_prompt, call_llm, hash_prompt, estimate_cost_usd
+from src.harness import render_prompt, call_llm, hash_prompt, estimate_cost_usd, extract_json_text
 from src.logger import log_llm_call
 
 
@@ -29,4 +29,4 @@ def f_eval(
         cost_usd=estimate_cost_usd(msg.usage),
     )
 
-    return json.loads(msg.text)
+    return json.loads(extract_json_text(msg.text))

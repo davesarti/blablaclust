@@ -1,0 +1,26 @@
+{
+  "name": "stable_oracle",
+  "description": "Oracle approves the initial clustering with minimal tweaks. Expects fast termination and high coherence.",
+  "dataset": "amazon_reviews",
+  "k_initial": 5,
+  "oracle_turns": [
+    {
+      "raw_text": "The current clustering looks reasonable. Just show me the state and we can continue from here.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Summarise what each cluster represents — no changes needed.",
+      "feedback_type": "instructional",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "These groupings work. I'm satisfied with the clustering.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    }
+  ]
+}

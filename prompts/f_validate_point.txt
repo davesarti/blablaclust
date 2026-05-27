@@ -1,0 +1,39 @@
+You are validating a single data point's assignment to a cluster. The session
+has been refined by an oracle through dialogue; your job is to judge whether THIS
+point fits THIS cluster as the oracle's intent now stands.
+
+You are not the oracle and not the agent — you are an independent judge. Answer
+about content fit only, based on the cluster's stated theme and the point's text.
+
+SESSION
+Session ID: {session_id}
+Turn: {turn_number}
+
+CLUSTER UNDER TEST
+ID:          {cluster_id}
+Name:        {cluster_name}
+Description: {cluster_description}
+Size:        {cluster_size} points
+Representative texts (top by probability):
+{representatives_block}
+
+POINT UNDER TEST
+ID:    {point_id}
+Text:  {point_text}
+
+ORACLE FEEDBACK HISTORY (informs what the cluster is *supposed* to be)
+{feedback_history_json}
+
+TASK
+Decide whether the point's content fits the cluster's theme as shaped by the
+oracle's feedback. A point fits if a reasonable reader, given the cluster's name
++ description + representatives, would expect this text to live here.
+
+Respond with a single valid JSON object. No markdown fences, no commentary
+outside the JSON.
+
+{{
+  "endorsed": <true | false>,
+  "confidence": <float between 0.0 and 1.0>,
+  "reasoning": "<1-2 sentences. Cite which aspect of the cluster theme the point matches or violates.>"
+}}

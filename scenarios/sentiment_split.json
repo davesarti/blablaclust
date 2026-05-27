@@ -1,0 +1,26 @@
+{
+  "name": "sentiment_split",
+  "description": "Oracle refines the clustering by splitting a broad cluster on sentiment, renaming, then accepting. Should exercise split + rename + show in one healthy session.",
+  "dataset": "amazon_reviews",
+  "k_initial": 4,
+  "oracle_turns": [
+    {
+      "raw_text": "The largest cluster mixes positive and negative reviews. Split it into two: 'Positive Reviews' for praise and 'Negative Reviews' for complaints.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Rename the cluster about books to 'Book Reviews'.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "The clustering now reflects the sentiment split I wanted. No further changes.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    }
+  ]
+}

@@ -1,0 +1,134 @@
+{
+  "name": "high_load_oracle",
+  "description": "Oracle sends 21 turns of small, unrelenting nudges without ever converging. Designed to exhaust the cognitive-load budget (score reaches 5 at turn 20, triggering termination=cognitive_overload) before the script ends. Validates the A2 cognitive_overload termination code and that B2 load scores rise predictably with turn count.",
+  "dataset": "amazon_reviews",
+  "k_initial": 5,
+  "oracle_turns": [
+    {
+      "raw_text": "Rename the first cluster to something more descriptive.",
+      "feedback_type": "point",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "The second cluster's name is too vague. Give it a clearer label.",
+      "feedback_type": "point",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Split the largest cluster into two more focused groups.",
+      "feedback_type": "cluster",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "One of those new clusters still feels too broad. Split it again.",
+      "feedback_type": "cluster",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "The cluster about music has some film reviews mixed in. Move the film reviews out.",
+      "feedback_type": "cluster",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Rename all clusters so their names start with the product category.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "The electronics cluster should be split by price range: budget vs premium.",
+      "feedback_type": "cluster",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Merge the two smallest clusters — they are too granular to be useful.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Update all cluster descriptions to be more detailed.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Split the book reviews by genre: fiction vs non-fiction.",
+      "feedback_type": "cluster",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "The negative reviews cluster mixes product complaints with shipping complaints. Separate them.",
+      "feedback_type": "cluster",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Merge the fiction and non-fiction book clusters back — the split wasn't helpful.",
+      "feedback_type": "cluster",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Add a dedicated cluster for reviews that mention delivery or shipping.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Rename the shipping cluster to 'Logistics & Delivery Reviews'.",
+      "feedback_type": "point",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Split the positive reviews cluster into five-star and four-star reviews.",
+      "feedback_type": "cluster",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Merge the five-star and four-star clusters back together — that split was too granular.",
+      "feedback_type": "cluster",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Add a cluster specifically for reviews that mention 'value for money'.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Rename every cluster to use title case.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Split the electronics cluster one more time — separate audio equipment from everything else.",
+      "feedback_type": "cluster",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Merge the audio and general electronics clusters back — the distinction is not useful.",
+      "feedback_type": "cluster",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "I want a cluster for short reviews (under 20 words) separated from long detailed ones.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    }
+  ]
+}

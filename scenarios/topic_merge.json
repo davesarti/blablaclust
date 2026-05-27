@@ -1,0 +1,32 @@
+{
+  "name": "topic_merge",
+  "description": "Oracle starts with an over-fragmented clustering (k=7) and progressively merges related topic clusters down to a cleaner set. Tests that merge operations fire correctly and coherence improves.",
+  "dataset": "amazon_reviews",
+  "k_initial": 7,
+  "oracle_turns": [
+    {
+      "raw_text": "There are too many clusters. The two smallest ones both seem to be about electronics — merge them into a single 'Electronics Reviews' cluster.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "I also see two clusters that are both about music: one for albums and one for concerts. Combine them into one 'Music Reviews' cluster.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "The book cluster and the film cluster are both about entertainment media. Merge them into 'Books and Films'.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "That looks much cleaner. The remaining clusters now have clear, distinct themes. I'm happy with this — no further changes needed.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    }
+  ]
+}

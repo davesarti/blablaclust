@@ -10,5 +10,7 @@ __pycache__/
 notes/PROJECT_CONTEXT.md
 scripts/oracle_smoke.py
 scripts/test_e2e.py
+scripts/dump_split_state.py
+reports/
 logs/*
 !logs/.gitkeep

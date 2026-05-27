@@ -43,9 +43,12 @@ def f_next_best_step(
     contradiction = bool(state.contradictions)
 
     # Rule 1: stop if the oracle is overloaded or the session has run long.
-    # Threshold raised from 4 to 5: load=4 means "heavy but manageable",
-    # only load=5 (the maximum) should trigger an automatic stop.
+    # Threshold is 5 (the maximum): load=4 means "heavy but manageable".
+    # Distinct reason codes let the eval harness bucket runs separately.
     if cognitive_load >= 5 or state.turn_number > MAX_TURNS:
+        reason = (
+            "cognitive_overload" if cognitive_load >= 5 else "max_turns_reached"
+        )
         return SystemTurn(
             session_id=state.session_id,
             turn_number=state.turn_number,
@@ -61,7 +64,7 @@ def f_next_best_step(
             contradiction_detected=contradiction,
             contradiction_detail=state.contradictions[-1] if contradiction else None,
             cognitive_load_score=cognitive_load,
-            state_snapshot={"reason": "max_turns_or_load_reached"},
+            state_snapshot={"reason": reason},
         )
 
     # Rule 2a: ask about a merge if two clusters overlap significantly.

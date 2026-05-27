@@ -1,0 +1,32 @@
+{
+  "name": "contradictory_oracle",
+  "description": "Oracle first splits a cluster by sentiment, then reverses course and asks to merge the sentiment clusters back together. Tests that the agent handles contradictory intent gracefully and keeps producing valid state. NOTE: the built-in B3 detector fires only when target_cluster_ids overlap across turns — since scenarios use empty target lists, B3 will read 0 even though the intent is contradictory. This scenario instead validates agent robustness (no crashes, valid final state) rather than the contradiction counter.",
+  "dataset": "amazon_reviews",
+  "k_initial": 4,
+  "oracle_turns": [
+    {
+      "raw_text": "Split the largest cluster into two: one for positive reviews and one for negative reviews.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Actually, that separation is not useful for my analysis. Merge the positive and negative review clusters back into a single mixed-sentiment cluster.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "On reflection I do want them split after all — separate positive from negative reviews again.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "OK, let's keep the split. The current clustering is fine as it is. No more changes.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    }
+  ]
+}
