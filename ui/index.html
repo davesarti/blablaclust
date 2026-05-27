@@ -1177,9 +1177,19 @@ function renderClusters() {
 function updateInputPlaceholder() {
   const el = document.getElementById('chat-input');
   if (!el) return;
-  el.placeholder = state.session.turn === 0
-    ? 'Turn 1 — describe a semantic axis (e.g. "angry tone", "battery life", "positive sentiment")…'
-    : 'Share your feedback on the clusters…';
+  if (state.session.turn === 0) {
+    el.placeholder = 'Turn 1 — describe a semantic axis (e.g. "angry tone", "battery life", "positive sentiment")…';
+    return;
+  }
+  const names = state.clusters.map(c => `"${c.name}"`);
+  const n = names.length;
+  if (n === 0) { el.placeholder = 'Share your feedback on the clusters…'; return; }
+  const examples = [];
+  if (n >= 2) examples.push(`merge ${names[0]} and ${names[1]}`);
+  if (n >= 1) examples.push(`split ${names[n - 1]} into 3`);
+  if (n >= 1) examples.push(`rename ${names[0]} to "…"`);
+  examples.push(`make ${n + 1} clusters`);
+  el.placeholder = `e.g. ${examples[state.session.turn % examples.length]}`;
 }
 
 function renderSidebar() {
