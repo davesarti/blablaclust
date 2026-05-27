@@ -1,7 +1,7 @@
 # Report: branch `feature/semantic-reembed`
 
 **Autore:** P5 (Arianna Schiavi)
-**Ultimo aggiornamento:** 2026-05-27 (rev 6)
+**Ultimo aggiornamento:** 2026-05-27 (rev 7)
 **Stato:** implementazione completa, in test manuale
 
 ---
@@ -235,6 +235,8 @@ I log del terminale mostrano già `cost_usd=$X.XXXX` per ogni `f_output` call. D
 | `396698f` | docs: log open issue — free-form language causes multi-step merge+split |
 | `a210804` | fix: forbid merge when K>N and split when K<N in cluster count constraint |
 | `f8f00a1` | fix: populate token_usage and cost_usd in SystemTurn so UI counters work |
+| `336bf08` | feat: dynamic input placeholder shows cluster-aware examples for turns 2+ |
+| `21d184b` | fix: placeholder shows all operations at once separated by dots |
 
 ---
 
@@ -293,3 +295,39 @@ inconsistente.
 | "make 5 clusters" da 3 → merge di tutti e 3 in 1 | LLM ignorava la direzione; vincolo INCREASE mancava di "NEVER merge se K > N" | Riscritto vincolo con proibizioni esplicite per entrambe le direzioni; da ritestarsi |
 | 3 test rotti in `test_f_apply_operations` | Kwarg `axis_hint=None` non previsto nei mock | Fixture aggiornate |
 | Formula peso asse sbagliata (α=0.7, β=0.3 → 15%) | Scaling lineare non considera le norme dei vettori | Sostituito con `axis_weight` e scaling `sqrt` |
+| Token counter UI sempre a zero | `SystemTurn` mancava dei campi `token_usage`/`cost_usd`; `turns.py` non li popolava | Aggiunti campi a schema, wire in `turns.py` |
+| Placeholder input generico nei turni successivi | Testo fisso "Share your feedback" non suggeriva azioni | Placeholder dinamico con nomi cluster reali e tutte le operazioni disponibili |
+
+---
+
+## Prospettive future
+
+### 1. Svincolare il re-embedding dal Turn 1
+
+Attualmente `axis_hint` è accettato **solo al Turn 1** (`if new_turn_number == 1 and payload.axis_hint`). Questo crea due limitazioni:
+
+- L'oracle deve sapere l'asse semantico prima ancora di vedere i cluster iniziali.
+- Se l'oracle cambia idea sull'asse a metà sessione (es. inizia con "angry tone" e poi vuole passare a "price sensitivity") non può farlo senza aprire una nuova sessione.
+
+**Step proposto:** rendere il re-embedding invocabile a qualsiasi turno, non solo al primo. Il trigger potrebbe essere:
+- Un campo `axis_hint` presente nel payload a qualsiasi turno (non solo turno 1)
+- Oppure un'istruzione testuale riconosciuta da `f_output` che emette un'operazione di tipo `semantic_reembed` (da aggiungere al protocollo operazioni)
+
+La difficoltà tecnica principale è la **coerenza storica delle SoftAssignment**: i turni precedenti sono stati calcolati in uno spazio diverso. Bisogna decidere se invalidare la history o tenerla come contesto narrativo senza usarla per il calcolo dell'uncertainty.
+
+### 2. Test sistematici sui limiti di comprensione del LLM
+
+I test manuali finora hanno rivelato comportamenti inconsistenti su istruzioni implicite ("make 5 clusters" invece di "split into 2"). Serve una batteria di test più sistematica per mappare i confini di comprensione dell'esecutore.
+
+**Categorie da testare:**
+
+| Categoria | Esempi da testare | Comportamento atteso |
+|-----------|-------------------|----------------------|
+| Conteggio implicito | "I want more clusters", "too many groups, reduce" | Split/merge corretto senza numero esplicito |
+| Linguaggio valutativo | "these two look the same", "this cluster is too broad" | Merge / split senza nominare l'operazione |
+| Riferimenti nominali | "merge the angry ones", "split the neutral cluster" | Identificare cluster per nome non per ID |
+| Operazioni concatenate | "merge A e B e poi splitta il risultato in 3" | Rifiutare (forward-reference) e chiedere conferma step-by-step |
+| Istruzioni contraddittorie | "merge A e B" dopo aver appena splittato A | `contradiction_detected: true` + spiegazione |
+| Nomi non standard | `rename to "blah"`, `call it "???"` | Nome usato VERBATIM senza "miglioramenti" |
+
+**Metrica:** per ciascuna categoria, contare quante sessioni producono l'operazione corretta al primo turno vs. quante richiedono correzione. Soglia di accettabilità proposta: ≥ 80% corretto al primo turno per le categorie "conteggio implicito" e "riferimenti nominali", ≥ 95% per "nomi verbatim".
