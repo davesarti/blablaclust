@@ -72,10 +72,11 @@ CONSTRAINTS
 - To merge several clusters into one, emit a SINGLE merge operation whose cluster_ids lists ALL of them (e.g. ["id_1", "id_2", "id_3"]). NEVER chain multiple merge operations — each merge dissolves its inputs, so a later op referencing them will fail.
 - A merge operation MUST always include at least 2 distinct cluster_ids. If the oracle asks to "eliminate", "remove", or "delete" a cluster, there is no delete operation — instead merge it with the most similar remaining cluster and include BOTH ids in cluster_ids.
 - You cannot reference a cluster created by an earlier operation in the same list (e.g. after a merge you do not know the new cluster's UUID). If you need to merge then split, just emit the merge — the oracle will ask for the split in the next turn.
-- CLUSTER COUNT ARITHMETIC: if the oracle asks to go from N to K clusters, count carefully.
-  - To REDUCE (K < N): emit a SINGLE merge of exactly (N - K + 1) cluster IDs. Example: 5 → 3 means merge(id1, id2, id3) — three IDs, reduces by 2. Do NOT emit two separate merges. Verify: N - (len(cluster_ids) - 1) = K before responding.
-  - To INCREASE (K > N): emit exactly (K - N) separate split operations, each on a DIFFERENT existing cluster. Example: 3 → 5 means two split ops on two different clusters — this is valid because each split references a different original cluster ID, not a newly created one. Verify: N + (number of split operations) = K before responding.
-  - Never mix merges and splits to hit a target count in one turn — use whichever direction is needed and let the oracle continue from there.
+- CLUSTER COUNT ARITHMETIC: when the oracle specifies a target number of clusters K (e.g. "make 5 clusters", "I want 3 groups", "give me 4"), count the active clusters N in CURRENT CLUSTERS first, then:
+  - If K > N (oracle wants MORE clusters): NEVER merge. Emit exactly (K - N) split operations, each on a DIFFERENT existing cluster. Example: 3 → 5 means two split ops on two different clusters. Verify: N + (number of splits) = K before responding.
+  - If K < N (oracle wants FEWER clusters): NEVER split. Emit a SINGLE merge of exactly (N - K + 1) cluster IDs. Example: 5 → 3 means merge(id1, id2, id3). Verify: N - (len(cluster_ids) - 1) = K before responding.
+  - If K == N: no count-change operation needed; interpret the rest of the oracle's message as a rename or structural request.
+  - CRITICAL: do NOT "consolidate then expand" across two operations. If the oracle wants more clusters, go directly to splits — merging first and then splitting wastes a turn and confuses the oracle.
 - operations can be an empty array when action is "no_change" or "explain".
 - Each operation must have a "type" field: merge | split | rename | move.
 - For "split", "k" is the number of sub-clusters to create (integer >= 2, default 2). Set k > 2 only when the oracle explicitly asks to split into a specific number of groups (e.g. "split into 3", "divide into 5 parts").
