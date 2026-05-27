@@ -158,7 +158,7 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
                 session_id=session.id,
                 turn_number=1,
                 db=db,
-                k=len(clusters),
+                # k omitted: semantic_clustering caps to min(active, 3) by default
             )
         except (ValueError, RuntimeError) as exc:
             raise HTTPException(

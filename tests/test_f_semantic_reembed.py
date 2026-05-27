@@ -136,6 +136,31 @@ class TestLlmAxisScores:
         # batches: [0:2], [2:4], [4:5] → 3 calls
         assert mock_call.call_count == 3
 
+    def test_large_dataset_uses_sampling(self):
+        """With N > LLM_SAMPLE_SIZE, LLM calls are capped at ceil(200/batch)."""
+        from src.engine.f_semantic_reembed import LLM_SAMPLE_SIZE
+        n_points = LLM_SAMPLE_SIZE + 50  # just above threshold
+        points = _make_points(n_points)
+        mock_response = MagicMock()
+
+        with (
+            patch(f"{MOD}.call_llm", return_value=mock_response) as mock_call,
+            patch(f"{MOD}.render_prompt", return_value="prompt"),
+            patch(f"{MOD}.extract_json_text", return_value="[5] * 25"),
+            patch(f"{MOD}.deviation"),
+        ):
+            # patch extract_json_text to return neutral list for any batch size
+            import json as _json
+            def _fake_extract(text):
+                return "[5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5]"
+            with patch(f"{MOD}.extract_json_text", side_effect=_fake_extract):
+                from src.engine.f_semantic_reembed import _llm_axis_scores
+                scores = _llm_axis_scores(points, "angry", batch_size=25)
+
+        # Should call LLM ceil(200/25)=8 times, not ceil(250/25)=10 times
+        assert mock_call.call_count == (LLM_SAMPLE_SIZE + 24) // 25
+        assert len(scores) == n_points
+
     def test_malformed_response_fills_neutral(self):
         """A JSON parse error must not abort — fill batch with 5.0."""
         points = _make_points(3)

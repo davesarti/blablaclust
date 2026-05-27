@@ -61,20 +61,17 @@ def _cosine_axis_scores(
     return scores
 
 
-def _llm_axis_scores(
+# For large datasets, only this many points are scored via LLM; the rest
+# inherit the score of their nearest neighbour in the original embedding space.
+LLM_SAMPLE_SIZE = 200
+
+
+def _llm_score_sample(
     points: list[DataPoint],
     axis_label: str,
-    batch_size: int = 25,
+    batch_size: int,
 ) -> np.ndarray:
-    """Score each point along the axis via LLM batch scoring.
-
-    Costs ceil(N / batch_size) LLM calls. On a malformed LLM response for a
-    batch the batch is filled with the neutral value 5.0 and a deviation is
-    logged (no exception raised — we never abort clustering because of a
-    scoring glitch).
-
-    Returns an (N,) float64 array with values approximately in [0, 10].
-    """
+    """Score exactly `points` via LLM batching. Returns float64 (N,)."""
     scores: list[float] = []
     for i in range(0, len(points), batch_size):
         batch = points[i : i + batch_size]
@@ -107,8 +104,61 @@ def _llm_axis_scores(
             )
             batch_scores = [5.0] * len(batch)
         scores.extend(batch_scores)
-
     return np.array(scores, dtype=np.float64)
+
+
+def _llm_axis_scores(
+    points: list[DataPoint],
+    axis_label: str,
+    batch_size: int = 25,
+) -> np.ndarray:
+    """Score each point along the axis via LLM batch scoring.
+
+    For datasets larger than LLM_SAMPLE_SIZE, scores a random sample and
+    propagates each score to the nearest-neighbour in the original embedding
+    space, keeping LLM calls to ceil(LLM_SAMPLE_SIZE / batch_size) regardless
+    of dataset size.
+
+    On a malformed LLM response the affected batch is filled with 5.0 (neutral).
+
+    Returns an (N,) float64 array with values approximately in [0, 10].
+    """
+    n = len(points)
+    if n <= LLM_SAMPLE_SIZE:
+        n_calls = (n + batch_size - 1) // batch_size
+        print(
+            f"[semantic-reembed] LLM scoring {n} points  calls={n_calls}",
+            flush=True,
+        )
+        return _llm_score_sample(points, axis_label, batch_size)
+
+    # Sample LLM_SAMPLE_SIZE points, score them, propagate via NN.
+    rng = np.random.default_rng(42)
+    sample_idx = sorted(
+        rng.choice(n, LLM_SAMPLE_SIZE, replace=False).tolist()
+    )
+    sampled = [points[i] for i in sample_idx]
+    n_calls = (LLM_SAMPLE_SIZE + batch_size - 1) // batch_size
+    print(
+        f"[semantic-reembed] LLM scoring {LLM_SAMPLE_SIZE}/{n} points (sample)  "
+        f"calls={n_calls}  (was {(n + batch_size - 1) // batch_size} without sampling)",
+        flush=True,
+    )
+    sample_scores = _llm_score_sample(sampled, axis_label, batch_size)
+
+    # Nearest-neighbour interpolation in the original embedding space.
+    sample_embs = np.array([p.embedding for p in sampled], dtype=np.float64)
+    all_embs    = np.array([p.embedding for p in points],  dtype=np.float64)
+    sample_norms = np.linalg.norm(sample_embs, axis=1, keepdims=True) + 1e-8
+    all_norms    = np.linalg.norm(all_embs,    axis=1, keepdims=True) + 1e-8
+    # cosine similarity matrix (N, LLM_SAMPLE_SIZE)
+    sims    = (all_embs / all_norms) @ (sample_embs / sample_norms).T
+    nearest = sims.argmax(axis=1)           # each of the N points → its closest sample
+    scores  = sample_scores[nearest].copy()
+    # Exact sampled points keep their own score (not neighbour's).
+    for local_i, global_i in enumerate(sample_idx):
+        scores[global_i] = sample_scores[local_i]
+    return scores
 
 
 def reembed_for_axis(
