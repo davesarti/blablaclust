@@ -48,7 +48,9 @@ def f_next_best_step(
     contradiction = bool(state.contradictions)
 
     # Rule 1: stop if the oracle is overloaded or the session has run long.
-    if cognitive_load >= 4 or state.turn_number > MAX_TURNS:
+    # Threshold raised from 4 to 5: load=4 means "heavy but manageable",
+    # only load=5 (the maximum) should trigger an automatic stop.
+    if cognitive_load >= 5 or state.turn_number > MAX_TURNS:
         return SystemTurn(
             session_id=state.session_id,
             turn_number=state.turn_number,

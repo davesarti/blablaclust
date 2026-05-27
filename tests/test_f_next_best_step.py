@@ -75,10 +75,19 @@ def test_action_show_when_high_uncertainty():
 
 
 def test_action_stop_when_cognitive_load_high():
+    # Threshold is now 5 (was 4) — only maximum load triggers auto-stop.
+    state = _make_state(turn_number=5)
+    ctx = _make_context(load_score=5)
+    result = f_next_best_step(state, [], ctx)
+    assert result.action == "stop"
+
+
+def test_action_show_when_cognitive_load_is_4():
+    # load=4 used to trigger stop prematurely — now it gives show.
     state = _make_state(turn_number=5)
     ctx = _make_context(load_score=4)
     result = f_next_best_step(state, [], ctx)
-    assert result.action == "stop"
+    assert result.action == "show"
 
 
 def test_action_stop_when_too_many_turns():

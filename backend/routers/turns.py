@@ -189,9 +189,17 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     system_turn = f_next_best_step(updated_state, uncertainty, context)
     system_turn.clusters_updated = bool(operations)
 
+    # Always surface the LLM's actual reply, regardless of action.
+    # Previously only "show" got the real text — "stop" and "ask" got a
+    # hardcoded canned string, discarding whatever the model actually said.
     raw_display = raw.get("display") if isinstance(raw, dict) else None
-    if isinstance(raw_display, str) and system_turn.action == "show":
+    if isinstance(raw_display, str):
         system_turn.display.content = raw_display
+
+    # If the planner decided to stop, actually close the session so the UI
+    # reflects the final state and no further turns are processed.
+    if system_turn.action == "stop":
+        session.status = "closed"
 
     if operations:
         system_turn.state_snapshot["operations"] = operations
