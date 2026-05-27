@@ -1,7 +1,7 @@
 # Report: branch `feature/semantic-reembed`
 
 **Autore:** P5 (Arianna Schiavi)
-**Ultimo aggiornamento:** 2026-05-27 (rev 2)
+**Ultimo aggiornamento:** 2026-05-27 (rev 3)
 **Stato:** implementazione completa, in test manuale
 
 ---
@@ -184,6 +184,21 @@ Dai turni successivi il payload è normale (nessun `axis_hint`).
 
 ---
 
+## Miglioramenti integrati da main (2026-05-27)
+
+| File | Cosa è arrivato da main |
+|------|-------------------------|
+| `src/engine/f_uncertainty.py` | Riscrittura: `ClusterUncertainty`, `ClusterOverlap`, `ClusterCohesion`, `f_cluster_uncertainty()` — uncertainty a livello cluster invece di per-punto |
+| `src/engine/f_next_best_step.py` | Regole ask usano nomi cluster non UUID; soglia stop alzata a 5 (load=4 non ferma più la sessione prematuramente) |
+| `src/engine/initial_clustering.py` | Softmax con temperatura scalata sui dati → assegnamenti meno uniformi |
+| `src/engine/cluster_operations.py` | Fix merge: la massa dei cluster fusi viene droppata (non ripiegata sul nuovo) → impedisce che l'intero dataset collassi sul cluster fuso |
+| `src/engine/f_apply_operations.py` | Inline `new_name` su merge; `new_names`+`k` su split; rename preserva description esistente se l'oracle non ne specifica una |
+| `backend/routers/turns.py` | Usa `f_cluster_uncertainty`; display LLM visibile su qualsiasi action (non solo `show`); `session.status="closed"` quando action è `stop` |
+| `src/harness.py` | Cognitive load con floor division: score=5 solo vicino a MAX_TURNS |
+| `prompts/f_output.txt` | Merge richiede >= 2 id; `k` e `new_names` su split; nomi oracle usati VERBATIM |
+
+---
+
 ## Sequenza di commit sul branch
 
 | Hash | Descrizione |
@@ -195,6 +210,7 @@ Dai turni successivi il payload è normale (nessun `axis_hint`).
 | `202176e` | fix: propagate axis_hint to cluster naming throughout the call chain |
 | `f45aafc` | fix: cap k at 3 in turns.py; speed up LLM scoring via sampling |
 | `27d79d3` | fix: add cluster count arithmetic constraint to f_output; update axis_hint test fixtures |
+| `37e2773` | feat: integrate main improvements into semantic-reembed branch |
 
 ---
 
@@ -205,7 +221,7 @@ Dai turni successivi il payload è normale (nessun `axis_hint`).
 | `test_f_semantic_reembed.py` | 15 | ✅ tutti passano |
 | `test_semantic_clustering.py` | 22 | ✅ tutti passano |
 | `test_f_apply_operations.py` | 13 | ✅ tutti passano |
-| Suite completa | 144 | ✅ 141 pass, 3 fail pre-esistenti* |
+| Suite completa | 147 | ✅ 144 pass, 3 fail pre-esistenti* |
 
 *I 3 fail in `test_turns_endpoint.py` sono un problema di ordinamento tra test
 pre-esistente (non introdotto da questo branch); passano quando eseguiti in
