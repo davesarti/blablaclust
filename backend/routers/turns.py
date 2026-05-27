@@ -9,7 +9,7 @@ from backend.session_state import build_session_state
 from src.engine.f_apply_operations import f_apply_operations
 from src.engine.f_next_best_step import f_next_best_step
 from src.engine.f_output import f_output
-from src.engine.f_uncertainty import f_uncertainty
+from src.engine.f_uncertainty import f_cluster_uncertainty
 from src.harness import ConversationContext, estimate_cost_usd
 from src.models import ChatSession, Cluster as DbCluster, DataPoint, SoftAssignment, Turn
 from src.schemas import InputOracle, TurnRead
@@ -185,7 +185,7 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
             )
 
     updated_state = build_session_state(db, session)
-    uncertainty = f_uncertainty(session.id, db)
+    uncertainty = f_cluster_uncertainty(session.id, db)
     system_turn = f_next_best_step(updated_state, uncertainty, context)
     system_turn.clusters_updated = bool(operations)
 
