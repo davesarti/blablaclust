@@ -3,9 +3,12 @@
 ## What I built
 
 Sprint 3 for P2 covered three issues against the clustering code plus one
-sprint-omnibus task, plus three additional fixes applied after the initial
-sprint: end-to-end wiring of variable-arity split, broken import fixes, and
-a missing `tiktoken` dependency resolved.
+sprint-omnibus task, plus several additional fixes applied after the initial
+sprint: end-to-end wiring of variable-arity split, broken import fixes, a
+missing `tiktoken` dependency resolved, a critical correctness bug in
+`merge_clusters` (every merge was pulling the entire dataset into the new
+cluster), a top-level side-effect hazard in the dataset sampling script, and
+a cross-team audit that produced two issues for P3.
 
 ### 1. Centralised cluster naming — one LLM call instead of N
 
@@ -75,6 +78,32 @@ dimensions"). With those three slices the issue is closed across the team.
 
 ### 4. Structured logging of every clustering run (Sprint 3 task)
 
+`src/engine/clustering_log.py` (new) + `src/engine/initial_clustering.py`
++ `tests/conftest.py` (new).
+
+Sprint 3 asked for one JSONL line per clustering run with `seed`, `k`,
+`backend`, `silhouette`, `n_points`. New helper `log_clustering_run` (mirrors
+P5's `log_llm_call` shape) appends to `logs/clustering_runs.jsonl`;
+`initial_clustering` calls it at the end, computing silhouette on the spot
+from `model.labels_` (None when `k < 2` or `k >= n_points`). Logging is
+best-effort — an `OSError` is swallowed so a broken log file can never abort
+a clustering run.
+
+Covers both initial clustering and the runs triggered internally by
+`split_cluster` (which goes through `initial_clustering`). Diagnostic
+functions (`silhouette_for_k`, `sweep_k`) stay silent — they're for
+k-selection, not real runs.
+
+The helper originally lived in `src/engine/clustering_log.py` (separate file
+because the central logger is P5-owned). A follow-up issue
+(`notes/p2/issue-for-p5-logger.md`) asked P5 to absorb it into
+`src/logger.py`; **P5 has now done this**: `clustering_log.py` is gone,
+`log_clustering_run` lives in `src/logger.py`, and `initial_clustering`
+imports from there. Tests and `conftest.py` were updated accordingly.
+
+A new `tests/conftest.py` autouse fixture redirects the log path to a
+per-test tmp file, so the suite never pollutes `logs/clustering_runs.jsonl`.
+
 ### 5. End-to-end wiring of variable-arity split
 
 `prompts/f_output.txt` + `src/engine/f_apply_operations.py` + `tests/test_f_apply_operations.py`.
@@ -112,29 +141,81 @@ so every LLM call (including `name_clusters`) silently failed with
 `ModuleNotFoundError: No module named 'tiktoken'` — cluster naming appeared
 to run but produced no names. Fixed with `pip install tiktoken`.
 
-`src/engine/clustering_log.py` (new) + `src/engine/initial_clustering.py`
-+ `tests/conftest.py` (new).
+### 8. Fix merge_clusters pulling the entire dataset into the new cluster
 
-Sprint 3 asked for one JSONL line per clustering run with `seed`, `k`,
-`backend`, `silhouette`, `n_points`. New helper `log_clustering_run` (mirrors
-P5's `log_llm_call` shape) appends to `logs/clustering_runs.jsonl`;
-`initial_clustering` calls it at the end, computing silhouette on the spot
-from `model.labels_` (None when `k < 2` or `k >= n_points`). Logging is
-best-effort — an `OSError` is swallowed so a broken log file can never abort
-a clustering run.
+`src/engine/cluster_operations.py` + `tests/test_cluster_operations.py`.
 
-Covers both initial clustering and the runs triggered internally by
-`split_cluster` (which goes through `initial_clustering`). Diagnostic
-functions (`silhouette_for_k`, `sweep_k`) stay silent — they're for
-k-selection, not real runs.
+Live UI testing surfaced a critical correctness bug: merging two clusters
+ended up assigning **all** points (1200/1200) to the new cluster, with the
+other un-merged clusters dropping to 0 size. Root cause in the carry-forward
+step of `merge_clusters`: for un-pooled points the code summed the
+probabilities of the merged clusters and folded that mass onto the new
+cluster (`merged_mass = sum(prob[cid] for cid in merge_set)`). In high-dim
+sentence-transformer space the softmax over k=5 clusters is very flat
+(~0.20 each), so the sum of two merged probs routinely exceeded any
+un-merged cluster's prob — and the new cluster became the argmax for every
+point in the dataset.
 
-The helper lives in `src/engine/clustering_log.py` rather than `src/logger.py`
-because the central logger is P5's file. The shape is intentionally identical
-to `log_llm_call` so P5 can fold it in trivially — follow-up issue dropped
-in `notes/p2/issue-for-p5-logger.md`.
+Fix: drop the merged mass entirely on carry-forward. Pooled points still
+get 1.0 on the new cluster, un-pooled points keep their original argmax.
+Probabilities for un-pooled points no longer sum to 1, but the snapshot is
+internally consistent and the hard partition (what the UI reads) is
+preserved. Added regression test
+`test_merge_preserves_argmax_on_flat_soft_assignments` that reproduces the
+5-cluster scenario and fails under the old fold. Verified end-to-end on the
+exact live repro (sizes 483/234/188/165/130, merge of c4+c5) — new cluster
+ends up with 295 points (= 165+130), others unchanged.
 
-A new `tests/conftest.py` autouse fixture redirects the log path to a
-per-test tmp file, so the suite never pollutes `logs/clustering_runs.jsonl`.
+Bonus collateral: with the fix, `merged_point_ids` (passed to
+`name_clusters`) now contains only the actually pooled points instead of
+every point in the dataset. So the LLM gets clean representative texts and
+produces sensible names like "Shipping Problems" instead of generic labels
+derived from the whole dataset.
+
+### 9. Sample-dataset script: guard side effects + rename
+
+`src/dataset_processing/download_dataset.py` →
+`src/dataset_processing/sample_amazon_dataset.py` (uncommitted).
+
+The script had two problems:
+1. All sampling / CSV writes happened at module top-level — importing it
+   would immediately read `data/amazon_review_polarity_csv/train.csv` and
+   overwrite `data/train.csv` + `data/frozen_eval.csv`.
+2. The name "download_dataset" was misleading: nothing is downloaded, it
+   only samples a CSV already on disk.
+
+Wrapped the body in `def main()` + `if __name__ == "__main__": main()`,
+extracted magic numbers (`SAMPLE_SIZE`, `TRAIN_SIZE`, `RANDOM_STATE`,
+`MIN_TEXT_LEN`) as module constants, and renamed the file. Verified with
+two tests: (1) importing the module does NOT change the mtime of
+`data/train.csv` or `data/frozen_eval.csv`; (2) running it as
+`python -m src.dataset_processing.sample_amazon_dataset` correctly
+produces 1200 train + 300 frozen rows. No callers anywhere in the repo, so
+the rename is safe.
+
+### 10. Cross-team audit — issues opened for P3
+
+Read-only audit of P3-owned engine files (`f_apply_operations`, `f_eval`,
+`f_next_state`, `f_next_best_step`, `f_uncertainty`, `f_output`,
+`f_parse_clustering_intent`) looking for bugs that interact with P2 code or
+block end-to-end correctness. Produced two GitHub issues:
+
+- **#42 — `f_eval.py` crashes on Gemini.** `json.loads(msg.text)` skips
+  the `extract_json_text` helper that every other `f_*` uses to strip
+  markdown fences. Gemini (our current OpenRouter default) wraps JSON in
+  fences → JSONDecodeError. One-line fix.
+- **#43 — Cluster descriptions wiped or never set on rename / merge / split.**
+  Rename always passes `new_description=""` because the prompt never asks
+  for one; merged clusters start with `description=""` and depend entirely
+  on the LLM call succeeding; split children skip naming when the oracle
+  provides `new_names`, so they keep an empty description forever. Three
+  bugs, separate fixes proposed for each.
+
+Also noted but not filed: `f_uncertainty` is computed every turn but its
+result is no longer read by `f_next_best_step` (the "ask" rule was
+removed), and `f_next_state.py` is now dead code (never called by
+`turns.py`, would double the LLM call if anyone used it). Logged in this
+note as candidates for a follow-up issue if P3 confirms.
 
 ## Results
 
@@ -153,10 +234,15 @@ per-test tmp file, so the suite never pollutes `logs/clustering_runs.jsonl`.
 | `split_cluster(k=4)` wired end-to-end from LLM prompt to k-means | verified |
 | `generate_embeddings.py` / `verify_database.py` import from project root | verified |
 | `tiktoken` installed — `name_clusters` LLM calls succeed | verified |
+| `merge_clusters` no longer collapses dataset into one cluster | verified live (5-cluster repro: 295/470/245/190 vs old 1199/1/0/0/0) |
+| New regression test `test_merge_preserves_argmax_on_flat_soft_assignments` | passes; fails on old code |
+| Live merge naming with Gemini after fix | produces "Shipping Problems" + description |
+| `sample_amazon_dataset.py` import does NOT touch CSVs on disk | verified (mtime unchanged) |
+| `sample_amazon_dataset.py` run as `__main__` produces 1200/300 split | verified |
 
-Full P2-relevant suite: 93 tests pass, `test_f_apply_operations.py` 39 tests pass.
-`tiktoken` now installed — the 7 `test_f_next_state.py` failures are unrelated
-(P3 test file, not owned by P2).
+Full P2-relevant suite: 45 tests pass in the vibe-coders env
+(`test_cluster_operations`, `test_cluster_naming`, `test_clustering_log`).
+`test_f_apply_operations.py` 14 tests pass after the `k` wiring update.
 
 ## What I changed in other people's files
 
@@ -171,13 +257,16 @@ Full P2-relevant suite: 93 tests pass, `test_f_apply_operations.py` 39 tests pas
 
 ## What I need from others
 
-- **P5** — absorb `src/engine/clustering_log.py` into `src/logger.py` and
-  update the one import in `initial_clustering.py`. Full instructions in
-  `notes/p2/issue-for-p5-logger.md`.
+- **P5** — ~~absorb `src/engine/clustering_log.py` into `src/logger.py`~~
+  **DONE.** `clustering_log.py` no longer exists; `log_clustering_run`
+  lives in `src/logger.py`; `initial_clustering` imports from there.
 - **P4** — `prompts/cluster_naming.txt` changed shape this sprint (now
   takes `{clusters_block}` and returns an id-keyed JSON object). If P4
   keeps a prompt-versioning registry, the hash for this prompt needs
   refreshing.
+- **P3 (open issues)** — #42 (`f_eval` Gemini crash, one-line fix) and
+  #43 (cluster descriptions wiped on rename / never set on merge & split
+  with inline names). Both have fixes proposed in the issue body.
 - **Cosmetic, P3/P4** — `f_output.txt` shows merge ops can include a
   `"new_name"` field, but `f_apply_operations` doesn't pass it to
   `merge_clusters` (which now auto-names from pooled content anyway).
@@ -193,5 +282,20 @@ Full P2-relevant suite: 93 tests pass, `test_f_apply_operations.py` 39 tests pas
 - `6bc7cfd` — structured logging of every clustering run
 - `6612273` — feat: wire k parameter through split op end-to-end
 - `ea627e7` — fix: correct text_cleaning imports in dataset_processing scripts
+- `22a5b0e` — fix: drop merged mass in merge_clusters to preserve un-pooled argmax
 
 All pushed to `origin/main`.
+
+### Uncommitted (waiting for a stable moment to push)
+
+- `download_dataset.py` → `sample_amazon_dataset.py` rename with `main()`
+  guard and extracted constants. No callers in the repo, so the rename is
+  safe but worth landing when the team isn't actively touching nearby code.
+
+### GitHub issues opened during this sprint
+
+- **#42** — `f_eval.py crashes on Gemini` (P3)
+- **#43** — `Cluster descriptions get wiped or never set on rename / merge / split` (P3, with optional slice for P4)
+- UI feedback issue for P5 — drafted in `notes/p2/issue-for-p5-ui.md`, not
+  yet pushed to GitHub (waiting on the team to decide which UI revamp scope
+  to take on).
