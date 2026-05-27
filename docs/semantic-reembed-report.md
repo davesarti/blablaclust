@@ -1,7 +1,7 @@
 # Report: branch `feature/semantic-reembed`
 
 **Autore:** P5 (Arianna Schiavi)
-**Ultimo aggiornamento:** 2026-05-27 (rev 5)
+**Ultimo aggiornamento:** 2026-05-27 (rev 6)
 **Stato:** implementazione completa, in test manuale
 
 ---
@@ -184,6 +184,26 @@ Dai turni successivi il payload è normale (nessun `axis_hint`).
 
 ---
 
+## Costo LLM stimato per sessione
+
+I costi sono visibili nella UI (contatore token + stima $) ora che il fix è applicato.
+Stime teoriche per una sessione tipo con axis_hint:
+
+| Operazione | Chiamate LLM | Costo stimato |
+|------------|-------------|---------------|
+| Turn 1 — scoring asse (LLM fallback, 1200 punti, sample 200) | 8 × batch-25 | ~$0.01–0.02 |
+| Turn 1 — naming 3 cluster | 1 | ~$0.003 |
+| Turn 2+ — f_output per turno | 1 per turno | ~$0.006–0.010 |
+| Turn 2+ — naming su merge/split | 1 per op | ~$0.003 |
+
+**Stima sessione completa** (Turn 1 + 5 turni operativi): ~$0.07–0.12
+
+Quando la strategia coseno funziona (cosine_variance > 0.01) il Turn 1 non costa nulla per lo scoring dell'asse — solo 1 chiamata per il naming.
+
+I log del terminale mostrano già `cost_usd=$X.XXXX` per ogni `f_output` call. Da ora anche la UI accumula il totale per sessione.
+
+---
+
 ## Miglioramenti integrati da main (2026-05-27)
 
 | File | Cosa è arrivato da main |
@@ -211,6 +231,10 @@ Dai turni successivi il payload è normale (nessun `axis_hint`).
 | `f45aafc` | fix: cap k at 3 in turns.py; speed up LLM scoring via sampling |
 | `27d79d3` | fix: add cluster count arithmetic constraint to f_output; update axis_hint test fixtures |
 | `37e2773` | feat: integrate main improvements into semantic-reembed branch |
+| `df0888d` | docs: update report with integrated main improvements |
+| `396698f` | docs: log open issue — free-form language causes multi-step merge+split |
+| `a210804` | fix: forbid merge when K>N and split when K<N in cluster count constraint |
+| `f8f00a1` | fix: populate token_usage and cost_usd in SystemTurn so UI counters work |
 
 ---
 
