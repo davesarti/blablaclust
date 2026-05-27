@@ -128,6 +128,14 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     # persisted oracle turn (0 if none), so the next one is state.turn_number + 1.
     new_turn_number = state.turn_number + 1
 
+    # Retrieve the axis_hint stored in Turn 1 (if any) so subsequent turns can
+    # name clusters consistently along the session's semantic axis.
+    session_axis_hint: str | None = None
+    if prior_turns:
+        first_input = prior_turns[0].oracle_input
+        if isinstance(first_input, dict):
+            session_axis_hint = first_input.get("axis_hint") or None
+
     # ── Semantic re-embedding path ─────────────────────────────────────────────
     # When the oracle provides axis_hint on Turn 1, we re-orient the entire
     # embedding space around the specified semantic axis before anything else.
@@ -186,7 +194,15 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
         )
 
         try:
-            raw, _usage = f_output(state, payload, context, total_points)
+            raw, usage = f_output(state, payload, context, total_points)
+            cost = estimate_cost_usd(usage)
+            print(
+                f"[turns] f_output  session={session.id}  turn={new_turn_number}  "
+                f"input_tokens={usage.get('input_tokens', 0)}  "
+                f"output_tokens={usage.get('output_tokens', 0)}  "
+                f"cost_usd=${cost:.4f}",
+                flush=True,
+            )
         except (json.JSONDecodeError, ValueError) as exc:
             raise HTTPException(
                 status_code=502,
@@ -201,6 +217,11 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
             operations = raw
         else:
             operations = raw.get("operations", [])
+        print(
+            f"[turns] operations  session={session.id}  turn={new_turn_number}  "
+            f"count={len(operations)}  types={[op.get('type') for op in operations]}",
+            flush=True,
+        )
 
         if operations:
             latest_snapshot_turn = (
@@ -220,6 +241,7 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
                     session_id=session.id,
                     turn_number=start_turn,
                     db=db,
+                    axis_hint=session_axis_hint,
                 )
                 db.commit()
             except (ValueError, KeyError) as exc:

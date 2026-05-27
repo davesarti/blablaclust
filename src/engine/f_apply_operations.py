@@ -37,6 +37,7 @@ def f_apply_operations(
     session_id: str,
     turn_number: int,
     db: Session,
+    axis_hint: str | None = None,
 ) -> int:
     """Route each operation from Claude's response to the right clustering function.
 
@@ -48,6 +49,8 @@ def f_apply_operations(
         turn_number: Starting turn number for snapshot-writing operations.
                      Must be strictly greater than the latest existing snapshot.
         db: SQLAlchemy session. No commit is made here — caller's responsibility.
+        axis_hint: When provided, forwarded to merge/split so newly-named
+                   clusters reflect the session's semantic axis.
 
     Returns:
         The next available turn_number after all operations. If no snapshot-writing
@@ -76,6 +79,7 @@ def f_apply_operations(
                 session_id=session_id,
                 turn_number=current_turn,
                 db=db,
+                axis_hint=axis_hint,
             )
             # Flush so the next operation in this same turn sees the updated
             # snapshot rows and dissolved cluster state.  The session uses
@@ -91,6 +95,7 @@ def f_apply_operations(
                 session_id=session_id,
                 turn_number=current_turn,
                 db=db,
+                axis_hint=axis_hint,
             )
             # Same flush reason as merge above.
             db.flush()

@@ -185,7 +185,7 @@ def semantic_clustering(
 
     # Name the new clusters via LLM — best-effort, a failure leaves placeholders.
     if auto_name:
-        name_clusters(new_clusters, new_assignments, valid)
+        name_clusters(new_clusters, new_assignments, valid, axis_hint=axis_hint)
 
     # Log the run so it appears in clustering_runs.jsonl alongside all other runs.
     silhouette: float | None = None

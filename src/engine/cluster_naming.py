@@ -25,6 +25,7 @@ def name_clusters(
     assignments: list[DbSoftAssignment],
     data_points: list[DataPoint],
     sample_size: int = REPRESENTATIVE_SAMPLE_SIZE,
+    axis_hint: str | None = None,
 ) -> list[DbCluster]:
     """Fill in name and description for all clusters in a single LLM call.
 
@@ -39,6 +40,11 @@ def name_clusters(
     their placeholder names. If the response omits individual cluster IDs,
     those clusters also keep their placeholder names — naming never aborts
     the overall clustering operation.
+
+    Args:
+        axis_hint: When provided, the naming prompt instructs the LLM to label
+            clusters along this semantic axis (e.g. "angry tone") rather than
+            purely by topic.
 
     Mutates `clusters` in place and also returns the list for convenience.
     """
@@ -71,7 +77,25 @@ def name_clusters(
         return clusters  # nothing to name
 
     clusters_block = "\n\n".join(cluster_blocks)
-    prompt = render_prompt("cluster_naming", clusters_block=clusters_block)
+
+    if axis_hint:
+        axis_context = (
+            f"\nAXIS CONTEXT\n"
+            f"These clusters were produced by re-embedding along the semantic axis "
+            f'"{axis_hint}". Name each cluster to reflect where it falls along this '
+            f"axis — use degree/tone labels (e.g. for 'angry tone': 'Very Angry', "
+            f"'Mildly Frustrated', 'Neutral/Satisfied') rather than topic labels "
+            f"like 'Book Reviews' or 'Electronics'. The name must make the axis "
+            f"position immediately clear to the oracle.\n"
+        )
+    else:
+        axis_context = ""
+
+    prompt = render_prompt(
+        "cluster_naming",
+        clusters_block=clusters_block,
+        axis_context=axis_context,
+    )
 
     # Naming is best-effort: a failed LLM call (no API key, rate limit,
     # unreachable) or an unparseable response must not abort clustering.
