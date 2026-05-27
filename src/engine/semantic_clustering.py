@@ -64,8 +64,9 @@ def semantic_clustering(
         turn_number: Turn at which the new snapshot is written. Must be > 0
             (turn 0 is reserved for the pre-oracle initial clustering).
         db: SQLAlchemy session. Changes are staged but not committed.
-        k: Number of clusters to produce. Defaults to the current number of
-            active clusters in the session (preserving the oracle's original k).
+        k: Number of clusters to produce. Defaults to min(active_clusters, 3)
+            — a semantic axis is 1-D and separates well into at most 3 bins
+            (high/medium/low). Pass explicitly to override.
         axis_weight: Fraction [0, 1] of k-means distance signal attributed to
             the semantic axis (default 0.7). The remaining 1-axis_weight comes
             from the original embeddings. 0.7 means 70% axis, 30% topic.
@@ -103,8 +104,18 @@ def semantic_clustering(
             "run initial clustering first"
         )
 
+    # A semantic axis is a 1-D signal; k=3 (high/medium/low) is the natural
+    # maximum before clusters become degenerate. Cap the inherited k at 3 so
+    # the oracle gets meaningful tone-based bins rather than topic repetition.
+    AXIS_K_CAP = 3
     if k is None:
-        k = len(existing)
+        inherited_k = len(existing)
+        k = min(inherited_k, AXIS_K_CAP)
+        print(
+            f"[semantic-clustering] k defaulted to {k}"
+            + (f" (capped from {inherited_k})" if k < inherited_k else ""),
+            flush=True,
+        )
     if k < 1:
         raise ValueError(f"k must be >= 1, got {k}")
 

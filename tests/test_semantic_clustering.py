@@ -174,8 +174,8 @@ def test_creates_k_new_active_clusters(db):
         assert c.session_id == SESSION_ID
 
 
-def test_default_k_matches_initial_cluster_count(db):
-    """When k is not given it defaults to the number of currently active clusters."""
+def test_default_k_capped_at_3_when_initial_k_is_small(db):
+    """When active clusters <= 3 the default k equals the cluster count."""
     data_points = db.query(DataPoint).filter(DataPoint.dataset_name == "ds").all()
 
     with PATCH_COSINE, PATCH_NAME:
@@ -189,7 +189,38 @@ def test_default_k_matches_initial_cluster_count(db):
         )
     db.commit()
 
-    assert len(new_clusters) == 2  # inherits k=2 from initial clustering
+    assert len(new_clusters) == 2  # initial k=2, below cap of 3 → kept at 2
+
+
+def test_default_k_capped_at_3_when_initial_k_exceeds_cap(db):
+    """When active clusters > 3 the default k is capped at 3 for 1-D axis."""
+    data_points = db.query(DataPoint).filter(DataPoint.dataset_name == "ds").all()
+
+    # Add extra clusters so active count = 5 > AXIS_K_CAP(3).
+    for i in range(3):
+        db.add(
+            Cluster(
+                id=f"extra-{i}",
+                session_id=SESSION_ID,
+                name=f"Extra {i}",
+                description="",
+                created_at_turn=0,
+            )
+        )
+    db.commit()
+
+    with PATCH_COSINE, PATCH_NAME:
+        new_clusters, _ = semantic_clustering(
+            data_points=data_points,
+            axis_hint="angry",
+            session_id=SESSION_ID,
+            turn_number=1,
+            db=db,
+            auto_name=False,
+        )
+    db.commit()
+
+    assert len(new_clusters) == 3  # capped from 5 → 3
 
 
 def test_writes_full_snapshot_at_turn_1_all_points_covered(db):
