@@ -19,6 +19,15 @@ from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoft
 KMEANS_RANDOM_STATE = 42
 KMEANS_BACKEND = "kmeans"
 
+# Temperature for the soft-assignment softmax, expressed as a fraction of the
+# mean squared distance to centroids. softmax(-d²) with no temperature (i.e. a
+# fixed 1.0) is nearly uniform for unit-norm embeddings — every point's distances
+# are O(1) and similar, so each cluster gets ~1/k and no point looks more certain
+# than any other. Dividing distances by a fraction of their own mean sharpens the
+# split and stays scale-invariant if the embedding model changes. 0.1 chosen
+# empirically: core points reach ~0.9 max-probability, boundary points ~0.4.
+SOFTMAX_TEMPERATURE_FRACTION = 0.1
+
 
 def _embedding_matrix(data_points: list[DataPoint]) -> tuple[list[DataPoint], np.ndarray]:
     """Return (points, X) restricted to data points that have an embedding."""
@@ -89,8 +98,13 @@ def initial_clustering(
     diffs = X[:, np.newaxis, :] - centroids[np.newaxis, :, :]  # (n, k, dim)
     sq_dists = np.sum(diffs ** 2, axis=2)  # (n, k)
 
-    # Softmax of negative distances → probabilities in (0, 1) summing to 1 per point
-    probs = _softmax(-sq_dists, axis=1)  # (n, k)
+    # Temperature scaled to the data's own distance spread keeps the softmax
+    # sharp regardless of embedding magnitude. Guard against a zero mean (e.g.
+    # k == n, where every point sits exactly on its own centroid).
+    temperature = max(SOFTMAX_TEMPERATURE_FRACTION * float(sq_dists.mean()), 1e-12)
+
+    # Softmax of negative scaled distances → probabilities in (0, 1) summing to 1 per point
+    probs = _softmax(-sq_dists / temperature, axis=1)  # (n, k)
 
     db_assignments = [
         DbSoftAssignment(
