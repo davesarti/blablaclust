@@ -9,7 +9,7 @@ from backend.session_state import build_session_state
 from src.engine.f_apply_operations import f_apply_operations
 from src.engine.f_next_best_step import f_next_best_step
 from src.engine.f_output import f_output
-from src.engine.f_uncertainty import f_uncertainty
+from src.engine.f_uncertainty import f_cluster_uncertainty
 from src.engine.semantic_clustering import semantic_clustering
 from src.harness import ConversationContext, estimate_cost_usd
 from src.models import ChatSession, Cluster as DbCluster, DataPoint, SoftAssignment, Turn
@@ -255,13 +255,17 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
 
     # ── Common path: planner + persist turn ───────────────────────────────────
     updated_state = build_session_state(db, session)
-    uncertainty = f_uncertainty(session.id, db)
+    uncertainty = f_cluster_uncertainty(session.id, db)
     system_turn = f_next_best_step(updated_state, uncertainty, context)
     system_turn.clusters_updated = bool(operations)
 
-    # In the normal path, f_output may provide richer display text; use it.
-    if isinstance(raw_display, str) and system_turn.action == "show":
+    # Surface the LLM's real display text regardless of action (show/ask/stop).
+    if isinstance(raw_display, str):
         system_turn.display.content = raw_display
+
+    # Close the session when the planner decides to stop.
+    if system_turn.action == "stop":
+        session.status = "closed"
 
     if operations:
         system_turn.state_snapshot["operations"] = operations

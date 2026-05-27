@@ -176,27 +176,29 @@ def merge_clusters(
                 )
             )
         else:
-            # Untouched point — carry forward, folding merged mass into the new cluster.
-            merged_mass = 0.0
+            # Untouched point — carry forward only the non-merged-cluster mass.
+            #
+            # We deliberately DROP the probability mass that the merged clusters
+            # used to hold for this point. Folding it into the new cluster
+            # (`merged_mass = sum(prob[cid] for cid in merge_set)`) sounds
+            # symmetric but breaks the hard partition: k-means soft assignments
+            # in high-dim sentence-transformer space are very flat (e.g. 5
+            # clusters → ~0.20 each), so the sum of two merged probabilities
+            # routinely exceeds the un-merged argmax and the entire dataset
+            # collapses into the merged cluster after a single merge op.
+            # Dropping the mass preserves each un-pooled point's original hard
+            # cluster. Probabilities for these points no longer sum to 1, but
+            # the snapshot stays internally consistent (pooled points are 1.0
+            # on the new cluster) and the argmax is what downstream UI reads.
             for cid, prob in distribution.items():
                 if cid in merge_set:
-                    merged_mass += prob
-                else:
-                    new_assignments.append(
-                        DbSoftAssignment(
-                            data_point_id=point_id,
-                            cluster_id=cid,
-                            turn_number=turn_number,
-                            probability=prob,
-                        )
-                    )
-            if merged_mass > 0.0:
+                    continue
                 new_assignments.append(
                     DbSoftAssignment(
                         data_point_id=point_id,
-                        cluster_id=new_cluster.id,
+                        cluster_id=cid,
                         turn_number=turn_number,
-                        probability=merged_mass,
+                        probability=prob,
                     )
                 )
 
@@ -213,9 +215,7 @@ def merge_clusters(
         merged_points = (
             db.query(DataPoint).filter(DataPoint.id.in_(merged_point_ids)).all()
         )
-        name_clusters(
-            [new_cluster], new_assignments, merged_points, axis_hint=axis_hint
-        )
+        name_clusters([new_cluster], new_assignments, merged_points, axis_hint=axis_hint)
 
     return new_cluster
 
@@ -305,9 +305,7 @@ def split_cluster(
     # operation itself; the "part N" labels above are the fallback if the LLM
     # call fails. subset_assignments / subset_points are already in memory.
     if auto_name:
-        name_clusters(
-            new_clusters, subset_assignments, subset_points, axis_hint=axis_hint
-        )
+        name_clusters(new_clusters, subset_assignments, subset_points, axis_hint=axis_hint)
 
     # Dissolve the parent cluster as of this turn.
     cluster.dissolved_at_turn = turn_number

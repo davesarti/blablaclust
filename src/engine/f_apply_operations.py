@@ -30,6 +30,7 @@ from src.engine.cluster_operations import (
     rename_cluster,
     split_cluster,
 )
+from src.models import Cluster as DbCluster
 
 
 def f_apply_operations(
@@ -73,8 +74,18 @@ def f_apply_operations(
         op_type = op.get("type")
 
         if op_type == "merge":
-            # Writes a full soft-assignment snapshot → consumes a turn_number.
-            merge_clusters(
+            # The prompt lets the LLM put an inline new_name on a merge op so
+            # the oracle can say "merge these and call it X" in a single turn —
+            # without it the rename would need a forward-reference to a UUID
+            # that does not exist yet (forbidden, see #28).
+            inline_new_name = (op.get("new_name") or "").strip()
+            inline_new_desc = (op.get("new_description") or "").strip()
+
+            # Always let auto-name run — it produces BOTH name and description
+            # from the merged content, and we want the description even when
+            # the oracle is overriding the name (otherwise the cluster ends up
+            # with the oracle's chosen name but an empty description).
+            new_cluster = merge_clusters(
                 cluster_ids=op["cluster_ids"],
                 session_id=session_id,
                 turn_number=current_turn,
@@ -86,19 +97,56 @@ def f_apply_operations(
             # autoflush=False, so without this the second split/merge would
             # read the pre-operation DB state and carry forward wrong clusters.
             db.flush()
+
+            if inline_new_name or inline_new_desc:
+                # Preserve whichever side the oracle did NOT specify so we
+                # don't blow away the placeholder/auto-name we kept above.
+                rename_cluster(
+                    cluster_id=new_cluster.id,
+                    new_name=inline_new_name or (new_cluster.name or ""),
+                    new_description=inline_new_desc or (new_cluster.description or ""),
+                    db=db,
+                )
             current_turn += 1
 
         elif op_type == "split":
-            # Writes a full soft-assignment snapshot → consumes a turn_number.
-            split_cluster(
+            # Optional inline child names — same single-turn-naming pattern as
+            # the merge branch.  Without this, the LLM has to defer naming the
+            # children to the next turn because it cannot forward-reference
+            # not-yet-existing UUIDs (#28 rule).
+            inline_new_names = [
+                (n or "").strip()
+                for n in (op.get("new_names") or [])
+            ]
+            k = int(op.get("k", 2))
+
+            # Always let auto-name run — it generates BOTH name and description
+            # per child from the actual content. We override only the name(s)
+            # below, so each child keeps a content-appropriate description even
+            # when the oracle supplied an explicit name.
+            new_clusters = split_cluster(
                 cluster_id=op["cluster_id"],
                 session_id=session_id,
                 turn_number=current_turn,
                 db=db,
+                k=k,
                 axis_hint=axis_hint,
             )
             # Same flush reason as merge above.
             db.flush()
+
+            # K-means returns children in no oracle-meaningful order, so this
+            # mapping is best-effort: name[i] -> child[i].  Acceptable because
+            # the oracle can rename a misaligned child in the next turn.
+            for child, name in zip(new_clusters, inline_new_names):
+                if not name:
+                    continue
+                rename_cluster(
+                    cluster_id=child.id,
+                    new_name=name,
+                    new_description=child.description or "",
+                    db=db,
+                )
             current_turn += 1
 
         elif op_type == "move":
@@ -116,10 +164,22 @@ def f_apply_operations(
 
         elif op_type == "rename":
             # Only updates name/description — no new snapshot, no turn_number needed.
+            # The LLM usually emits only new_name on a rename op; without this
+            # lookup, rename_cluster would clobber a meaningful auto-generated
+            # description with the empty default. Preserve whichever side the
+            # oracle did NOT explicitly set (same pattern as the inline rename
+            # branches on merge/split).
+            inline_new_name = (op.get("new_name") or "").strip()
+            inline_new_desc = (op.get("new_description") or "").strip()
+            existing = (
+                db.query(DbCluster)
+                .filter(DbCluster.id == op["cluster_id"])
+                .first()
+            )
             rename_cluster(
                 cluster_id=op["cluster_id"],
-                new_name=op.get("new_name", ""),
-                new_description=op.get("new_description", ""),
+                new_name=inline_new_name or (existing.name if existing else ""),
+                new_description=inline_new_desc or (existing.description if existing else ""),
                 db=db,
             )
 

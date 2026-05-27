@@ -46,7 +46,9 @@ Respond with a single valid JSON object. No markdown fences, no commentary outsi
     }},
     {{
       "type": "split",
-      "cluster_id": "<existing cluster id>"
+      "cluster_id": "<existing cluster id>",
+      "k": 2,
+      "new_names": ["<optional name for sub-cluster 1>", "<optional name for sub-cluster 2>"]
     }},
     {{
       "type": "rename",
@@ -68,6 +70,7 @@ CONSTRAINTS
 - Use only cluster IDs present in the provided CURRENT CLUSTERS list. Do not invent IDs.
 - NEVER use a cluster name as a cluster_id. cluster_id must always be the UUID string from the list above.
 - To merge several clusters into one, emit a SINGLE merge operation whose cluster_ids lists ALL of them (e.g. ["id_1", "id_2", "id_3"]). NEVER chain multiple merge operations — each merge dissolves its inputs, so a later op referencing them will fail.
+- A merge operation MUST always include at least 2 distinct cluster_ids. If the oracle asks to "eliminate", "remove", or "delete" a cluster, there is no delete operation — instead merge it with the most similar remaining cluster and include BOTH ids in cluster_ids.
 - You cannot reference a cluster created by an earlier operation in the same list (e.g. after a merge you do not know the new cluster's UUID). If you need to merge then split, just emit the merge — the oracle will ask for the split in the next turn.
 - CLUSTER COUNT ARITHMETIC: if the oracle asks to go from N to K clusters, count carefully.
   - To REDUCE (K < N): emit a SINGLE merge of exactly (N - K + 1) cluster IDs. Example: 5 → 3 means merge(id1, id2, id3) — three IDs, reduces by 2. Do NOT emit two separate merges. Verify: N - (len(cluster_ids) - 1) = K before responding.
@@ -75,6 +78,9 @@ CONSTRAINTS
   - Never mix merges and splits to hit a target count in one turn — use whichever direction is needed and let the oracle continue from there.
 - operations can be an empty array when action is "no_change" or "explain".
 - Each operation must have a "type" field: merge | split | rename | move.
+- For "split", "k" is the number of sub-clusters to create (integer >= 2, default 2). Set k > 2 only when the oracle explicitly asks to split into a specific number of groups (e.g. "split into 3", "divide into 5 parts").
+- For "split", "new_names" is OPTIONAL. Include it (an array of strings, one per sub-cluster in order) ONLY when the oracle explicitly named the children — e.g. "split it into 'Music' and 'Books'". If the oracle did not name them, omit the field entirely so the system can auto-name from cluster content.
+- When the oracle supplies cluster names (in "new_name" on merge/rename, or in "new_names" on split), copy them VERBATIM — character-for-character — into the operation. Do NOT rephrase, expand, abbreviate, censor, sanitize, translate, capitalize differently, or "improve" them. The oracle's chosen label is authoritative; your job is to apply it, not to edit it.
 - For "move", point_ids may ONLY contain data point IDs the oracle explicitly referenced (see Target points above, or IDs named earlier in the conversation). NEVER invent point IDs or move points the oracle did not name — bulk reassignment is the clustering algorithm's job, not yours. Use "move" for point-level feedback such as resolving a boundary point or correcting a single misplaced point.
 - If feedback_type is "explain", set action to "explain" and leave operations empty.
 - If contradiction_detected is true, briefly note the conflict in the display field.

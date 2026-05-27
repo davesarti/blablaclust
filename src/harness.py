@@ -431,4 +431,6 @@ class ConversationContext:
     Restituisce un valore compreso tra 0.0 e 1.0.
     '''
     def get_cognitive_load_score(self, max_turns: int = 20) -> int:
-        return max(1, min(round(len(self._oracle_turns) / max_turns * 5), 5))
+        # Floor division instead of round() so the score only reaches 5
+        # (the stop threshold) when the session is genuinely near max_turns.
+        return max(1, min(len(self._oracle_turns) * 5 // max_turns + 1, 5))

@@ -59,7 +59,7 @@ def test_split_calls_split_cluster_with_correct_args():
     with patch(f"{MOD}.split_cluster") as mock_split:
         f_apply_operations([op], session_id="s1", turn_number=7, db=db)
     mock_split.assert_called_once_with(
-        cluster_id="c1", session_id="s1", turn_number=7, db=db, axis_hint=None
+        cluster_id="c1", session_id="s1", turn_number=7, db=db, k=2, axis_hint=None
     )
 
 
@@ -91,13 +91,18 @@ def test_rename_does_not_increment_turn_number():
     assert result == 2  # rename writes no snapshot
 
 
-def test_rename_defaults_new_description_to_empty_string():
+def test_rename_preserves_existing_description_when_oracle_omits_it():
+    """When oracle omits new_description, the existing cluster description is kept."""
     op = {"type": "rename", "cluster_id": "c1", "new_name": "New"}
     db = _db()
+    existing = MagicMock()
+    existing.name = "Old Name"
+    existing.description = "Existing description"
+    db.query.return_value.filter.return_value.first.return_value = existing
     with patch(f"{MOD}.rename_cluster") as mock_rename:
         f_apply_operations([op], session_id="s1", turn_number=2, db=db)
     _, kwargs = mock_rename.call_args
-    assert kwargs["new_description"] == ""
+    assert kwargs["new_description"] == "Existing description"
 
 
 # ── multiple operations ────────────────────────────────────────────────────
@@ -120,7 +125,7 @@ def test_multiple_ops_turn_number_increments_correctly():
     )
     mock_split.assert_called_once_with(
         cluster_id="c3", session_id="s1", turn_number=6,
-        db=mock_split.call_args[1]["db"], axis_hint=None
+        db=mock_split.call_args[1]["db"], k=2, axis_hint=None
     )
 
 

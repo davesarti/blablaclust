@@ -2,28 +2,22 @@
 
 The three possible actions:
   - "show"  →  present the current clustering state to the oracle
-  - "ask"   →  ask the oracle to clarify a specific ambiguous area
-                (triggered when boundary points are found with high uncertainty)
+  - "ask"   →  ask a targeted structural question (merge or split candidate)
   - "stop"  →  end the session (oracle is cognitively overloaded or the
                 clustering has stabilised over many turns)
 
 Decision logic (rule-based, no LLM needed):
-  1. If cognitive load is too high (score >= 4) or too many turns have passed
-     (turn_number > MAX_TURNS), stop — the oracle has given enough feedback.
-  2. If there are boundary points with uncertainty above ASK_THRESHOLD,
-     ask — there are genuinely ambiguous data points worth clarifying.
-  3. Otherwise, show — present the current state and wait for the next turn.
+  1. If cognitive load is too high (score >= 5) or too many turns have passed
+     (turn_number > MAX_TURNS), stop.
+  2. If two clusters overlap significantly, ask whether to merge them.
+     If a cluster has low internal cohesion, ask whether to split it.
+     Structural questions are asked one at a time, most urgent first.
+  3. Otherwise, show — present the current state and wait for next turn.
 """
 
-from src.engine.f_uncertainty import BoundaryPoint
+from src.engine.f_uncertainty import ClusterUncertainty
 from src.schemas import ChatSessionState, Display, SystemTurn
 from src.harness import ConversationContext
-
-# A point with uncertainty >= this value is worth asking the oracle about.
-# Raised from 0.4 to 0.45 to avoid asking too frequently after initial clustering,
-# when many points naturally land near cluster boundaries with uncertainty ~0.5.
-# 0.45 means "only ask for points that are genuinely ambiguous (>45% split between clusters)".
-ASK_THRESHOLD = 0.45
 
 # After this many turns the session is likely to have converged.
 MAX_TURNS = 20
@@ -31,14 +25,15 @@ MAX_TURNS = 20
 
 def f_next_best_step(
     state: ChatSessionState,
-    uncertainty: list[BoundaryPoint],
+    uncertainty: ClusterUncertainty,
     context: ConversationContext,
 ) -> SystemTurn:
     """Return the next action the system should take.
 
     Args:
         state: Current clustering state (clusters, turn number, history).
-        uncertainty: Output of f_uncertainty — boundary points sorted by score.
+        uncertainty: Output of f_cluster_uncertainty — cluster-level overlap
+                     and cohesion signals.
         context: Conversation memory, used to compute cognitive load.
 
     Returns:
@@ -48,7 +43,12 @@ def f_next_best_step(
     contradiction = bool(state.contradictions)
 
     # Rule 1: stop if the oracle is overloaded or the session has run long.
-    if cognitive_load >= 4 or state.turn_number > MAX_TURNS:
+    # Threshold is 5 (the maximum): load=4 means "heavy but manageable".
+    # Distinct reason codes let the eval harness bucket runs separately.
+    if cognitive_load >= 5 or state.turn_number > MAX_TURNS:
+        reason = (
+            "cognitive_overload" if cognitive_load >= 5 else "max_turns_reached"
+        )
         return SystemTurn(
             session_id=state.session_id,
             turn_number=state.turn_number,
@@ -64,13 +64,15 @@ def f_next_best_step(
             contradiction_detected=contradiction,
             contradiction_detail=state.contradictions[-1] if contradiction else None,
             cognitive_load_score=cognitive_load,
-            state_snapshot={"reason": "max_turns_or_load_reached"},
+            state_snapshot={"reason": reason},
         )
 
-    # Rule 2: ask if there are genuinely ambiguous data points.
-    ambiguous = [p for p in uncertainty if p.uncertainty_score >= ASK_THRESHOLD]
-    if ambiguous:
-        top = ambiguous[0]  # most uncertain point
+    # Rule 2a: ask about a merge if two clusters overlap significantly.
+    # Overlap means many points sit between them with no clear home — the oracle
+    # should decide if the distinction is real or if they should be one cluster.
+    if uncertainty.overlaps:
+        top = uncertainty.overlaps[0]
+        pct = round(top.overlap_fraction * 100)
         return SystemTurn(
             session_id=state.session_id,
             turn_number=state.turn_number,
@@ -79,25 +81,57 @@ def f_next_best_step(
             display=Display(
                 type="text",
                 content=(
-                    f"Some data points are ambiguous between clusters. "
-                    f"For example: \"{top.text_preview[:120]}\" "
-                    f"(uncertainty {top.uncertainty_score:.2f}). "
-                    f"How should this be classified?"
+                    f"Clusters \"{top.cluster_a_name}\" and \"{top.cluster_b_name}\" "
+                    f"overlap: {pct}% of data points ({top.n_overlap}) are ambiguous "
+                    f"between them. Are they meaningfully distinct, or should they be merged?"
                 ),
                 items=[
                     {
-                        "point_id": p.point_id,
-                        "text_preview": p.text_preview,
-                        "uncertainty_score": p.uncertainty_score,
-                        "cluster_scores": p.cluster_scores,
+                        "cluster_a_id": top.cluster_a_id,
+                        "cluster_a_name": top.cluster_a_name,
+                        "cluster_b_id": top.cluster_b_id,
+                        "cluster_b_name": top.cluster_b_name,
+                        "overlap_fraction": top.overlap_fraction,
+                        "n_overlap": top.n_overlap,
                     }
-                    for p in ambiguous[:5]  # surface top 5 to the oracle
                 ],
             ),
             contradiction_detected=contradiction,
             contradiction_detail=state.contradictions[-1] if contradiction else None,
             cognitive_load_score=cognitive_load,
-            state_snapshot={"ambiguous_count": len(ambiguous)},
+            state_snapshot={"overlap_count": len(uncertainty.overlaps)},
+        )
+
+    # Rule 2b: ask about a split if a cluster has low internal cohesion.
+    # Low cohesion means the cluster is internally diffuse — points inside it
+    # are not confidently assigned to it, suggesting sub-themes worth separating.
+    if uncertainty.low_cohesion:
+        worst = uncertainty.low_cohesion[0]
+        pct = round(worst.mean_max_prob * 100)
+        return SystemTurn(
+            session_id=state.session_id,
+            turn_number=state.turn_number,
+            action="ask",
+            clusters_updated=False,
+            display=Display(
+                type="text",
+                content=(
+                    f"Cluster \"{worst.cluster_name}\" has low internal cohesion "
+                    f"(average confidence {pct}%). It may contain distinct sub-themes. "
+                    f"Would you like to split it?"
+                ),
+                items=[
+                    {
+                        "cluster_id": worst.cluster_id,
+                        "cluster_name": worst.cluster_name,
+                        "mean_max_prob": worst.mean_max_prob,
+                    }
+                ],
+            ),
+            contradiction_detected=contradiction,
+            contradiction_detail=state.contradictions[-1] if contradiction else None,
+            cognitive_load_score=cognitive_load,
+            state_snapshot={"low_cohesion_count": len(uncertainty.low_cohesion)},
         )
 
     # Rule 3: show — clustering looks stable, present current state.
@@ -123,4 +157,3 @@ def f_next_best_step(
         cognitive_load_score=cognitive_load,
         state_snapshot={"reason": "stable_clustering"},
     )
-
