@@ -5,6 +5,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BlaBlaClust</title>
+  <!-- Inter (modern, highly legible UI sans). Falls back to the system stack
+       if the network is unavailable, so the app still renders offline. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
       /* ── Palette ────────────────────────────────────────────────
@@ -37,15 +42,15 @@
       --r:           2px;
       --serif:       Georgia, 'Times New Roman', serif;
       --mono:        ui-monospace, 'SF Mono', Menlo, 'Cascadia Code', monospace;
-      --sans:        -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --sans:        'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: var(--sans);
-      font-size: 13px;
-      line-height: 1.5;
+      font-size: 15px;
+      line-height: 1.55;
       color: var(--text);
       background-color: var(--bg);
       background-image: radial-gradient(circle at 1px 1px, rgba(74,124,89,.06) 1px, transparent 0);
@@ -53,6 +58,8 @@
       overflow: hidden;
       height: 100vh;
       height: 100dvh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
     /* ── HEADER ── */
@@ -86,7 +93,7 @@
     }
     #header .header-dataset {
       font-family: var(--mono);
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 700;
       letter-spacing: 0.1em;
       text-transform: uppercase;
@@ -124,7 +131,7 @@
     }
     .status-badge {
       font-family: var(--mono);
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 700;
       letter-spacing: 0.12em;
       padding: 3px 8px;
@@ -230,7 +237,7 @@
     #session-list.visible { display: block; }
     .session-list-label {
       font-family: var(--mono);
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 700;
       letter-spacing: 0.14em;
       text-transform: uppercase;
@@ -365,7 +372,7 @@
 
     #cluster-area .section-label {
       font-family: var(--mono);
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 700;
       letter-spacing: 0.14em;
       text-transform: uppercase;
@@ -375,7 +382,7 @@
     .cluster-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(256px, 1fr));
-      gap: 10px;
+      gap: 16px;
     }
 
     /* per-cluster accent colors */
@@ -503,7 +510,7 @@
     .sb-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
     .sb-label {
       font-family: var(--mono);
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 700;
       letter-spacing: 0.14em;
       text-transform: uppercase;
@@ -520,7 +527,7 @@
     }
     .stat-unit {
       font-family: var(--mono);
-      font-size: 9px;
+      font-size: 10px;
       color: var(--text-faint);
       margin-top: 3px;
       letter-spacing: 0.1em;
@@ -603,7 +610,7 @@
     }
     #drawer-topbar .label {
       font-family: var(--mono);
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 700;
       letter-spacing: 0.14em;
       text-transform: uppercase;
@@ -637,10 +644,10 @@
     #chat-history {
       flex: 1;
       overflow-y: auto;
-      padding: 10px 14px 6px;
+      padding: 14px 18px 10px;
       display: flex;
       flex-direction: column;
-      gap: 7px;
+      gap: 11px;
     }
     #chat-history::-webkit-scrollbar { width: 3px; }
     #chat-history::-webkit-scrollbar-track { background: transparent; }
@@ -854,7 +861,7 @@
     .form-field label {
       display: block;
       font-family: var(--mono);
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 700;
       letter-spacing: 0.12em;
       margin-bottom: 5px;
@@ -1029,11 +1036,7 @@
     <button class="btn-primary" onclick="openModal('modal-new-session'); loadDatasets()" aria-label="Start new session">
       Start new session
     </button>
-    <div class="welcome-meta">
-      <span class="welcome-stat">1,500 reviews</span>
-      <div class="welcome-sep"></div>
-      <span class="welcome-stat">Amazon Electronics</span>
-      <div class="welcome-sep"></div>
+    <div class="welcome-meta" id="welcome-meta">
       <span class="welcome-stat">Iterative clustering</span>
     </div>
   </div>
@@ -1423,6 +1426,45 @@ async function loadRecentSessions() {
     if (!relevant.length) return;
     renderSessionList(relevant);
   } catch (_) {}
+}
+
+// Populate the welcome-screen meta line from the datasets actually loaded in
+// the DB, instead of a hardcoded "1,500 reviews / Amazon Electronics" label.
+// UI-only: /datasets exposes dataset names (no per-row count), so we show the
+// real name(s) and fall back gracefully if the call fails.
+async function loadWelcomeStats() {
+  const meta = document.getElementById('welcome-meta');
+  if (!meta) return;
+  try {
+    const res = await fetch('/datasets');
+    if (!res.ok) return;
+    const datasets = await res.json();
+    const names = (datasets || []).map(d => d.dataset_name).filter(Boolean);
+
+    let label;
+    if (names.length === 0)      label = 'No datasets loaded';
+    else if (names.length === 1) label = names[0];
+    else                         label = `${names.length} datasets available`;
+
+    const mk = (txt) => {
+      const s = document.createElement('span');
+      s.className = 'welcome-stat';
+      s.textContent = txt;          // textContent → safe against odd names
+      return s;
+    };
+    const sep = () => {
+      const d = document.createElement('div');
+      d.className = 'welcome-sep';
+      return d;
+    };
+
+    meta.innerHTML = '';
+    meta.appendChild(mk(label));
+    meta.appendChild(sep());
+    meta.appendChild(mk('Iterative clustering'));
+  } catch (_) {
+    /* leave the static "Iterative clustering" fallback in place */
+  }
 }
 
 function showDeleteConfirm(sessionId) {
@@ -1867,6 +1909,7 @@ function _slug(str) {
 
 // ── INIT ───────────────────────────────────────────────────────────────────
 loadRecentSessions();
+loadWelcomeStats();
 </script>
 </body>
 </html>
