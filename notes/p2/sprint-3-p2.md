@@ -7,8 +7,10 @@ sprint-omnibus task, plus several additional fixes applied after the initial
 sprint: end-to-end wiring of variable-arity split, broken import fixes, a
 missing `tiktoken` dependency resolved, a critical correctness bug in
 `merge_clusters` (every merge was pulling the entire dataset into the new
-cluster), a top-level side-effect hazard in the dataset sampling script, and
-a cross-team audit that produced two issues for P3.
+cluster), a top-level side-effect hazard in the dataset sampling script, a
+cross-team audit that produced two issues for P3, fresh test coverage for the
+dataset-processing layer (validated by mutation testing), and a small
+deduplication chore in the clusters router.
 
 ### 1. Centralised cluster naming — one LLM call instead of N
 
@@ -175,7 +177,7 @@ derived from the whole dataset.
 ### 9. Sample-dataset script: guard side effects + rename
 
 `src/dataset_processing/download_dataset.py` →
-`src/dataset_processing/sample_amazon_dataset.py` (uncommitted).
+`src/dataset_processing/sample_amazon_dataset.py` (committed in `862a691`).
 
 The script had two problems:
 1. All sampling / CSV writes happened at module top-level — importing it
@@ -217,6 +219,42 @@ removed), and `f_next_state.py` is now dead code (never called by
 `turns.py`, would double the LLM call if anyone used it). Logged in this
 note as candidates for a follow-up issue if P3 confirms.
 
+### 11. Test coverage for the dataset-processing layer
+
+`tests/test_text_cleaning.py` (new) + `tests/test_dataset_load_utils.py` (new).
+
+Two P2 files had zero test coverage — exactly the silent-regression risk the
+cleaning + ingest pipeline is prone to. Added:
+
+- **`test_text_cleaning.py`** (25 tests) — every private helper in isolation
+  (`_normalize_unicode`, `_fix_double_quotes`, `_collapse_repeated_chars`,
+  `_collapse_whitespace`) plus `clean_fields` / `clean_text` end-to-end on
+  representative dirty strings. Edge cases: empty input, decomposed unicode
+  (NFC), CSV-escaped quotes, long runs of the same character, whitespace
+  across the title+text join.
+- **`test_dataset_load_utils.py`** (18 tests) — runs against an in-memory
+  SQLite DB (StaticPool, same pattern as `test_cluster_operations.py`).
+  Covers header validation (missing → `ValueError`, extra columns OK),
+  empty-text skip, non-int / missing label skip, field cleaning on insert,
+  and **transaction rollback** in `process_csv_upload` (both on an embedding
+  failure via monkeypatch and on bad headers — nothing persists).
+
+Validated with **mutation testing**: temporarily broke each behaviour in the
+source (collapse threshold, quote fix, whitespace strip, rollback, empty-text
+skip, header raise) and confirmed at least one test fails for every mutation.
+The tests have teeth, not just green checkmarks.
+
+### 12. Deduplicate session lookup in clusters.py
+
+`backend/routers/clusters.py`.
+
+`run_initial_clustering` and `suggest_k` each reimplemented the
+`_get_session_or_404` helper inline (3 identical lines apiece). Replaced both
+with a call to the existing helper, so all four session lookups in the file
+now go through one code path. Net −4 lines, zero behaviour change — verified
+the app still loads via `backend.main` and the 8 `test_turns_endpoint.py`
+tests pass.
+
 ## Results
 
 | Check | Result |
@@ -239,10 +277,15 @@ note as candidates for a follow-up issue if P3 confirms.
 | Live merge naming with Gemini after fix | produces "Shipping Problems" + description |
 | `sample_amazon_dataset.py` import does NOT touch CSVs on disk | verified (mtime unchanged) |
 | `sample_amazon_dataset.py` run as `__main__` produces 1200/300 split | verified |
+| `test_text_cleaning.py` (25 tests, new) | all pass |
+| `test_dataset_load_utils.py` (18 tests, new) | all pass |
+| Mutation testing on text_cleaning + dataset_load_utils | 6/6 mutations caught |
+| `clusters.py` session-lookup dedup — app loads + endpoint tests | verified (8 tests pass) |
 
-Full P2-relevant suite: 45 tests pass in the vibe-coders env
-(`test_cluster_operations`, `test_cluster_naming`, `test_clustering_log`).
-`test_f_apply_operations.py` 14 tests pass after the `k` wiring update.
+Full P2-relevant suite: **110 tests pass** in the vibe-coders env across
+`test_text_cleaning`, `test_dataset_load_utils`, `test_cluster_operations`,
+`test_cluster_naming`, `test_clustering_log`, `test_initial_clustering`,
+`test_f_parse_clustering_intent`, and `test_turns_endpoint`.
 
 ## What I changed in other people's files
 
@@ -283,19 +326,17 @@ Full P2-relevant suite: 45 tests pass in the vibe-coders env
 - `6612273` — feat: wire k parameter through split op end-to-end
 - `ea627e7` — fix: correct text_cleaning imports in dataset_processing scripts
 - `22a5b0e` — fix: drop merged mass in merge_clusters to preserve un-pooled argmax
+- `862a691` — rename download_dataset.py → sample_amazon_dataset.py with main() guard
 
 All pushed to `origin/main`.
 
-### Uncommitted (waiting for a stable moment to push)
-
-- `download_dataset.py` → `sample_amazon_dataset.py` rename with `main()`
-  guard and extracted constants. No callers in the repo, so the rename is
-  safe but worth landing when the team isn't actively touching nearby code.
+**Pending commit** (items 11–12 above, verified, not yet pushed):
+`tests/test_text_cleaning.py`, `tests/test_dataset_load_utils.py`, and the
+`clusters.py` session-lookup dedup.
 
 ### GitHub issues opened during this sprint
 
 - **#42** — `f_eval.py crashes on Gemini` (P3)
 - **#43** — `Cluster descriptions get wiped or never set on rename / merge / split` (P3, with optional slice for P4)
-- UI feedback issue for P5 — drafted in `notes/p2/issue-for-p5-ui.md`, not
-  yet pushed to GitHub (waiting on the team to decide which UI revamp scope
-  to take on).
+- UI feedback for P5 (home button, loading indicator, dynamic dataset label,
+  general restyle) — drafted in chat, not yet filed as a GitHub issue.

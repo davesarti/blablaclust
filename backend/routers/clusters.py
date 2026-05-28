@@ -48,9 +48,7 @@ def run_initial_clustering(
 
     Can only be called once per session — returns 409 if clusters already exist.
     """
-    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
-    if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+    session = _get_session_or_404(session_id, db)
 
     existing = db.query(DbCluster).filter(DbCluster.session_id == session_id).first()
     if existing is not None:
@@ -148,9 +146,7 @@ def suggest_k(
     A diagnostic to help the oracle choose the number of clusters before
     running POST /clusters/{session_id} — does not modify any state.
     """
-    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
-    if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+    session = _get_session_or_404(session_id, db)
 
     data_points = (
         db.query(DataPoint)
