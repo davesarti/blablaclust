@@ -1371,11 +1371,12 @@ async function refreshClusters() {
 function buildDiff(items) {
   const visible = items?.filter(item => !(item.name && !item.size));
   if (!visible?.length) return null;
-  return visible.map(item => {
-    if (item.text_preview) return `• "${item.text_preview.slice(0, 90)}" (uncertainty ${item.uncertainty_score?.toFixed(2)})`;
-    if (item.name)         return `• ${item.name}: ${item.size} points`;
-    return JSON.stringify(item);
-  }).join('\n');
+  const lines = visible.flatMap(item => {
+    if (item.text_preview) return [`• "${item.text_preview.slice(0, 90)}" (uncertainty ${item.uncertainty_score?.toFixed(2)})`];
+    if (item.name)         return [`• ${item.name}: ${item.size} points`];
+    return [];
+  });
+  return lines.length ? lines.join('\n') : null;
 }
 
 function handleSystemTurn(turnData) {

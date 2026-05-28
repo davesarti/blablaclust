@@ -11,7 +11,9 @@ that capture the shared theme. Be concrete: prefer "Shipping delays and damage"
 over a vague label like "Negative reviews".
 
 Respond with a single valid JSON object mapping each cluster id to its label.
-No markdown fences, no commentary outside the JSON.
+No markdown fences, no commentary outside the JSON. Inside name/description
+values, escape any double quote as \" or avoid it entirely — write measurements
+as "15.6 inch", never 15.6" — otherwise the JSON will not parse.
 
 {{
   "<cluster_id>": {{

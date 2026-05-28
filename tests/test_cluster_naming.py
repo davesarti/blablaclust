@@ -184,6 +184,56 @@ class TestLLMFailure:
         assert clusters[0].name == "Cluster N"
 
 
+class TestUnescapedQuotes:
+    """LLM responses with raw double quotes in values (inch marks, quoted phrases)
+    are invalid JSON but must still be recovered — this is the dominant real-world
+    failure for electronics-review naming (15.6", 3.5", etc.)."""
+
+    def _raw(self, text: str) -> LLMResponse:
+        return LLMResponse(
+            text=text,
+            usage={"input_tokens": 0, "output_tokens": 0,
+                   "cache_read_tokens": 0, "cache_creation_tokens": 0},
+            model="test",
+        )
+
+    def test_inch_mark_in_description_is_recovered(self):
+        clusters = [_cluster("c1"), _cluster("c2")]
+        dps = [_dp("p1", text="laptop"), _dp("p2", text="cable")]
+        assignments = [_assignment("p1", "c1", 0.9), _assignment("p2", "c2", 0.9)]
+        # Note the raw, unescaped " after 15.6 — exactly what breaks json.loads.
+        raw = (
+            '{\n'
+            '  "c1": {\n'
+            '    "name": "Laptop screens",\n'
+            '    "description": "Reviews about 15.6" laptop screens with dead pixels"\n'
+            '  },\n'
+            '  "c2": {\n'
+            '    "name": "Cables",\n'
+            '    "description": "USB cables that stopped working"\n'
+            '  }\n'
+            '}'
+        )
+
+        with patch("src.engine.cluster_naming.call_llm", return_value=self._raw(raw)):
+            name_clusters(clusters, assignments, dps)
+
+        assert clusters[0].name == "Laptop screens"
+        assert clusters[0].description == 'Reviews about 15.6" laptop screens with dead pixels'
+        assert clusters[1].name == "Cables"
+
+    def test_quoted_phrase_in_value_is_recovered(self):
+        clusters = [_cluster("c1")]
+        dps = [_dp("p1", text="x")]
+        assignments = [_assignment("p1", "c1", 0.9)]
+        raw = '{"c1": {"name": "The "best" earbuds", "description": "ok."}}'
+
+        with patch("src.engine.cluster_naming.call_llm", return_value=self._raw(raw)):
+            name_clusters(clusters, assignments, dps)
+
+        assert clusters[0].name == 'The "best" earbuds'
+
+
 class TestPartialResponse:
     """If the LLM omits some cluster IDs, only the present ones get named."""
 
