@@ -437,9 +437,23 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     system_turn.token_usage = turn_usage
     system_turn.cost_usd = turn_cost
 
-    # Surface the LLM's real display text regardless of action (show/ask/stop).
-    if isinstance(raw_display, str):
-        system_turn.display.content = raw_display
+    # Always surface the LLM's actual reply, regardless of action.
+    # Guard: only use the LLM's display text if it is plain prose, not JSON.
+    # Small/free models sometimes put structured JSON inside the display field
+    # instead of a human-readable explanation, which would show raw JSON in
+    # the chat. If the value parses as JSON or starts with { / [, fall back
+    # to the f_next_best_step message which is always a proper English string.
+    if isinstance(raw_display, str) and raw_display.strip():
+        stripped = raw_display.strip()
+        is_json = stripped.startswith(("{", "["))
+        if not is_json:
+            try:
+                json.loads(stripped)
+                is_json = True
+            except (ValueError, TypeError):
+                pass
+        if not is_json:
+            system_turn.display.content = raw_display
 
     # Close the session when the planner decides to stop.
     if system_turn.action == "stop":
