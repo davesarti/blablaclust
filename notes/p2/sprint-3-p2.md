@@ -9,8 +9,11 @@ missing `tiktoken` dependency resolved, a critical correctness bug in
 `merge_clusters` (every merge was pulling the entire dataset into the new
 cluster), a top-level side-effect hazard in the dataset sampling script, a
 cross-team audit that produced two issues for P3, fresh test coverage for the
-dataset-processing layer (validated by mutation testing), and a small
-deduplication chore in the clusters router.
+dataset-processing layer (validated by mutation testing), a small
+deduplication chore in the clusters router, and — covering P5's slice while
+she's on evaluation — a round of UI improvements (dynamic dataset label +
+typography refresh) plus a new issue (#47) to surface token/cost/cognitive
+load in the UI.
 
 ### 1. Centralised cluster naming — one LLM call instead of N
 
@@ -255,6 +258,97 @@ now go through one code path. Net −4 lines, zero behaviour change — verified
 the app still loads via `backend.main` and the 8 `test_turns_endpoint.py`
 tests pass.
 
+### 13. UI improvements (covering P5's slice)
+
+`ui/index.html` — **uncommitted**. P5 is busy on evaluation, so I picked up
+the "UI improvements" issue. Audited the 4 requested points against the real
+code first — two were already done:
+
+| Point | State |
+|---|---|
+| 1. Home / New session button | **Already existed** (`← BACK` in the header → `goBackToWelcome()`) |
+| 2. Typography refresh | **Partially done** (see below) |
+| 3. Loading indicator | **Already existed** (rotating "Vibing…/Noodling…" messages wired to the clustering call) |
+| 4. Dynamic dataset label | **Done** |
+
+What I actually changed:
+- **#4** — replaced the hardcoded "1,500 reviews / Amazon Electronics" welcome
+  stat with `loadWelcomeStats()`, which reads `GET /datasets` and shows the
+  real dataset name(s). UI-only (the endpoint exposes names, not per-row
+  counts); XSS-safe via `textContent`; falls back to "Iterative clustering"
+  if the call fails.
+- **#2 (partial)** — imported **Inter** from Google Fonts (with system-stack
+  fallback for offline), bumped the base font 13px → 15px, line-height
+  1.5 → 1.55, the smallest micro-labels 9px → 10px, cluster-grid gap
+  10 → 16px, and chat padding/gap. Verified live with screenshots: Inter +
+  15px applied, layout holds with no overflow.
+
+Verified by running the app and screenshotting both the welcome screen
+(label now reads "amazon_reviews | Iterative clustering") and the workspace
+(cluster cards well-spaced, Inter at 15px).
+
+**Deliberately NOT done** (out of the chosen scope):
+- The "distinctive palette / accent colour" part of #2 — kept the existing
+  sage-green paper palette; only did the content refresh.
+- Base font left at 15px rather than the issue's suggested 17–18px (the
+  panels are fixed-width and 16px+ risked overflow).
+- `ui/DESIGN.md` not updated with the new font/size guidelines.
+
+### 14. Opened issue #47 — wire token/cost/cognitive load to the UI
+
+While in the UI I noticed the sidebar always shows "0 tokens / $0.0000". The
+UI is fully wired to display `token_usage`, `cost_usd`, and
+`cognitive_load_score`, and the `SystemTurn` schema carries all three — but
+`backend/routers/turns.py` discards `f_output`'s usage (`raw, _usage = ...`)
+and never calls the imported `estimate_cost_usd`, so the fields stay empty.
+Filed as **#47** (assigned to me), ~15-min backend fix. Touches `turns.py`
+(P3/P1 router) — heads-up flagged in the issue.
+
+### 15. Second dataset (20 Newsgroups) — adaptivity proof
+
+`src/dataset_processing/sample_20newsgroups.py` (new) +
+`data/20newsgroups_train.csv` + `data/20newsgroups_frozen.csv`.
+
+Added a second dataset to prove the system is genuinely dataset-agnostic and
+not tuned to Amazon sentiment. Curated 6 well-separated newsgroups
+(`comp.graphics`, `rec.autos`, `rec.sport.baseball`, `sci.med`, `sci.space`,
+`talk.politics.guns`) via `sklearn.datasets.fetch_20newsgroups`, stripped
+headers/footers/quotes, and wrote 1200 train + 300 frozen rows in the
+`label,title,text` schema. `title` is left empty on purpose so the category
+label isn't leaked into the embedding (`clean_text` concatenates title+text).
+
+Verified live end-to-end: uploaded via `POST /datasets/upload`, generated
+1200 embeddings, ran k=6 clustering. The system recovered all six topics with
+topic-appropriate names ("Space Exploration", "Baseball Game Analysis", …) —
+not sentiment labels — and **87.9% purity** against the known ground-truth
+categories (per-cluster 69–99%). Amazon (`amazon_reviews`) is untouched; the
+two datasets coexist in the DB isolated by `dataset_name`.
+
+Known follow-ups surfaced by this work, filed as issues for the team: #48
+(prompts still say "customer reviews" — P4), #49 (verify merge/split/move on
+20NG — P3), #50 (eval scenarios for 20NG — P5), #51 (datasets API should
+expose per-dataset counts — P1), #52 (generalization mapping function on the
+frozen splits — me).
+
+### 16. Silhouette computed twice in the initial-clustering POST
+
+`src/engine/initial_clustering.py` + `backend/routers/clusters.py`
++ `src/engine/cluster_operations.py`.
+
+`POST /clusters` fit k-means **twice** on the full ~1200-point dataset: once
+inside `initial_clustering` (for the structured log) and again via
+`silhouette_for_k` in the router, purely to return the score in the HTTP
+response. The two values could also diverge if the seed weren't fixed.
+
+Changed `initial_clustering` to return `(clusters, assignments, silhouette)`
+— it already computed the score internally — and the router now reads it
+directly, dropping the `silhouette_for_k` call entirely. One k-means run per
+clustering, single source of truth. Updated `split_cluster` (ignores the
+third value) and the affected tests; added
+`test_returns_silhouette_matching_the_log` (returned value == logged value)
+and `test_returns_none_silhouette_for_k1`. `silhouette_for_k` stays defined
+as a public diagnostic but is no longer on the POST path.
+
 ## Results
 
 | Check | Result |
@@ -281,11 +375,17 @@ tests pass.
 | `test_dataset_load_utils.py` (18 tests, new) | all pass |
 | Mutation testing on text_cleaning + dataset_load_utils | 6/6 mutations caught |
 | `clusters.py` session-lookup dedup — app loads + endpoint tests | verified (8 tests pass) |
+| 20 Newsgroups adaptivity (k=6 vs. ground truth) | 87.9% purity, topic-based names |
+| 20NG `title` left empty (no label leak into embedding) | verified (1200/1200) |
+| Amazon dataset intact after adding 20NG | verified (CSVs untouched, isolated by `dataset_name`) |
+| `initial_clustering` returns silhouette matching the log | verified (test + live POST) |
+| `POST /clusters` fits k-means once (was twice) | verified (silhouette_for_k removed from path) |
 
-Full P2-relevant suite: **110 tests pass** in the vibe-coders env across
+Full P2-relevant suite: **60+ tests pass** in the vibe-coders env across
 `test_text_cleaning`, `test_dataset_load_utils`, `test_cluster_operations`,
 `test_cluster_naming`, `test_clustering_log`, `test_initial_clustering`,
-`test_f_parse_clustering_intent`, and `test_turns_endpoint`.
+`test_f_parse_clustering_intent`, and `test_turns_endpoint` (the silhouette
+refactor added two `test_initial_clustering` cases; all green).
 
 ## What I changed in other people's files
 
@@ -328,15 +428,44 @@ Full P2-relevant suite: **110 tests pass** in the vibe-coders env across
 - `22a5b0e` — fix: drop merged mass in merge_clusters to preserve un-pooled argmax
 - `862a691` — rename download_dataset.py → sample_amazon_dataset.py with main() guard
 
-All pushed to `origin/main`.
+All pushed to `origin/main`. (Items 11–12 — the new tests and the
+`clusters.py` dedup — are now committed too.)
 
-**Pending commit** (items 11–12 above, verified, not yet pushed):
-`tests/test_text_cleaning.py`, `tests/test_dataset_load_utils.py`, and the
-`clusters.py` session-lookup dedup.
+**Pending commit** (verified, not yet pushed — grouped into 4 themed commits):
+1. silhouette perf fix (item 16) — `initial_clustering.py`, `clusters.py`,
+   `cluster_operations.py`, `test_cluster_operations.py`,
+   `test_initial_clustering.py`
+2. 20 Newsgroups dataset (item 15) — `sample_20newsgroups.py` +
+   `data/20newsgroups_{train,frozen}.csv`
+3. UI improvements (item 13) — `ui/index.html`
+4. these sprint notes
 
 ### GitHub issues opened during this sprint
 
 - **#42** — `f_eval.py crashes on Gemini` (P3)
 - **#43** — `Cluster descriptions get wiped or never set on rename / merge / split` (P3, with optional slice for P4)
-- UI feedback for P5 (home button, loading indicator, dynamic dataset label,
-  general restyle) — drafted in chat, not yet filed as a GitHub issue.
+- **#47** — `Wire token usage, cost, and cognitive load through to the UI` (me; ~15-min `turns.py` fix)
+- **#48** — `Make prompts dataset-agnostic (remove Amazon/review framing)` (P4)
+- **#49** — `Verify the conversational loop (merge/split/move) on a non-Amazon dataset` (P3)
+- **#50** — `Add eval scenarios for 20_newsgroups` (P5)
+- **#51** — `Expose per-dataset metadata (record count) from the datasets API` (P1)
+- **#52** — `Generalization mapping function: assign held-out items via the codified clustering` (me)
+- UI improvements issue (home button, loading, dynamic label, restyle) —
+  worked under item 13; mostly addressed, restyle/palette deferred.
+
+## To do / still open
+
+P2-relevant items still outstanding, roughly in priority order:
+
+1. **Commit `ui/index.html`** (item 13) and decide whether to close the UI
+   issue now (with a note that the palette restyle is deferred) or keep it
+   open for the accent-colour pass before the demo.
+2. **#47** — wire token/cost/cognitive load in `turns.py` (the sidebar still
+   shows "0 tokens / $0.0000"). ~15 min, mine.
+3. **Optional UI follow-ups** (deferred from the UI issue): distinctive
+   palette / accent colour, base font 17–18px, update `ui/DESIGN.md`.
+4. **Bigger project gaps that touch P2** (from the full-project audit, see
+   `project_remaining_tasks.pdf` on Desktop): generalization mapping function
+   on `frozen_eval.csv`, hierarchy (drill-in/zoom-out) on the clustering
+   side, optional HDBSCAN backend, instructional re-embedding. These are the
+   real deliverable-movers for the final hand-in, not the UI polish.
