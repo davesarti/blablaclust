@@ -118,8 +118,14 @@ def call_openrouter(
         )
 
     completion = _retry_sync_openai(_call)
+    content = completion.choices[0].message.content
+    if content is None:
+        raise ValueError(
+            f"OpenRouter returned no text content "
+            f"(finish_reason={completion.choices[0].finish_reason!r}, model={model!r})"
+        )
     return LLMResponse(
-        text=completion.choices[0].message.content,
+        text=content,
         usage=extract_usage_openai(completion),
         model=model,
     )
@@ -145,8 +151,14 @@ async def call_openrouter_async(
         )
 
     completion = await _retry_async_openai(_call)
+    content = completion.choices[0].message.content
+    if content is None:
+        raise ValueError(
+            f"OpenRouter returned no text content "
+            f"(finish_reason={completion.choices[0].finish_reason!r}, model={model!r})"
+        )
     return LLMResponse(
-        text=completion.choices[0].message.content,
+        text=content,
         usage=extract_usage_openai(completion),
         model=model,
     )

@@ -1,6 +1,6 @@
 import json
 from src.schemas import ChatSessionState, InputOracle
-from src.harness import ConversationContext, render_prompt, call_llm, hash_prompt, estimate_cost_usd, extract_json_text
+from src.harness import ConversationContext, render_prompt, call_llm, hash_prompt, estimate_cost_usd, loads_llm_json
 from src.logger import log_llm_call
 
 
@@ -41,7 +41,7 @@ def f_output(
         cost_usd=estimate_cost_usd(msg.usage),
     )
 
-    raw = json.loads(extract_json_text(msg.text))
+    raw = loads_llm_json(msg.text)
 
     # Register Claude's response in the conversation memory.
     context.add_system_turn(raw)

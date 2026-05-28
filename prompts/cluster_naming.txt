@@ -10,7 +10,9 @@ For each cluster, produce a short, specific name and a one-sentence description.
 Be concrete and specific to what distinguishes THIS cluster from the others.
 
 Respond with a single valid JSON object mapping each cluster id to its label.
-No markdown fences, no commentary outside the JSON.
+No markdown fences, no commentary outside the JSON. Inside name/description
+values, escape any double quote as \" or avoid it entirely — write measurements
+as "15.6 inch", never 15.6" — otherwise the JSON will not parse.
 
 {{
   "<cluster_id>": {{

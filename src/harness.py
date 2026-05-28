@@ -76,7 +76,67 @@ def extract_json_text(text: str) -> str:
     match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
     if match:
         return match.group(1).strip()
+    # Fall back: extract the first top-level {...} block, ignoring surrounding prose
+    match = re.search(r"(\{[\s\S]*\})", text)
+    if match:
+        return match.group(1).strip()
     return text
+
+
+def _escape_unescaped_quotes(s: str) -> str:
+    """Escape stray double quotes inside JSON string values.
+
+    LLMs routinely emit raw double quotes inside string values — inch marks
+    (15.6"), quoted phrases ("best") — which is invalid JSON and makes json.loads
+    raise "Expecting ',' delimiter". We walk the text tracking whether we are
+    inside a string, and escape any `"` that is NOT a structural terminator. A
+    terminator is a quote followed (after optional whitespace) by one of ``:,}]``
+    or end-of-input; anything else is treated as content and escaped.
+    """
+    out: list[str] = []
+    in_string = False
+    i, n = 0, len(s)
+    while i < n:
+        c = s[i]
+        if not in_string:
+            out.append(c)
+            if c == '"':
+                in_string = True
+            i += 1
+        elif c == "\\":
+            out.append(c)
+            if i + 1 < n:
+                out.append(s[i + 1])
+                i += 2
+            else:
+                i += 1
+        elif c == '"':
+            j = i + 1
+            while j < n and s[j] in " \t\r\n":
+                j += 1
+            if j >= n or s[j] in ":,}]":
+                out.append(c)
+                in_string = False
+            else:
+                out.append('\\"')
+            i += 1
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def loads_llm_json(text: str) -> Any:
+    """Parse JSON from an LLM response, tolerating unescaped double quotes.
+
+    Strict parse first (the common path); only if that fails do we escape stray
+    quotes and retry. Raises json.JSONDecodeError if still unrecoverable.
+    """
+    raw = extract_json_text(text)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return json.loads(_escape_unescaped_quotes(raw))
 
 
 # ---------------------------------------------------------------------------

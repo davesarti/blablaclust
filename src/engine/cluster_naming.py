@@ -5,9 +5,7 @@ asks the LLM (via the harness) to label all clusters in a single call.
 Mutates the Cluster objects in place.
 """
 
-import json
-
-from src.harness import call_llm, render_prompt, extract_json_text
+from src.harness import call_llm, render_prompt, loads_llm_json
 from src.logger import log
 from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoftAssignment
 
@@ -99,12 +97,13 @@ def name_clusters(
 
     # Naming is best-effort: a failed LLM call (no API key, rate limit,
     # unreachable) or an unparseable response must not abort clustering.
+    response = None
     try:
         response = call_llm(
             [{"role": "user", "content": "Name all clusters."}],
             system=prompt,
         )
-        parsed = json.loads(extract_json_text(response.text))
+        parsed = loads_llm_json(response.text)
 
         clusters_by_id = {c.id: c for c in clusters}
         for cluster_id in nameable_ids:
@@ -117,6 +116,10 @@ def name_clusters(
             if description := entry.get("description"):
                 cluster.description = str(description)
     except Exception as e:
-        log.warning(f"cluster_naming: LLM call failed or returned invalid JSON, keeping placeholder names for all clusters. Error: {e}")
+        snippet = repr(response.text[:500]) if response is not None else "<no response>"
+        log.warning(
+            f"cluster_naming: LLM call failed or returned invalid JSON, keeping "
+            f"placeholder names for all clusters. Error: {e}. Raw response: {snippet}"
+        )
 
     return clusters
