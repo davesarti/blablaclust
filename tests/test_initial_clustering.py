@@ -49,7 +49,7 @@ def test_soft_assignments_sharper_than_uniform(tmp_path, monkeypatch):
     monkeypatch.setattr(logger, "_clustering_log_path", tmp_path / "runs.jsonl")
 
     points = _marginal_points()
-    _, assignments = initial_clustering(points, k=3, session_id="s", turn_number=0)
+    _, assignments, _ = initial_clustering(points, k=3, session_id="s", turn_number=0)
 
     max_probs = _max_probs(assignments)
     # Uniform would put every point at 1/3 ≈ 0.333. The temperature must lift the
@@ -64,7 +64,7 @@ def test_soft_assignments_scale_invariant(tmp_path, monkeypatch):
     monkeypatch.setattr(logger, "_clustering_log_path", tmp_path / "runs.jsonl")
 
     points = _marginal_points()
-    _, assignments = initial_clustering(points, k=3, session_id="s", turn_number=0)
+    _, assignments, _ = initial_clustering(points, k=3, session_id="s", turn_number=0)
     baseline = np.sort(_max_probs(assignments))
 
     # Multiplying every embedding by a large constant scales squared distances by
@@ -77,7 +77,7 @@ def test_soft_assignments_scale_invariant(tmp_path, monkeypatch):
         dp.embedding = (np.array(p.embedding) * 1000.0).tolist()
         dp.data = p.data
         scaled_points.append(dp)
-    _, scaled_assignments = initial_clustering(scaled_points, k=3, session_id="s", turn_number=0)
+    _, scaled_assignments, _ = initial_clustering(scaled_points, k=3, session_id="s", turn_number=0)
     scaled = np.sort(_max_probs(scaled_assignments))
 
     assert np.allclose(baseline, scaled, atol=1e-3)
@@ -88,9 +88,37 @@ def test_probabilities_sum_to_one_per_point(tmp_path, monkeypatch):
     monkeypatch.setattr(logger, "_clustering_log_path", tmp_path / "runs.jsonl")
 
     points = _marginal_points()
-    _, assignments = initial_clustering(points, k=4, session_id="s", turn_number=0)
+    _, assignments, _ = initial_clustering(points, k=4, session_id="s", turn_number=0)
 
     by_point: dict[str, float] = defaultdict(float)
     for a in assignments:
         by_point[a.data_point_id] += a.probability
     assert all(abs(total - 1.0) < 1e-5 for total in by_point.values())
+
+
+def test_returns_silhouette_matching_the_log(tmp_path, monkeypatch):
+    """The silhouette returned to the caller must be the same value written to
+    the structured log — single source of truth, one k-means run."""
+    import json
+    import src.logger as logger
+    log_path = tmp_path / "runs.jsonl"
+    monkeypatch.setattr(logger, "_clustering_log_path", log_path)
+
+    points = _marginal_points()
+    _, _, silhouette = initial_clustering(points, k=3, session_id="s", turn_number=0)
+
+    assert isinstance(silhouette, float)
+    assert -1.0 <= silhouette <= 1.0
+
+    logged = json.loads(log_path.read_text().splitlines()[-1])["silhouette"]
+    assert logged == silhouette
+
+
+def test_returns_none_silhouette_for_k1(tmp_path, monkeypatch):
+    """Silhouette is undefined for k < 2 → the function returns None (no crash)."""
+    import src.logger as logger
+    monkeypatch.setattr(logger, "_clustering_log_path", tmp_path / "runs.jsonl")
+
+    points = _marginal_points()
+    _, _, silhouette = initial_clustering(points, k=1, session_id="s", turn_number=0)
+    assert silhouette is None

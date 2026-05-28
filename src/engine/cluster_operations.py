@@ -289,8 +289,9 @@ def split_cluster(
     subset_points = db.query(DataPoint).filter(DataPoint.id.in_(subset_ids)).all()
 
     # Real k-means on the subset — initial_clustering builds the k new
-    # clusters and their soft assignments at turn_number.
-    new_clusters, subset_assignments = initial_clustering(
+    # clusters and their soft assignments at turn_number. The split path does
+    # not surface a silhouette, so we ignore the third return value.
+    new_clusters, subset_assignments, _ = initial_clustering(
         data_points=subset_points,
         k=k,
         session_id=session_id,

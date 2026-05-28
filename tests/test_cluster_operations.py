@@ -64,7 +64,7 @@ def db():
         data_points.append(dp)
         session.add(dp)
 
-    clusters, assignments = initial_clustering(
+    clusters, assignments, _ = initial_clustering(
         data_points=data_points, k=3, session_id=SESSION_ID, turn_number=0
     )
     for cluster in clusters:

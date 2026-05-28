@@ -59,7 +59,7 @@ def initial_clustering(
     k: int,
     session_id: str,
     turn_number: int = 0,
-) -> tuple[list[DbCluster], list[DbSoftAssignment]]:
+) -> tuple[list[DbCluster], list[DbSoftAssignment], float | None]:
     """Run k-means on the embedding matrix and compute soft assignments.
 
     Soft probabilities are derived from negative squared distances to centroids
@@ -73,7 +73,11 @@ def initial_clustering(
             the pre-oracle state; oracle turns start at 1).
 
     Returns:
-        (db_clusters, db_assignments) — not yet added to any DB session.
+        (db_clusters, db_assignments, silhouette) — not yet added to any DB
+        session. ``silhouette`` is the mean silhouette score of this exact
+        k-means fit, or ``None`` when it is undefined (``k < 2`` or
+        ``k >= n_points``). Returning it lets callers reuse the value that was
+        already computed for the structured log instead of re-fitting k-means.
 
     Raises:
         ValueError: if k < 1, no points have embeddings, or k > number of points.
@@ -132,7 +136,7 @@ def initial_clustering(
         turn_number=turn_number,
     )
 
-    return db_clusters, db_assignments
+    return db_clusters, db_assignments, silhouette
 
 
 def silhouette_for_k(data_points: list[DataPoint], k: int) -> float:

@@ -7,7 +7,7 @@ from backend.main import get_db
 from backend.session_state import build_cluster_schemas
 from src.engine.cluster_naming import name_clusters
 from src.engine.f_parse_clustering_intent import f_parse_clustering_intent
-from src.engine.initial_clustering import initial_clustering, silhouette_for_k, sweep_k
+from src.engine.initial_clustering import initial_clustering, sweep_k
 from src.models import ChatSession, Cluster as DbCluster, DataPoint, SoftAssignment
 from src.schemas import Cluster as ClusterSchema, ClusterPointsResponse, ClusterPoint
 
@@ -81,7 +81,7 @@ def run_initial_clustering(
         k = payload.k
 
     try:
-        db_clusters, db_assignments = initial_clustering(
+        db_clusters, db_assignments, silhouette = initial_clustering(
             data_points=data_points,
             k=k,
             session_id=session_id,
@@ -109,13 +109,9 @@ def run_initial_clustering(
     for cluster_id, _ in best_cluster.values():
         cluster_sizes[cluster_id] = cluster_sizes.get(cluster_id, 0) + 1
 
-    # Silhouette score is only defined for 2 <= k < n_points.
-    silhouette: float | None = None
-    if 2 <= k < len(data_points):
-        try:
-            silhouette = silhouette_for_k(data_points, k)
-        except ValueError:
-            silhouette = None
+    # silhouette is whatever initial_clustering computed for THIS exact k-means
+    # fit (None when k < 2 or k >= n_points). Reusing it avoids a second full
+    # k-means run and guarantees the returned value matches the logged one.
 
     return {
         "session_id": session_id,
