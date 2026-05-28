@@ -123,9 +123,16 @@ def initial_clustering(
 
     # Structured log of this run. Silhouette is undefined for k < 2 or
     # k >= n_points; we record None in those cases rather than crashing.
+    # silhouette_score can also raise ValueError on degenerate input (e.g.
+    # all embeddings identical → a single distinct label). The score is a
+    # best-effort diagnostic — it must never abort an otherwise-valid
+    # clustering run, so we swallow any failure and fall back to None.
     silhouette: float | None = None
     if 2 <= k < len(points):
-        silhouette = float(silhouette_score(X, model.labels_))
+        try:
+            silhouette = float(silhouette_score(X, model.labels_))
+        except Exception:
+            silhouette = None
     log_clustering_run(
         session_id=session_id,
         k=k,

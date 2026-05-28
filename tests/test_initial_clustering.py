@@ -122,3 +122,29 @@ def test_returns_none_silhouette_for_k1(tmp_path, monkeypatch):
     points = _marginal_points()
     _, _, silhouette = initial_clustering(points, k=1, session_id="s", turn_number=0)
     assert silhouette is None
+
+
+def test_degenerate_input_does_not_crash_clustering(tmp_path, monkeypatch):
+    """All-identical embeddings make silhouette_score raise — but a failed
+    diagnostic must never abort the clustering run. Expect: no exception,
+    clusters + assignments still produced, silhouette falls back to None."""
+    import src.logger as logger
+    monkeypatch.setattr(logger, "_clustering_log_path", tmp_path / "runs.jsonl")
+
+    # 20 points, every embedding identical → k-means yields one populated
+    # cluster, so silhouette_score raises ValueError ("number of labels is 1").
+    points = []
+    for i in range(20):
+        dp = DataPoint()
+        dp.id = f"d{i}"
+        dp.embedding = [0.5, 0.5, 0.5, 0.5]
+        dp.data = {"text": f"identical {i}"}
+        points.append(dp)
+
+    clusters, assignments, silhouette = initial_clustering(
+        points, k=3, session_id="s", turn_number=0
+    )
+
+    assert len(clusters) == 3            # clustering still ran
+    assert len(assignments) == 20 * 3    # full snapshot still written
+    assert silhouette is None            # diagnostic degraded gracefully
