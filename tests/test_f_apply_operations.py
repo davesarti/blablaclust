@@ -101,13 +101,22 @@ def test_rename_does_not_increment_turn_number():
     assert result == 2  # rename writes no snapshot
 
 
-def test_rename_defaults_new_description_to_empty_string():
+def test_rename_preserves_existing_description_when_oracle_omits_it():
+    # Issue #43 fix: when the oracle renames a cluster but provides no
+    # new_description, the existing (e.g. auto-generated) description must be
+    # preserved — NOT clobbered with an empty string. The handler looks the
+    # current cluster up and reuses its description.
     op = {"type": "rename", "cluster_id": "c1", "new_name": "New"}
     db = _db()
+    existing = MagicMock()
+    existing.name = "Old name"
+    existing.description = "Auto-generated description"
+    db.query.return_value.filter.return_value.first.return_value = existing
     with patch(f"{MOD}.rename_cluster") as mock_rename:
         f_apply_operations([op], session_id="s1", turn_number=2, db=db)
     _, kwargs = mock_rename.call_args
-    assert kwargs["new_description"] == ""
+    assert kwargs["new_name"] == "New"                              # oracle's new name wins
+    assert kwargs["new_description"] == "Auto-generated description"  # existing preserved
 
 
 # ── multiple operations ────────────────────────────────────────────────────
