@@ -138,57 +138,40 @@ Funziona quando `cosine_variance > COSINE_VARIANCE_THRESHOLD`.
 
 LLM valuta ogni testo da 0 a 10 lungo l'asse (batch di 25).
 Per dataset grandi (N > `LLM_SAMPLE_SIZE = 200`): campiona 200 punti e li fa
-scorare, poi propaga i punteggi agli altri N-200 punti via **Ridge regression**
-(alpha=1.0) invece di nearest-neighbour coseno. Riduce da ~48 a ~8 chiamate LLM.
-
-**Perché Ridge invece di nearest-neighbour**
-
-Il nearest-neighbour usa la similarità coseno di MiniLM per trovare il punto
-"più simile" al quale ereditare il punteggio. Il problema: MiniLM cattura la
-similarità di *topic*, non di *tono*. Per assi tonali (angry tone, formality)
-una recensione calma di elettronica eredita il punteggio dalla recensione arrabbiata
-di elettronica più vicina per topic — propagazione sbagliata.
-
-La Ridge regression cerca invece la migliore combinazione lineare di tutte le 384
-dimensioni dell'embedding che predice i punteggi LLM dei 200 punti campionati.
-Anche se MiniLM non codifica esplicitamente il tono in una singola dimensione,
-esiste una combinazione lineare debole che correla con esso (struttura della frase,
-scelta lessicale, lunghezza). Con 200 labeled points Ridge la trova.
-
-I log di terminale riportano entrambe le metriche per confronto:
-
-```
-[semantic-reembed] NN propagation   std=X.XXX  min=X.XX  max=X.XX
-[semantic-reembed] Ridge propagation  train_R²=X.XXX  std=X.XXX  min=X.XX  max=X.XX
-```
-
-**`train_R²`**: quanto bene la direzione lineare fittata predice i punteggi LLM
-sui 200 punti di training. Valori attesi: 0.1–0.4 per assi tonali (segnale debole),
-0.4–0.8 per assi tematici (MiniLM cattura bene il topic).
-
-**`std` Ridge vs NN**: se `std_ridge > std_nn`, Ridge ha trovato più varianza
-lungo l'asse → separazione k-means potenzialmente migliore.
+scorare, poi propaga i punteggi agli altri N-200 punti via **nearest-neighbour
+coseno** sul embedding originale. Riduce da ~48 a ~8 chiamate LLM.
 
 ---
 
-### Esperimento: Ridge vs NN — risultati empirici
+### Esperimento: Ridge vs NN — risultati empirici (concluso)
 
-I log di terminale riportano entrambe le metriche per ogni sessione che usa il fallback LLM.
+**Ipotesi:** Ridge regression sul subspace MiniLM trova una direzione lineare
+che correla con il tono meglio del nearest-neighbour, il quale propaga per topic.
 
-| Sessione | Asse | std NN | std Ridge (α) | R² Ridge | Silhouette | Note |
-|----------|------|--------|---------------|----------|------------|------|
-| 1 | angry tone | 2.815 | 1.507 (α=1.0) | 0.525 | 0.340 | Ridge peggio di NN (0.551 prev.) |
-| 2 | angry tone | — | — (α=0.01) | — | — | in corso |
+| Sessione | Asse | std NN | std Ridge (α) | R² Ridge | Silhouette k-means | Note |
+|----------|------|--------|---------------|----------|--------------------|------|
+| 1 | angry tone | 2.815 | 1.507 (α=1.0) | 0.525 | 0.340 | over-regularised: std schiacciato |
+| 2 | angry tone | 2.967 | 4.087 (α=0.01) | 0.990 | 0.357 | overfitting: range -11.52..17.97 |
+| — | — | ~0.55 | — | — | ~0.55 | NN (baseline, entrambe le sessioni) |
 
 **Analisi sessione 1 (α=1.0):**
-- R²=0.525 è sorprendentemente alto per un asse tonale in MiniLM — esiste una direzione lineare reale
-- Ma std Ridge (1.507) < std NN (2.815): la regolarizzazione forte schiaccia le predizioni verso la media
-- Distribuzione Ridge più gaussiana/continua → k-means separa meno nettamente → silhouette cala (0.551→0.340)
-- NN copia valori estremi (0 e 10) creando distribuzione bimodale artificiale ma efficace per k-means
+- R²=0.525 conferma che esiste una direzione lineare reale nel subspace MiniLM
+- Ma D=384 >> N=200 → la regolarizzazione forte schiaccia le predizioni verso la media (std 1.5 vs NN 2.8)
+- Distribuzione Ridge gaussiana/continua → k-means separa meno nettamente → silhouette 0.340 < NN 0.551
 
-**Decisione dopo i test:**
-Se α=0.01 non recupera la silhouette almeno al livello NN (≥0.5), si torna a NN.
-NN ha basi teoriche più deboli ma risultati empirici migliori su questo dataset/asse.
+**Analisi sessione 2 (α=0.01):**
+- Regolarizzazione debole → overfitting massiccio (R²=0.990, fit quasi perfetto sui 200 campioni)
+- Extrapolazione fuori range: min=-11.52, max=17.97 su scala 0-10 LLM
+- k-means sceglie k=2, silhouette=0.357 — ancora peggio di NN
+
+**Conclusione:**
+Il problema è strutturale: D=384 >> N_sample=200 non lascia spazio intermedio
+praticabile — o si over-regularizza o si overfatta. Ridge non è il metodo giusto
+in questo regime. Si torna a nearest-neighbour (commit `408b255`).
+
+NN ha basi teoriche più deboli (propaga topic, non tono) ma è empiricamente
+migliore perché mantiene la bimodalità dei punteggi LLM (valori 0 e 10 ai bordi)
+che k-means sfrutta efficacemente.
 
 ---
 
@@ -425,7 +408,7 @@ Refactor del path semantico in `turns.py`:
 | `a063783` | fix: deterministic clarify-confirm flow for semantic reembed |
 | `783e6c0` | fix(naming): axis_context uses degree-based criterion instead of topic-relatedness |
 | `6b79c4d` | fix(naming): remove hardcoded axis examples from axis_context prompt |
-| `(current)` | feat: Ridge regression propagation replaces nearest-neighbour in LLM fallback |
+| `408b255` | revert: use NN propagation instead of Ridge regression |
 
 ---
 
