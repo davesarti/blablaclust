@@ -84,15 +84,10 @@ def name_clusters(
             f"a different POSITION on this axis, not a different topic.\n"
             f"For each cluster, apply this rule:\n"
             f"- If you can meaningfully say these texts score HIGH or LOW on "
-            f"'{axis_hint}' (e.g. they express a strong or weak degree of it), "
-            f"name the cluster by its axis position. Use 'High {axis_hint.title()}', "
-            f"'Low {axis_hint.title()}', 'Strongly {axis_hint.title()}', "
-            f"'Mildly {axis_hint.title()}', or natural synonyms that convey "
-            f"degree (e.g. for 'angry tone': 'Frustrated', 'Calm'; "
-            f"for 'battery life': 'Long Battery Life', 'Short Battery Life').\n"
+            f"'{axis_hint}', name the cluster by its axis position using natural "
+            f"words that convey degree or intensity on that axis.\n"
             f"- Only use a topic name if '{axis_hint}' is genuinely inapplicable "
-            f"to these texts (e.g. battery life for furniture that has no battery). "
-            f"When in doubt, prefer an axis-based name.\n"
+            f"to these texts. When in doubt, prefer an axis-based name.\n"
         )
     else:
         axis_context = ""
