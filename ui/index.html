@@ -449,6 +449,21 @@
     .tier-good { color: var(--green); }
     .tier-mid  { color: #9a7a30; }
     .tier-weak { color: var(--red); }
+    .eval-expected {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      letter-spacing: 0.02em;
+    }
+    .eval-expected::before {
+      content: "Expected ";
+      color: var(--text-faint);
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-right: 4px;
+    }
     .eval-value {
       font-family: var(--mono);
       font-size: 13px;
@@ -1201,7 +1216,20 @@
       outline-offset: 2px;
       border-radius: 2px;
     }
+
+    /* ── UMAP visualization (P2 — clustering evolution) ── */
+    #modal-umap .modal-card { width: 900px; max-width: 96vw; }
+    #umap-plot { width: 100%; height: 460px; }
+    .umap-controls { display: flex; align-items: center; gap: 14px; margin: 2px 0 14px; }
+    .umap-controls input[type=range] { flex: 1; }
+    .umap-meta { font-family: var(--mono); font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+    .umap-status { font-size: 12px; color: var(--text-muted); padding: 60px 0; text-align: center; }
+    .umap-play-btn { border: 1px solid var(--border-s); background: var(--surface); border-radius: 6px;
+      width: 30px; height: 26px; cursor: pointer; font-size: 11px; color: var(--text); flex: none; }
+    .umap-play-btn:hover { background: var(--surface-2); }
   </style>
+  <!-- Plotly.js (CDN) — UMAP clustering map (P2) -->
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
 </head>
 <body>
 
@@ -1271,6 +1299,9 @@
         <div class="sb-label">Actions</div>
         <button class="btn-outline blue" id="btn-converge" onclick="markConverged()" aria-label="Mark as Converged">
           Mark as Converged
+        </button>
+        <button class="btn-outline blue" onclick="openUmap()" aria-label="Show UMAP clustering map">
+          UMAP map
         </button>
         <button class="btn-outline red" onclick="openModal('modal-stop')" aria-label="Stop session">
           Stop session
@@ -1369,18 +1400,18 @@
     <div id="eval-error"   class="eval-error"   style="display:none"></div>
     <div id="eval-content"                       style="display:none">
 
-      <!-- B1 hero -->
+      <!-- Overall quality hero -->
       <div class="eval-metric full" style="margin-bottom: 4px;">
-        <div class="eval-metric-label">B1 · Overall quality (synthesis judge)</div>
+        <div class="eval-metric-label">Overall quality</div>
         <div class="eval-metric-desc">
           One verdict combining coherence, compliance, and oracle contradiction.
           High contradiction forgives weak coherence/compliance.
-          <strong style="font-style:normal; color:var(--text);">Good: ≥ 0.70</strong>.
         </div>
         <div class="eval-score-row">
           <div class="eval-score-big" id="ev-overall">—</div>
           <div class="eval-score-unit">/ 1.0</div>
         </div>
+        <div class="eval-expected">≥ 0.70</div>
         <div class="eval-notes" id="ev-notes"></div>
       </div>
 
@@ -1391,41 +1422,41 @@
       </div>
       <div class="eval-metric-grid">
         <div class="eval-metric">
-          <div class="eval-metric-label">B2 · Coherence</div>
+          <div class="eval-metric-label">Coherence</div>
           <div class="eval-metric-desc">
             Are clusters internally focused? Mean across all clusters.
-            <strong style="font-style:normal; color:var(--text);">Good: mean ≥ 0.70, no cluster &lt; 0.50.</strong>
           </div>
           <div class="eval-score-row">
             <div class="eval-score-mid" id="ev-coherence">—</div>
             <div class="eval-score-unit">mean</div>
           </div>
+          <div class="eval-expected">mean ≥ 0.70, no cluster &lt; 0.50</div>
           <div class="eval-sub"  id="ev-coherence-sub"></div>
           <div class="eval-detail" id="ev-coherence-weakest"></div>
         </div>
         <div class="eval-metric">
-          <div class="eval-metric-label">B3 · Compliance</div>
+          <div class="eval-metric-label">Compliance</div>
           <div class="eval-metric-desc">
             Did the system faithfully execute each oracle request?
-            <strong style="font-style:normal; color:var(--text);">Good: ≥ 0.70.</strong>
           </div>
           <div class="eval-score-row">
             <div class="eval-score-mid" id="ev-compliance">—</div>
             <div class="eval-score-unit">/ 1.0</div>
           </div>
+          <div class="eval-expected">≥ 0.70</div>
           <div class="eval-notes" id="ev-compliance-sub"></div>
         </div>
         <div class="eval-metric full">
-          <div class="eval-metric-label">B4 · Oracle contradiction</div>
+          <div class="eval-metric-label">Oracle contradiction</div>
           <div class="eval-metric-desc">
             How hard was the oracle to understand (contradictions, drift, vague targets)?
-            Higher = harder. Feeds B1 as forgiveness context.
-            <strong style="font-style:normal; color:var(--text);">Good: ≤ 0.30.</strong>
+            Higher = harder. Feeds overall quality as forgiveness context.
           </div>
           <div class="eval-score-row">
             <div class="eval-score-mid" id="ev-contradiction">—</div>
             <div class="eval-score-unit">/ 1.0 — higher = harder</div>
           </div>
+          <div class="eval-expected">≤ 0.30</div>
           <div class="eval-notes" id="ev-contradiction-sub"></div>
           <ul class="eval-examples" id="ev-contradiction-examples"></ul>
         </div>
@@ -1438,40 +1469,66 @@
       </div>
       <div class="eval-metric-grid">
         <div class="eval-metric">
-          <div class="eval-metric-label">A2 · Dialogue efficiency</div>
+          <div class="eval-metric-label">Dialogue efficiency</div>
           <div class="eval-metric-desc">
             How many turns did it take, and how did the session end?
-            <strong style="font-style:normal; color:var(--text);">Good: few turns, ends converged.</strong>
           </div>
           <div class="eval-value" id="ev-turns">—</div>
+          <div class="eval-expected">few turns, ends converged</div>
           <div class="eval-sub"  id="ev-weighted-turns"></div>
           <div id="ev-termination"></div>
         </div>
         <div class="eval-metric">
-          <div class="eval-metric-label">A3 · Cognitive load</div>
+          <div class="eval-metric-label">Cognitive load</div>
           <div class="eval-metric-desc">
             Per-turn 1–5 score from turns, tokens, cluster count. Saturates at 5 → halt.
-            <strong style="font-style:normal; color:var(--text);">Good: stays at 1–2.</strong>
           </div>
           <div class="eval-score-row">
             <div class="eval-score-mid" id="ev-cog-load">—</div>
             <div class="eval-score-unit">mean / 5</div>
           </div>
+          <div class="eval-expected">stays at 1–2</div>
           <div class="eval-detail" id="ev-cog-driver"></div>
         </div>
         <div class="eval-metric full">
-          <div class="eval-metric-label">A1 · Silhouette (cluster separation)</div>
+          <div class="eval-metric-label">Silhouette (cluster separation)</div>
           <div class="eval-metric-desc">
             Geometric tightness of clusters (−1 to 1). Tracks initial → final.
-            <strong style="font-style:normal; color:var(--text);">Good: stable or rising.</strong>
           </div>
           <div class="eval-value" id="ev-silhouette">—</div>
+          <div class="eval-expected">stable or rising across turns</div>
           <div class="eval-sub"  id="ev-silhouette-sub"></div>
         </div>
       </div>
     </div>
     <div class="modal-actions">
       <button class="btn-primary" onclick="closeModal('modal-eval')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL: UMAP clustering map (P2) ── -->
+<div class="modal-overlay" id="modal-umap" role="dialog" aria-modal="true" aria-labelledby="lbl-umap">
+  <div class="modal-card">
+    <h2 id="lbl-umap">Clustering map — UMAP</h2>
+    <div class="modal-desc">
+      2-D projection of the dataset embeddings (fixed layout). Move the slider to
+      watch how the clustering evolves across turns — the points stay put, only the
+      colours change.
+    </div>
+    <div class="umap-controls">
+      <button id="umap-play" class="umap-play-btn" onclick="umapTogglePlay()"
+              aria-label="Play or pause turn animation" title="Play / pause">▶</button>
+      <span class="umap-meta" id="umap-turn-label">Turn —</span>
+      <input type="range" id="umap-slider" min="0" max="0" value="0" step="1"
+             oninput="umapStopPlay(); renderUmapTurn(+this.value)" aria-label="Turn" />
+      <span class="umap-meta" id="umap-info"></span>
+    </div>
+    <div id="umap-plot"><div class="umap-status">—</div></div>
+    <div class="modal-actions">
+      <button class="btn-link" onclick="umapExportPng()">Export PNG</button>
+      <button class="btn-link" onclick="umapExportHtml()">Export HTML</button>
+      <button class="btn-primary" onclick="umapStopPlay(); closeModal('modal-umap')">Close</button>
     </div>
   </div>
 </div>
@@ -2104,6 +2161,147 @@ async function markConverged() {
 
 function openModal(id)  { document.getElementById(id).classList.add('visible');    }
 function closeModal(id) { document.getElementById(id).classList.remove('visible'); }
+
+// ── UMAP clustering map (P2 — clustering evolution over turns) ───────────────
+let _umapData = null;
+const _UMAP_PALETTE = ['#4a7c59','#c06b3e','#3e6fa3','#a3543e','#6b8e23','#8a5a9e',
+                       '#2e8b8b','#b07a2e','#9e3e5a','#5a6e8a','#7a9e3e','#3e8a5a'];
+const _umapColorMap = {};
+function _umapColor(cid) {
+  if (cid === 'unassigned' || cid == null) return '#cccccc';
+  if (!(cid in _umapColorMap)) {
+    _umapColorMap[cid] = _UMAP_PALETTE[Object.keys(_umapColorMap).length % _UMAP_PALETTE.length];
+  }
+  return _umapColorMap[cid];
+}
+
+async function openUmap() {
+  if (!state.sessionId) { alert('Open a session first.'); return; }
+  openModal('modal-umap');
+  umapStopPlay();
+  document.getElementById('umap-plot').innerHTML =
+    '<div class="umap-status">Computing UMAP projection… (the first run can take a few seconds)</div>';
+  document.getElementById('umap-info').textContent = '';
+  document.getElementById('umap-turn-label').textContent = 'Turn —';
+  try {
+    const res = await fetch(`/sessions/${state.sessionId}/umap`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    _umapData = await res.json();
+    for (const k in _umapColorMap) delete _umapColorMap[k];  // stable colours per load
+    if (!_umapData.turns.length) {
+      document.getElementById('umap-plot').innerHTML =
+        '<div class="umap-status">No clustering snapshots yet for this session.</div>';
+      return;
+    }
+    const slider = document.getElementById('umap-slider');
+    const last = _umapData.turns.length - 1;
+    slider.min = 0; slider.max = last; slider.value = last;
+    renderUmapTurn(last);  // show the latest turn first
+  } catch (e) {
+    document.getElementById('umap-plot').innerHTML =
+      '<div class="umap-status">Failed to load UMAP: ' + e.message + '</div>';
+  }
+}
+
+function renderUmapTurn(ti) {
+  if (!_umapData || !_umapData.turns.length) return;
+  const turn   = _umapData.turns[ti];
+  const labels = _umapData.assignments[String(turn)] || [];
+  const pts    = _umapData.points;
+  const groups = {};
+  for (let i = 0; i < pts.length; i++) {
+    const cid = labels[i] || 'unassigned';
+    (groups[cid] = groups[cid] || []).push(i);
+  }
+  const traces = Object.entries(groups).map(([cid, idxs]) => {
+    const meta  = _umapData.clusters[cid] || {};
+    const cname = meta.name || cid;
+    // A cluster "born" at this turn is the visible result of a merge/split/re-embed.
+    const isNew = ti > 0 && meta.created_at_turn === turn;
+    return {
+      x: idxs.map(i => pts[i].x),
+      y: idxs.map(i => pts[i].y),
+      text: idxs.map(i => pts[i].text),
+      name: (isNew ? '✦ ' : '') + cname + ' (' + idxs.length + ')',
+      mode: 'markers', type: 'scattergl',
+      marker: { size: isNew ? 7 : 5, color: _umapColor(cid), opacity: isNew ? 0.95 : 0.7,
+                line: { width: isNew ? 1.1 : 0, color: '#222' } },
+      hovertemplate: '%{text}<extra>' + cname + '</extra>',
+    };
+  });
+  // Merge/split deltas vs the previous snapshot turn.
+  const newCount = Object.keys(groups).filter(
+    cid => ti > 0 && (_umapData.clusters[cid] || {}).created_at_turn === turn).length;
+  const dissolvedCount = Object.values(_umapData.clusters).filter(
+    m => m.dissolved_at_turn === turn).length;
+  const sil = _umapData.silhouette_by_turn[String(turn)];
+  const layout = {
+    margin: { l: 24, r: 12, t: 8, b: 24 },
+    xaxis: { showticklabels: false, zeroline: false, showgrid: false },
+    yaxis: { showticklabels: false, zeroline: false, showgrid: false },
+    showlegend: true,
+    legend: { font: { size: 10 } },
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { family: 'monospace', size: 11 },
+  };
+  const gd = document.getElementById('umap-plot');
+  const leftover = gd.querySelector('.umap-status');  // clear the loading text
+  if (leftover) leftover.remove();
+  Plotly.react(gd, traces, layout, { displayModeBar: false, responsive: true });
+  document.getElementById('umap-turn-label').textContent = 'Turn ' + turn;
+  document.getElementById('umap-info').textContent =
+    traces.length + ' clusters · ' + String(_umapData.reducer).toUpperCase() +
+    (sil != null ? ' · silhouette ' + sil.toFixed(3) : '') +
+    (newCount ? ' · ✦' + newCount + ' new' : '') +
+    (dissolvedCount ? ' · −' + dissolvedCount + ' gone' : '');
+}
+
+// ── UMAP Phase 2: play/pause animation + PNG/HTML export (P2) ────────────────
+let _umapPlayTimer = null;
+function umapTogglePlay() {
+  if (_umapPlayTimer) { umapStopPlay(); return; }
+  if (!_umapData || _umapData.turns.length < 2) return;
+  document.getElementById('umap-play').textContent = '⏸';
+  _umapPlayTimer = setInterval(() => {
+    const slider = document.getElementById('umap-slider');
+    let v = (+slider.value) + 1;
+    if (v > +slider.max) v = 0;          // loop back to the first turn
+    slider.value = v;
+    renderUmapTurn(v);
+  }, 1300);
+}
+function umapStopPlay() {
+  if (_umapPlayTimer) { clearInterval(_umapPlayTimer); _umapPlayTimer = null; }
+  const btn = document.getElementById('umap-play');
+  if (btn) btn.textContent = '▶';
+}
+
+function _umapExportName(ext) {
+  const sid = _umapData ? _umapData.session_id.slice(0, 8) : 'session';
+  const turn = document.getElementById('umap-turn-label').textContent.replace(/\s+/g, '_');
+  return 'umap_' + sid + '_' + turn + '.' + ext;
+}
+function umapExportPng() {
+  const gd = document.getElementById('umap-plot');
+  if (!gd || !gd._fullData) return;
+  Plotly.downloadImage(gd, { format: 'png', width: 1200, height: 800,
+                             filename: _umapExportName('png').replace('.png', '') });
+}
+function umapExportHtml() {
+  const gd = document.getElementById('umap-plot');
+  if (!gd || !gd._fullData) return;
+  const html =
+    '<!doctype html><html><head><meta charset="utf-8">' +
+    '<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"><\/script></head>' +
+    '<body style="margin:0"><div id="p" style="width:100vw;height:100vh"></div>' +
+    '<script>Plotly.newPlot("p",' + JSON.stringify(gd.data) + ',' +
+    JSON.stringify(gd.layout) + ',{responsive:true});<\/script></body></html>';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+  a.download = _umapExportName('html');
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
 async function startSession() {
   const name = document.getElementById('inp-name').value.trim();

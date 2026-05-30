@@ -1,8 +1,6 @@
-import datetime
 import json
 import os
 import statistics
-import time
 import uuid
 
 from typing import Dict, Literal, Optional
@@ -15,7 +13,6 @@ from sqlalchemy import func
 from backend.eval_cache import compute_cache_key, get as cache_get, put as cache_put
 from backend.main import get_db
 from backend.session_state import build_session_state
-from src.eval_report import write_report
 from src.engine.f_eval import (
     f_eval_coherence,
     f_eval_compliance,
@@ -102,7 +99,6 @@ N_BOTTOM_COHERENCE = 2
 class EvalResponse(BaseModel):
     session_id: str
     k_final: int
-    report_dir: str
     cached: bool = False
     A1: A1Metrics
     A2: A2Metrics
@@ -434,37 +430,13 @@ def eval_session(
             cached["cached"] = True
             return EvalResponse(**cached)
 
-    t_start = time.time()
     a1 = _silhouette_trend(session_id)
     a2, a3 = _math_metrics(db, session_id, state)
     b1, b2, b3, b4 = _quality_metrics(state, coherence_samples, compliance_turns)
-    wall_time = round(time.time() - t_start, 1)
-
-    out_dir = os.path.join(
-        "reports",
-        f"{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}-{session_id[:8]}",
-    )
-    record = {
-        "scenario": session.name or session_id,
-        "description": f"API eval — session {session_id}",
-        "session_id": session_id,
-        "k_final": len(state.clusters),
-        "errors": [],
-        "wall_time_s": wall_time,
-        "A1": a1.model_dump(),
-        "A2": a2.model_dump(),
-        "A3": a3.model_dump(),
-        "B1": b1.model_dump(),
-        "B2": b2.model_dump(),
-        "B3": b3.model_dump(),
-        "B4": b4.model_dump(),
-    }
-    write_report(record, out_dir)
 
     response = EvalResponse(
         session_id=session_id,
         k_final=len(state.clusters),
-        report_dir=out_dir,
         cached=False,
         A1=a1,
         A2=a2,
