@@ -102,7 +102,7 @@ def _cosine_axis_scores(
 
 # For large datasets, only this many points are scored via LLM; the rest
 # inherit the score of their nearest neighbour in the original embedding space.
-LLM_SAMPLE_SIZE = 600
+LLM_SAMPLE_SIZE = 200
 
 
 def _llm_score_sample(
