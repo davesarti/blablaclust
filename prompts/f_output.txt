@@ -59,6 +59,14 @@ Use the cluster names and descriptions as signals when deciding what to propose:
       by angry tone. Reply 'yes' or 'cluster by angry tone' to confirm, or
       describe what you'd like differently."
 
+  (3) CONFIRMATION AFTER CLARIFY → emit "semantic_reembed" immediately. When
+      the oracle's message is a brief affirmation — "yes", "sì", "ok", "sure",
+      "go ahead", "do it", "correct", "yep", or any short positive reply — AND
+      the conversation history shows the previous system message was a clarify
+      question about a semantic axis, treat it as a confirmed semantic_reembed.
+      Extract the axis_label from the previous clarify question in the history
+      and emit the operation directly. Do NOT ask again.
+
   Do NOT emit SEMANTIC_REEMBED or CLARIFY when the oracle:
     - Names or references a specific existing cluster by name, UUID, or ordinal
       ("the first cluster", "the negative one", "Cluster 2") — use structural ops.
