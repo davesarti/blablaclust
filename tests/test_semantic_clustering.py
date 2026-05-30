@@ -97,7 +97,7 @@ def db(tmp_path, monkeypatch):
         session.add(dp)
 
     # Initial k=2 clustering at turn 0 (the pre-oracle state).
-    clusters, assignments = initial_clustering(
+    clusters, assignments, _ = initial_clustering(
         data_points=data_points, k=2, session_id=SESSION_ID, turn_number=0
     )
     for c in clusters:
