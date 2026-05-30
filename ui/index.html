@@ -2259,25 +2259,40 @@ function renderUmapTurn(ti) {
         name: 'Previous clusters',
         mode: 'markers',
         type: 'scattergl',
-        marker: { symbol: 'circle-open', size: 28, color: '#888',
-                  line: { width: 2, color: '#888' } },
+        marker: { symbol: 'circle-open', size: 52, color: '#888',
+                  line: { width: 2.5, color: '#888' } },
         hovertemplate: '<b>%{text}</b><br>(dissolved this turn)<extra></extra>',
       });
     }
-    // Axis arrow: PCA direction of new cluster centroids.
+    // Axis arrow: scatter line + triangle marker at tip (more reliable than
+    // Plotly annotation arrows when axref/ayref are data coordinates).
     const arrow = ((_umapData.axis_arrows || {})[String(turn)]);
     if (arrow) {
       const label = arrow.label ? `axis: ${arrow.label}` : 'semantic axis';
+      const dx = arrow.to[0] - arrow.from[0];
+      const dy = arrow.to[1] - arrow.from[1];
+      // Rotate triangle marker to match arrow direction (Plotly angle is clockwise from up).
+      const angleDeg = Math.atan2(dy, dx) * 180 / Math.PI - 90;
+      traces.push({
+        x: [arrow.from[0], arrow.to[0]],
+        y: [arrow.from[1], arrow.to[1]],
+        mode: 'lines+markers',
+        type: 'scatter',
+        line: { color: '#e8c94a', width: 2.5 },
+        marker: { symbol: ['circle', 'triangle-up'], size: [3, 14],
+                  color: '#e8c94a', angle: [0, angleDeg] },
+        name: label,
+        hovertemplate: '<b>' + label + '</b><extra></extra>',
+      });
+      // Label annotation at the arrowhead (text only, no arrow).
       layout.annotations = [{
         x: arrow.to[0], y: arrow.to[1],
-        ax: arrow.from[0], ay: arrow.from[1],
-        axref: 'x', ayref: 'y', xref: 'x', yref: 'y',
-        showarrow: true,
-        arrowhead: 2, arrowsize: 1.4, arrowwidth: 2.2,
-        arrowcolor: '#e8c94a',
+        xref: 'x', yref: 'y',
+        showarrow: false,
         text: label,
         font: { size: 10, color: '#e8c94a' },
-        bgcolor: 'rgba(0,0,0,0.45)', borderpad: 3,
+        bgcolor: 'rgba(0,0,0,0.5)', borderpad: 3,
+        xshift: 10, yshift: 10,
       }];
     }
   }
