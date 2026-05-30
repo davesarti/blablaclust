@@ -1574,10 +1574,6 @@ function renderClusters() {
 function updateInputPlaceholder() {
   const el = document.getElementById('chat-input');
   if (!el) return;
-  if (state.session.turn === 0) {
-    el.placeholder = 'Turn 1 — describe a semantic axis (e.g. "angry tone", "battery life", "positive sentiment")…';
-    return;
-  }
   const names = state.clusters.map(c => c.name);
   const n = names.length;
   if (n === 0) { el.placeholder = 'Share your feedback on the clusters…'; return; }
@@ -1586,6 +1582,7 @@ function updateInputPlaceholder() {
   parts.push(`split "${names[n - 1]}" into 3`);
   parts.push(`rename "${names[0]}" to "…"`);
   parts.push(`make ${n + 1} clusters`);
+  parts.push(`cluster by sentiment`);
   el.placeholder = `e.g. ${parts.join('  ·  ')}`;
 }
 
@@ -2054,9 +2051,6 @@ async function sendMessage() {
       target_point_ids:   [],
       metadata:           {},
     };
-    // On the first oracle turn, also send the text as axis_hint so the backend
-    // can re-orient the embedding space around the oracle's semantic intent.
-    if (state.session.turn === 0) payload.axis_hint = text;
 
     const res = await fetch('/turns', {
       method:  'POST',
