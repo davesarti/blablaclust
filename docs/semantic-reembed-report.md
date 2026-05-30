@@ -2,6 +2,7 @@
 
 **Autore:** P5 (Arianna Schiavi)
 **Ultimo aggiornamento:** 2026-05-30 (rev 10)
+**Ultimo aggiornamento:** 2026-05-30 (rev 11)
 **Stato:** implementazione completa, integrata su main
 
 ---
@@ -137,41 +138,42 @@ Funziona quando `cosine_variance > COSINE_VARIANCE_THRESHOLD`.
 **Strategia LLM batch scoring (fallback)**
 
 LLM valuta ogni testo da 0 a 10 lungo l'asse (batch di 25).
-Per dataset grandi (N > `LLM_SAMPLE_SIZE = 200`): campiona 200 punti e li fa
-scorare, poi propaga i punteggi agli altri N-200 punti via **nearest-neighbour
-coseno** sul embedding originale. Riduce da ~48 a ~8 chiamate LLM.
+Per dataset grandi (N > `LLM_SAMPLE_SIZE = 600`): campiona 600 punti e li fa
+scorare, poi propaga i punteggi agli altri via **nearest-neighbour coseno**
+sul embedding originale. Riduce da ~48 a ~24 chiamate LLM su dataset da 1200.
 
 ---
 
-### Esperimento: Ridge vs NN — risultati empirici (concluso)
+### Esperimento: Ridge vs NN, N=200 e N=600 (concluso)
 
-**Ipotesi:** Ridge regression sul subspace MiniLM trova una direzione lineare
-che correla con il tono meglio del nearest-neighbour, il quale propaga per topic.
+**Ipotesi iniziale:** Ridge regression sul subspace MiniLM trova una direzione
+lineare che correla con il tono meglio del nearest-neighbour, il quale propaga per topic.
 
-| Sessione | Asse | std NN | std Ridge (α) | R² Ridge | Silhouette k-means | Note |
-|----------|------|--------|---------------|----------|--------------------|------|
-| 1 | angry tone | 2.815 | 1.507 (α=1.0) | 0.525 | 0.340 | over-regularised: std schiacciato |
-| 2 | angry tone | 2.967 | 4.087 (α=0.01) | 0.990 | 0.357 | overfitting: range -11.52..17.97 |
-| — | — | ~0.55 | — | — | ~0.55 | NN (baseline, entrambe le sessioni) |
+| Sessione | N | Metodo | std (finale) | R² | Silhouette | min/max | Bilanciamento |
+|----------|---|--------|--------------|----|------------|---------|---------------|
+| 1 | 200 | Ridge α=1.0 | 1.507 | 0.525 | 0.340 | in range | — |
+| 2 | 200 | Ridge α=0.01 | 4.087 | 0.990 | 0.357 | -11.5..18.0 | — |
+| 3 | 200 | NN | ~2.8 | — | ~0.55 | 0..10 | — |
+| 4 | 600 | Ridge α=1.0 | 2.37 | 0.330 | 0.489 | -2.1..10.0 | 993/207 |
+| **5** | **600** | **NN** | **3.171** | **—** | **0.538** | **0..10** | **855/345** |
 
-**Analisi sessione 1 (α=1.0):**
-- R²=0.525 conferma che esiste una direzione lineare reale nel subspace MiniLM
-- Ma D=384 >> N=200 → la regolarizzazione forte schiaccia le predizioni verso la media (std 1.5 vs NN 2.8)
-- Distribuzione Ridge gaussiana/continua → k-means separa meno nettamente → silhouette 0.340 < NN 0.551
+**Analisi N=200:**
+- Ridge α=1.0: D=384 >> N=200 → regolarizzazione forte schiaccia std a 1.5, silhouette 0.340
+- Ridge α=0.01: overfitting massiccio (R²=0.990), extrapolazione -11.5..18.0, silhouette 0.357
+- NN: bimodalità preservata (estremi 0 e 10), silhouette ~0.55 — baseline
 
-**Analisi sessione 2 (α=0.01):**
-- Regolarizzazione debole → overfitting massiccio (R²=0.990, fit quasi perfetto sui 200 campioni)
-- Extrapolazione fuori range: min=-11.52, max=17.97 su scala 0-10 LLM
-- k-means sceglie k=2, silhouette=0.357 — ancora peggio di NN
+**Analisi N=600:**
+- Ridge α=1.0: R² scende a 0.330 (meno overfitting, regime D~N), range quasi in bounds (-2.1..10.0),
+  ma std compressa (2.37) e cluster sbilanciati (993/207) → silhouette 0.489 < NN
+- NN: std 3.171 (copertura maggiore → vicini più prossimi), range perfetto 0..10,
+  cluster più bilanciati (855/345), silhouette 0.538
 
 **Conclusione:**
-Il problema è strutturale: D=384 >> N_sample=200 non lascia spazio intermedio
-praticabile — o si over-regularizza o si overfatta. Ridge non è il metodo giusto
-in questo regime. Si torna a nearest-neighbour (commit `408b255`).
-
-NN ha basi teoriche più deboli (propaga topic, non tono) ma è empiricamente
-migliore perché mantiene la bimodalità dei punteggi LLM (valori 0 e 10 ai bordi)
-che k-means sfrutta efficacemente.
+Ridge non supera NN su nessuna metrica rilevante neanche a N=600.
+Il vantaggio teorico (direzione lineare di tono) non si traduce in separazione
+migliore: Ridge leviga la distribuzione (gaussiana) dove NN è forte (bimodalità).
+Configurazione finale: **NN con N=600** (commit `15cc26e`) — std e bilanciamento
+migliori di N=200, range perfetto, 24 chiamate LLM vs 8 precedenti.
 
 ---
 
@@ -327,14 +329,14 @@ CLUSTER COUNT ARITHMETIC:
 |------------|-------------|---------------|
 | Re-embed — generazione poli (`_generate_axis_poles`) | 1 (sempre) | ~$0.001 |
 | Re-embed — scoring coseno (variance > 0.01) | 0 | — |
-| Re-embed — scoring LLM fallback (1200 punti, sample 200) | 8 × batch-25 | ~$0.01–0.02 |
+| Re-embed — scoring LLM fallback (1200 punti, sample 600) | 24 × batch-25 | ~$0.03–0.05 |
 | Re-embed — naming k cluster | 1 | ~$0.003 |
 | Turno normale — `f_output` | 1 | ~$0.006–0.010 |
 | Turno clarify — `f_output` | 1 | ~$0.006–0.010 |
 | Turno conferma ("yes") | 0 (bypass deterministico) | — |
 | Naming su merge/split | 1 per op | ~$0.003 |
 
-**Stima sessione con re-embedding + 5 turni:** ~$0.07–0.12
+**Stima sessione con re-embedding + 5 turni:** ~$0.10–0.18
 
 ---
 
@@ -409,6 +411,8 @@ Refactor del path semantico in `turns.py`:
 | `783e6c0` | fix(naming): axis_context uses degree-based criterion instead of topic-relatedness |
 | `6b79c4d` | fix(naming): remove hardcoded axis examples from axis_context prompt |
 | `408b255` | revert: use NN propagation instead of Ridge regression |
+| `783223f` | feat: use Ridge regression when N_sample > D, fall back to NN otherwise |
+| `15cc26e` | feat: increase LLM_SAMPLE_SIZE 200 → 600 for better NN propagation coverage |
 
 ---
 
