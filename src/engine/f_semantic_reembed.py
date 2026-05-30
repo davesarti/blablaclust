@@ -210,7 +210,7 @@ def _llm_axis_scores(
     # More robust for tone/sentiment axes where MiniLM encodes topic but not tone.
     from sklearn.linear_model import Ridge
 
-    reg = Ridge(alpha=1.0)
+    reg = Ridge(alpha=0.01)
     reg.fit(sample_embs, sample_scores)
     scores = reg.predict(all_embs)
 
