@@ -138,9 +138,9 @@ Funziona quando `cosine_variance > COSINE_VARIANCE_THRESHOLD`.
 **Strategia LLM batch scoring (fallback)**
 
 LLM valuta ogni testo da 0 a 10 lungo l'asse (batch di 25).
-Per dataset grandi (N > `LLM_SAMPLE_SIZE = 600`): campiona 600 punti e li fa
+Per dataset grandi (N > `LLM_SAMPLE_SIZE = 200`): campiona 200 punti e li fa
 scorare, poi propaga i punteggi agli altri via **nearest-neighbour coseno**
-sul embedding originale. Riduce da ~48 a ~24 chiamate LLM su dataset da 1200.
+sul embedding originale. Riduce da ~48 a ~8 chiamate LLM su dataset da 1200.
 
 ---
 
@@ -172,8 +172,11 @@ lineare che correla con il tono meglio del nearest-neighbour, il quale propaga p
 Ridge non supera NN su nessuna metrica rilevante neanche a N=600.
 Il vantaggio teorico (direzione lineare di tono) non si traduce in separazione
 migliore: Ridge leviga la distribuzione (gaussiana) dove NN è forte (bimodalità).
-Configurazione finale: **NN con N=600** (commit `15cc26e`) — std e bilanciamento
-migliori di N=200, range perfetto, 24 chiamate LLM vs 8 precedenti.
+
+N=600 con NN ha dato silhouette 0.538 vs ~0.55 a N=200 — miglioramento dentro
+il rumore della generazione dei poli, non affidabile. La latenza invece triplica
+(24 chiamate LLM vs 8, ~48s vs ~16s solo per lo scoring). Configurazione finale:
+**NN con N=200** (commit `044423a`) — latenza accettabile per sistema interattivo.
 
 ---
 
@@ -329,14 +332,14 @@ CLUSTER COUNT ARITHMETIC:
 |------------|-------------|---------------|
 | Re-embed — generazione poli (`_generate_axis_poles`) | 1 (sempre) | ~$0.001 |
 | Re-embed — scoring coseno (variance > 0.01) | 0 | — |
-| Re-embed — scoring LLM fallback (1200 punti, sample 600) | 24 × batch-25 | ~$0.03–0.05 |
+| Re-embed — scoring LLM fallback (1200 punti, sample 200) | 8 × batch-25 | ~$0.01–0.02 |
 | Re-embed — naming k cluster | 1 | ~$0.003 |
 | Turno normale — `f_output` | 1 | ~$0.006–0.010 |
 | Turno clarify — `f_output` | 1 | ~$0.006–0.010 |
 | Turno conferma ("yes") | 0 (bypass deterministico) | — |
 | Naming su merge/split | 1 per op | ~$0.003 |
 
-**Stima sessione con re-embedding + 5 turni:** ~$0.10–0.18
+**Stima sessione con re-embedding + 5 turni:** ~$0.07–0.12
 
 ---
 
@@ -413,6 +416,7 @@ Refactor del path semantico in `turns.py`:
 | `408b255` | revert: use NN propagation instead of Ridge regression |
 | `783223f` | feat: use Ridge regression when N_sample > D, fall back to NN otherwise |
 | `15cc26e` | feat: increase LLM_SAMPLE_SIZE 200 → 600 for better NN propagation coverage |
+| `044423a` | revert: LLM_SAMPLE_SIZE 600 → 200 (latency cost outweighs marginal silhouette gain) |
 
 ---
 
