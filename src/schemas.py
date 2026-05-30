@@ -63,6 +63,14 @@ class InputOracle(BaseModel):
     target_cluster_ids: List[str] = Field(default_factory=list)
     target_point_ids: List[str] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    axis_hint: Optional[str] = Field(
+        default=None,
+        description=(
+            "Semantic axis for Turn-1 re-embedding (e.g. 'angry', 'battery life'). "
+            "When provided on the first oracle turn the system re-orients the entire "
+            "embedding space around this axis before applying structural operations."
+        ),
+    )
 
 
 class Display(BaseModel):

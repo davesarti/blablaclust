@@ -5,8 +5,6 @@ asks the LLM (via the harness) to label all clusters in a single call.
 Mutates the Cluster objects in place.
 """
 
-import json
-
 from src.harness import call_llm, render_prompt, loads_llm_json
 from src.logger import log
 from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoftAssignment
@@ -25,6 +23,7 @@ def name_clusters(
     assignments: list[DbSoftAssignment],
     data_points: list[DataPoint],
     sample_size: int = REPRESENTATIVE_SAMPLE_SIZE,
+    axis_hint: str | None = None,
 ) -> list[DbCluster]:
     """Fill in name and description for all clusters in a single LLM call.
 
@@ -39,6 +38,11 @@ def name_clusters(
     their placeholder names. If the response omits individual cluster IDs,
     those clusters also keep their placeholder names — naming never aborts
     the overall clustering operation.
+
+    Args:
+        axis_hint: When provided, the naming prompt instructs the LLM to label
+            clusters along this semantic axis (e.g. "angry tone") rather than
+            purely by topic.
 
     Mutates `clusters` in place and also returns the list for convenience.
     """
@@ -71,7 +75,28 @@ def name_clusters(
         return clusters  # nothing to name
 
     clusters_block = "\n\n".join(cluster_blocks)
-    prompt = render_prompt("cluster_naming", clusters_block=clusters_block)
+
+    if axis_hint:
+        axis_context = (
+            f"\nAXIS CONTEXT\n"
+            f"This session is oriented along the semantic axis \"{axis_hint}\".\n"
+            f"For each cluster, read its sample texts and apply this rule:\n"
+            f"- If the texts clearly relate to '{axis_hint}', name the cluster by "
+            f"its position on the axis (e.g. 'High {axis_hint.title()}', "
+            f"'Low {axis_hint.title()}', or natural synonyms like "
+            f"'Excellent {axis_hint.title()}' / 'Poor {axis_hint.title()}').\n"
+            f"- If the texts do NOT relate to '{axis_hint}', use a descriptive "
+            f"topic name that reflects what the cluster is actually about "
+            f"(e.g. 'Shipping and Returns', 'Product Durability').\n"
+        )
+    else:
+        axis_context = ""
+
+    prompt = render_prompt(
+        "cluster_naming",
+        clusters_block=clusters_block,
+        axis_context=axis_context,
+    )
 
     # Naming is best-effort: a failed LLM call (no API key, rate limit,
     # unreachable) or an unparseable response must not abort clustering.

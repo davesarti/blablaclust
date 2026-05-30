@@ -1,0 +1,19 @@
+You are defining a semantic axis for embedding-based clustering.
+
+Axis: "{axis_label}"
+
+Write exactly two short example texts (2-4 sentences each) that represent
+the extreme poles of this axis:
+- "high": a text that maximally and clearly exemplifies HIGH {axis_label}
+- "low":  a text that maximally and clearly exemplifies LOW {axis_label}
+
+Make the examples concrete and realistic — they will be embedded as reference
+points to score other texts along the axis. The clearer the contrast between
+the two examples, the better the clustering quality.
+
+Respond with a single JSON object. No markdown fences, no other text.
+
+{{
+  "high": "<example text representing maximum {axis_label}>",
+  "low":  "<example text representing minimum {axis_label}>"
+}}

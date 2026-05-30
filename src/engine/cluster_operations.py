@@ -95,6 +95,7 @@ def merge_clusters(
     turn_number: int,
     db: Session,
     auto_name: bool = True,
+    axis_hint: str | None = None,
 ) -> DbCluster:
     """Merge two or more clusters into one.
 
@@ -214,7 +215,7 @@ def merge_clusters(
         merged_points = (
             db.query(DataPoint).filter(DataPoint.id.in_(merged_point_ids)).all()
         )
-        name_clusters([new_cluster], new_assignments, merged_points)
+        name_clusters([new_cluster], new_assignments, merged_points, axis_hint=axis_hint)
 
     return new_cluster
 
@@ -226,6 +227,7 @@ def split_cluster(
     db: Session,
     k: int = 2,
     auto_name: bool = True,
+    axis_hint: str | None = None,
 ) -> list[DbCluster]:
     """Split one cluster into ``k`` sub-clusters using k-means on its members.
 
@@ -304,7 +306,7 @@ def split_cluster(
     # operation itself; the "part N" labels above are the fallback if the LLM
     # call fails. subset_assignments / subset_points are already in memory.
     if auto_name:
-        name_clusters(new_clusters, subset_assignments, subset_points)
+        name_clusters(new_clusters, subset_assignments, subset_points, axis_hint=axis_hint)
 
     # Dissolve the parent cluster as of this turn.
     cluster.dissolved_at_turn = turn_number

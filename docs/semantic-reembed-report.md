@@ -1,7 +1,7 @@
 # Report: branch `feature/semantic-reembed`
 
 **Autore:** P5 (Arianna Schiavi)
-**Ultimo aggiornamento:** 2026-05-27 (rev 7)
+**Ultimo aggiornamento:** 2026-05-30 (rev 9)
 **Stato:** implementazione completa, in test manuale
 
 ---
@@ -50,21 +50,27 @@ POST /turns
 |------|-------|
 | `src/engine/f_semantic_reembed.py` | Calcola la matrice ibrida `(N, D+1)` |
 | `src/engine/semantic_clustering.py` | Orchestra re-embed + k-means + naming |
-| `tests/test_f_semantic_reembed.py` | 15 unit test per `f_semantic_reembed` |
-| `tests/test_semantic_clustering.py` | 22 unit test per `semantic_clustering` |
+| `prompts/semantic_axis_poles.txt` | Prompt per la generazione LLM dei poli dell'asse |
+| `tests/test_f_semantic_reembed.py` | 37 unit test per `f_semantic_reembed` |
+| `tests/test_semantic_clustering.py` | 28 unit test per `semantic_clustering` |
+| `tests/test_harness_json.py` | 7 unit test per `loads_llm_json` / `_escape_unescaped_quotes` |
 
 ### File modificati
 
 | File | Modifica |
 |------|----------|
 | `src/schemas.py` | `axis_hint` aggiunto a `InputOracle` |
-| `src/engine/cluster_naming.py` | Parametro `axis_hint`; blocco AXIS CONTEXT nel prompt quando presente |
+| `src/engine/cluster_naming.py` | Parametro `axis_hint`; blocco AXIS CONTEXT dinamico; usa `loads_llm_json` |
 | `src/engine/cluster_operations.py` | `axis_hint` propagato a `merge_clusters` e `split_cluster` |
 | `src/engine/f_apply_operations.py` | `axis_hint` propagato a `merge_clusters` e `split_cluster` |
-| `backend/routers/turns.py` | Semantic path al Turn 1; recupero `session_axis_hint` per i turni successivi |
-| `prompts/cluster_naming.txt` | Slot `{axis_context}` inserito |
+| `src/engine/f_output.py` | Usa `loads_llm_json` invece di `json.loads(extract_json_text(...))` |
+| `src/harness.py` | `_escape_unescaped_quotes` + `loads_llm_json`; fallback `{...}` su `extract_json_text` |
+| `src/harness_openai.py` | Guard `content is None` in `call_gpt` e `call_gpt_async` |
+| `src/harness_openrouter.py` | Guard `content is None` in `call_openrouter` e `call_openrouter_async` |
+| `backend/routers/turns.py` | Catch `AxisNotDiscriminativeError` → ask-turn con `turn_number=0` |
+| `prompts/cluster_naming.txt` | Slot `{axis_context}` inserito; regola escape delle virgolette interne al JSON |
 | `prompts/f_output.txt` | Vincolo aritmetico N→K merge aggiunto ai CONSTRAINTS |
-| `ui/index.html` | Placeholder adattivo al turno; `axis_hint` incluso nel payload al Turn 0 |
+| `ui/index.html` | Placeholder adattivo al turno; `axis_hint` incluso nel payload; `buildDiff` helper estratto |
 | `tests/test_f_apply_operations.py` | Fixture aggiornate con `axis_hint=None` |
 
 ---
@@ -73,18 +79,43 @@ POST /turns
 
 ### `f_semantic_reembed.py`
 
-Due strategie + selettore ibrido.
+Due strategie + selettore ibrido. Flusso completo al Turn 1:
 
-**Strategia coseno (gratuita)**
+```
+_generate_axis_poles(axis_label)
+  → (pole_pos_text, pole_neg_text)   # 1 chiamata LLM, sempre
 
-```python
-pole_pos = model.encode(f"very {axis_label}")
-pole_neg = model.encode(f"not {axis_label} at all")
-score(p) = dot(emb_p, pole_pos) - dot(emb_p, pole_neg)
+_cosine_axis_scores(points, pole_pos_text, pole_neg_text)
+  → cosine_var > COSINE_VARIANCE_THRESHOLD?
+      sì → usa i punteggi coseno direttamente
+      no → _llm_axis_scores(points, axis_label)
+              → llm_std < LLM_STD_THRESHOLD?
+                  sì → raise AxisNotDiscriminativeError
+                  no → usa i punteggi LLM
 ```
 
-Fallisce silenziosamente quando il modello MiniLM non separa l'asse:
-`cosine_variance <= COSINE_VARIANCE_THRESHOLD (= 0.01)`.
+**Generazione poli LLM (`_generate_axis_poles`)**
+
+Prima di calcolare i punteggi coseno, il sistema chiede all'LLM di generare due
+testi concreti come poli dell'asse (prompt `prompts/semantic_axis_poles.txt`).
+I testi concreti (es. una recensione furente vs. una neutra) si embedderanno
+meglio delle frasi astratte ("very angry" / "not angry at all") perché vivono
+nella stessa distribuzione dei dati.
+
+In caso di errore (LLM non disponibile, risposta malformata, campi vuoti) fa
+fallback automatico alle frasi astratte senza interrompere il pipeline.
+
+**Strategia coseno (gratuita, dopo la generazione poli)**
+
+```python
+pole_pos = model.encode(pole_pos_text)   # testo concreto generato dall'LLM
+pole_neg = model.encode(pole_neg_text)
+# entrambi normalizzati a norma unitaria
+score(p) = dot(emb_p_norm, pole_pos) - dot(emb_p_norm, pole_neg)
+```
+
+Funziona quando il modello MiniLM separa l'asse:
+`cosine_variance > COSINE_VARIANCE_THRESHOLD (= 0.01)`.
 
 **Strategia LLM batch scoring (fallback)**
 
@@ -93,6 +124,14 @@ LLM valuta ogni testo da 0 a 10 lungo l'asse. Batch di 25 per chiamata.
 Per dataset grandi (N > `LLM_SAMPLE_SIZE = 200`): campiona 200 punti casuali,
 li fa valutare, propaga i punteggi al resto via nearest-neighbour coseno.
 Riduce da ~48 a ~8 chiamate LLM su 1200 punti.
+
+**`AxisNotDiscriminativeError`**
+
+Se anche il fallback LLM non riesce a discriminare l'asse
+(std dei punteggi < `LLM_STD_THRESHOLD = 1.0`), viene sollevata
+`AxisNotDiscriminativeError`. `turns.py` la intercetta e restituisce un
+ask-turn con `turn_number=0` — il turn non viene scritto nel DB, quindi
+lo stato UI rimane al Turn 1 e l'oracle può inserire un asse diverso.
 
 **Matrice ibrida risultante**
 
@@ -110,17 +149,25 @@ sia la **frazione esatta** di segnale k-means proveniente dall'asse.
 ### `semantic_clustering.py`
 
 ```
-AXIS_K_CAP = 3
+K_AUTO_MIN = 2
+K_AUTO_MAX = 5
 ```
 
-Un asse semantico è unidimensionale (alto/medio/basso). Se k non è passato
-esplicitamente, viene cappato a `min(k_corrente, 3)` per evitare cluster che
-ridivengono topic-based per mancanza di varianza.
+k viene scelto automaticamente via silhouette score quando non è passato
+esplicitamente. `_auto_select_k(X, k_min, k_max)` testa k=2..5 sul nuovo
+spazio ibrido già calcolato e restituisce il k con silhouette media più alta.
+Questo permette ai dati di determinare la granularità naturale dell'asse
+(es. asse binario → k=2; asse a tre livelli → k=3) invece di cap fisso a 3.
+
+Se k è passato esplicitamente (es. `k=3` dalla chiamata diretta) l'auto-select
+viene bypassato.
 
 Flusso:
 
 ```
 reembed_for_axis(points, axis_hint, axis_weight)
+  → X (matrice ibrida, già calcolata prima di scegliere k)
+  → _auto_select_k(X, K_AUTO_MIN, K_AUTO_MAX)   # k=None → silhouette
   → KMeans(k) sul nuovo spazio
   → dissolvi vecchi cluster (dissolved_at_turn = turn_number)
   → crea nuovi DbCluster
@@ -143,15 +190,43 @@ restano coerenti con l'asse semantico della sessione.
 
 ### Naming con contesto asse
 
-Quando `axis_hint` è presente, `name_clusters` inietta nel prompt:
+Quando `axis_hint` è presente, `name_clusters` inietta nel prompt un blocco
+AXIS CONTEXT con esempi di nomi **dinamici** basati sull'asse richiesto:
 
 ```
 AXIS CONTEXT
 These clusters were produced by re-embedding along the semantic axis "{axis_hint}".
-Name each cluster to reflect where it falls along this axis — use degree/tone labels
-(e.g. for 'angry tone': 'Very Angry', 'Mildly Frustrated', 'Neutral/Satisfied')
-rather than topic labels like 'Book Reviews' or 'Electronics'.
+Name each cluster to reflect its position on this axis.
+Choose names that describe degree or intensity along the '{axis_hint}' spectrum
+— for example 'High {axis_hint.title()}', 'Medium {axis_hint.title()}',
+'Low {axis_hint.title()}' — or use natural synonyms that make the position
+immediately clear. Do NOT use topic labels like 'Electronics' or 'Book Reviews'.
 ```
+
+Nella rev 7 il blocco conteneva esempi hardcoded `'Very Angry'` /
+`'Mildly Frustrated'` / `'Neutral/Satisfied'`: l'LLM li seguiva letteralmente
+per qualsiasi asse. Il fix sostituisce quegli esempi con `High/Medium/Low
+{axis_hint.title()}` generati dinamicamente dal nome dell'asse richiesto.
+
+**Fix rev 9 — naming biforcato per cluster non-asse**
+
+Un secondo bug: quando un cluster "non correlato all'asse" (es. "Unrelated
+Customer Experiences") veniva splittato, i sotto-cluster ricevevano comunque
+nomi asse (es. "High Battery Life", "Low Battery Life") perché il prompt
+vietava esplicitamente i nomi tematici (`Do NOT use topic labels`).
+
+Il blocco AXIS CONTEXT è stato riscritto con una regola biforcata:
+
+```
+- Se i testi del cluster riguardano '{axis_hint}' → nome per posizione
+  sull'asse (es. 'Poor Battery Life', 'Excellent Battery Life').
+- Se i testi NON riguardano '{axis_hint}' → nome tematico descrittivo
+  che riflette il contenuto reale (es. 'Shipping and Returns').
+```
+
+Il prompt `prompts/cluster_naming.txt` include anche la regola di escaping per
+evitare virgolette interne non escaped (es. misure `15.6"` scritte come
+`15.6 inch`) che rompevano il parse JSON.
 
 ### Vincolo aritmetico in `f_output.txt`
 
@@ -191,18 +266,32 @@ Stime teoriche per una sessione tipo con axis_hint:
 
 | Operazione | Chiamate LLM | Costo stimato |
 |------------|-------------|---------------|
-| Turn 1 — scoring asse (LLM fallback, 1200 punti, sample 200) | 8 × batch-25 | ~$0.01–0.02 |
+| Turn 1 — generazione poli asse (`_generate_axis_poles`) | 1 (sempre) | ~$0.001 |
+| Turn 1 — scoring asse coseno (se variance > 0.01) | 0 | — |
+| Turn 1 — scoring asse LLM fallback (1200 punti, sample 200) | 8 × batch-25 | ~$0.01–0.02 |
 | Turn 1 — naming 3 cluster | 1 | ~$0.003 |
 | Turn 2+ — f_output per turno | 1 per turno | ~$0.006–0.010 |
 | Turn 2+ — naming su merge/split | 1 per op | ~$0.003 |
 
 **Stima sessione completa** (Turn 1 + 5 turni operativi): ~$0.07–0.12
 
-Quando la strategia coseno funziona (cosine_variance > 0.01) il Turn 1 non costa nulla per lo scoring dell'asse — solo 1 chiamata per il naming.
+Quando la strategia coseno funziona (cosine_variance > 0.01) il Turn 1 costa
+solo 2 chiamate LLM: 1 per i poli + 1 per il naming.
 
 I log del terminale mostrano già `cost_usd=$X.XXXX` per ogni `f_output` call. Da ora anche la UI accumula il totale per sessione.
 
 ---
+
+## Miglioramenti da main e fix aggiuntivi (2026-05-30)
+
+| File | Modifica |
+|------|----------|
+| `src/harness.py` | `_escape_unescaped_quotes` + `loads_llm_json`: parse JSON tollerante per virgolette non escaped (inch mark `15.6"`, frasi citate); fallback `{...}` su `extract_json_text` |
+| `src/harness_openai.py` | Guard `content is None` in `call_gpt` e `call_gpt_async`: ValueError esplicita invece di crash su `NoneType` |
+| `src/harness_openrouter.py` | Stessa guard in `call_openrouter` e `call_openrouter_async` |
+| `src/engine/cluster_naming.py` | Usa `loads_llm_json` al posto di `json.loads(extract_json_text(...))` |
+| `src/engine/f_output.py` | Usa `loads_llm_json` |
+| `ui/index.html` | Helper `buildDiff` estratto inline → funzione separata; ritorna `null` per cluster invisibili (nome ma size=0) |
 
 ## Miglioramenti integrati da main (2026-05-27)
 
@@ -237,6 +326,12 @@ I log del terminale mostrano già `cost_usd=$X.XXXX` per ogni `f_output` call. D
 | `f8f00a1` | fix: populate token_usage and cost_usd in SystemTurn so UI counters work |
 | `336bf08` | feat: dynamic input placeholder shows cluster-aware examples for turns 2+ |
 | `21d184b` | fix: placeholder shows all operations at once separated by dots |
+| `00bb25c` | fix: tolerate unescaped quotes in LLM JSON (`loads_llm_json`, None content guards, `buildDiff`) |
+| `0ae00f7` | fix: remove hardcoded 'angry tone' example from axis_context naming prompt |
+| `3b325c6` | feat: return friendly ask-turn when axis doesn't discriminate the data |
+| `c5695f0` | fix: make axis-not-discriminative message dataset-agnostic |
+| `e2aa841` | feat: generate LLM axis poles for better semantic re-embedding |
+| *(pending)* | feat: auto-select k via silhouette score; fix off-axis cluster naming |
 
 ---
 
@@ -244,10 +339,11 @@ I log del terminale mostrano già `cost_usd=$X.XXXX` per ogni `f_output` call. D
 
 | Suite | Test | Stato |
 |-------|------|-------|
-| `test_f_semantic_reembed.py` | 15 | ✅ tutti passano |
-| `test_semantic_clustering.py` | 22 | ✅ tutti passano |
+| `test_f_semantic_reembed.py` | 37 | ✅ tutti passano |
+| `test_semantic_clustering.py` | 25 | ✅ tutti passano |
 | `test_f_apply_operations.py` | 13 | ✅ tutti passano |
-| Suite completa | 147 | ✅ 144 pass, 3 fail pre-esistenti* |
+| `test_harness_json.py` | 7 | ✅ tutti passano (nuova suite) |
+| Suite completa | 163 | ✅ 163 pass, 3 fail pre-esistenti* |
 
 *I 3 fail in `test_turns_endpoint.py` sono un problema di ordinamento tra test
 pre-esistente (non introdotto da questo branch); passano quando eseguiti in
@@ -297,6 +393,14 @@ inconsistente.
 | Formula peso asse sbagliata (α=0.7, β=0.3 → 15%) | Scaling lineare non considera le norme dei vettori | Sostituito con `axis_weight` e scaling `sqrt` |
 | Token counter UI sempre a zero | `SystemTurn` mancava dei campi `token_usage`/`cost_usd`; `turns.py` non li popolava | Aggiunti campi a schema, wire in `turns.py` |
 | Placeholder input generico nei turni successivi | Testo fisso "Share your feedback" non suggeriva azioni | Placeholder dinamico con nomi cluster reali e tutte le operazioni disponibili |
+| Cluster sempre nominati con nomi "angry tone" | Esempio hardcoded `'Very Angry' / 'Mildly Frustrated' / 'Neutral/Satisfied'` nel prompt di naming | Sostituito con esempi dinamici `High/Medium/Low {axis_hint.title()}` |
+| Asse non discriminativo → HTTP 422 (toast errore) | `reembed_for_axis` propagava l'eccezione fino a HTTP 422 | Catch `AxisNotDiscriminativeError` in `turns.py` → ask-turn con `turn_number=0`; il DB non viene toccato |
+| Messaggio errore "Amazon-specific" | Testo conteneva "Amazon reviews" come dataset di riferimento | Riscritto con linguaggio dataset-agnostico |
+| Poli coseno astratti mal embeddati | `"very {axis}"` non vive nella distribuzione dei dati reali | `_generate_axis_poles` chiede all'LLM due testi concreti come poli; fallback alle frasi astratte in caso di errore |
+| Parse JSON crash su inch mark / virgolette interne | `json.loads` strict su output LLM non sanitizzato | `loads_llm_json` + `_escape_unescaped_quotes`: tenta il parse strict, fallback con escape selettivo |
+| Crash su `content is None` nei harness OpenAI/OpenRouter | `completion.choices[0].message.content` può essere `None` su refusal o errori API | Guard esplicita con `ValueError` descrittiva prima di usare il valore |
+| k sempre 3 indipendentemente dall'asse | Cap fisso `AXIS_K_CAP = 3` ignorava la struttura reale dei dati | `_auto_select_k` testa k=2..5 via silhouette score sulla matrice ibrida già calcolata; es. asse binario → k=2 |
+| Cluster off-axis nominati con nomi asse | `axis_context` vietava esplicitamente i nomi tematici (`Do NOT use topic labels`) | Regola biforcata: se i testi riguardano l'asse → nome asse; altrimenti → nome tematico descrittivo |
 
 ---
 

@@ -10,10 +10,12 @@ from src.engine.f_apply_operations import f_apply_operations
 from src.engine.f_cognitive_load import f_cognitive_load
 from src.engine.f_next_best_step import f_next_best_step
 from src.engine.f_output import f_output
+from src.engine.f_semantic_reembed import AxisNotDiscriminativeError
 from src.engine.f_uncertainty import f_cluster_uncertainty
+from src.engine.semantic_clustering import semantic_clustering
 from src.harness import ConversationContext, estimate_cost_usd
 from src.models import ChatSession, Cluster as DbCluster, DataPoint, SoftAssignment, Turn
-from src.schemas import InputOracle, TurnRead
+from src.schemas import Display, InputOracle, SystemTurn, TurnRead
 
 router = APIRouter(prefix="/turns", tags=["turns"])
 
@@ -124,82 +126,179 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
         context.add_oracle_turn(turn.oracle_input)
         context.add_system_turn(turn.system_output)
 
-    total_points = (
-        db.query(DataPoint)
-        .filter(DataPoint.dataset_name == session.dataset_name)
-        .count()
-    )
+    # The next turn number is known from state: state.turn_number is the last
+    # persisted oracle turn (0 if none), so the next one is state.turn_number + 1.
+    new_turn_number = state.turn_number + 1
 
-    try:
-        raw, _usage = f_output(state, payload, context, total_points)
-    except (json.JSONDecodeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Engine returned a malformed response: {exc}",
+    # Retrieve the axis_hint stored in Turn 1 (if any) so subsequent turns can
+    # name clusters consistently along the session's semantic axis.
+    session_axis_hint: str | None = None
+    if prior_turns:
+        first_input = prior_turns[0].oracle_input
+        if isinstance(first_input, dict):
+            session_axis_hint = first_input.get("axis_hint") or None
+
+    # ── Semantic re-embedding path ─────────────────────────────────────────────
+    # When the oracle provides axis_hint on Turn 1, we re-orient the entire
+    # embedding space around the specified semantic axis before anything else.
+    # This replaces the f_output/f_apply_operations path for this turn.
+    if new_turn_number == 1 and payload.axis_hint:
+        print(
+            f"[turns] semantic-reembed path  session={session.id}  "
+            f"axis_hint='{payload.axis_hint}'",
+            flush=True,
         )
-    except Exception as exc:
-        raise HTTPException(
-            status_code=502, detail=f"Engine call failed: {exc}"
+        all_data_points = (
+            db.query(DataPoint)
+            .filter(DataPoint.dataset_name == session.dataset_name)
+            .all()
         )
-
-    latest_turn = (
-        db.query(func.max(Turn.turn_number))
-        .filter(Turn.session_id == session.id)
-        .scalar()
-    )
-    new_turn_number = (latest_turn or 0) + 1
-
-    if isinstance(raw, list):
-        operations = raw
-    else:
-        operations = raw.get("operations", [])
-
-    if operations:
-        latest_snapshot_turn = (
-            db.query(func.max(SoftAssignment.turn_number))
-            .filter(SoftAssignment.cluster_id.in_([c.id for c in clusters]))
-            .scalar()
-        )
-        start_turn = new_turn_number
-        if latest_snapshot_turn is not None and latest_snapshot_turn >= start_turn:
-            start_turn = latest_snapshot_turn + 1
-
-        # Engine errors (bad cluster_id, missing fields, dissolved cluster, …)
-        # propagate out of f_apply_operations on purpose — we surface them as
-        # HTTP 422 with the original message so the oracle (and the dev) can
-        # see exactly what went wrong rather than getting a bare "500 Internal
-        # Server Error".  The in-progress transaction rolls back when the
-        # session closes, so no partial cluster state ever reaches the DB.
         try:
-            f_apply_operations(
-                operations,
+            new_clusters, new_assignments = semantic_clustering(
+                data_points=all_data_points,
+                axis_hint=payload.axis_hint,
                 session_id=session.id,
-                turn_number=start_turn,
+                turn_number=1,
                 db=db,
+                # k omitted: semantic_clustering caps to min(active, 3) by default
             )
-            db.commit()
-        except (ValueError, KeyError) as exc:
-            db.rollback()
+        except AxisNotDiscriminativeError:
+            # The axis doesn't vary in the dataset — ask the oracle to try a
+            # different one WITHOUT advancing the turn counter (turn_number=0
+            # keeps state.session.turn=0 in the UI so axis_hint is sent again).
+            return TurnRead(
+                session_id=session.id,
+                turn_number=0,
+                oracle_input=payload,
+                system_output=SystemTurn(
+                    session_id=session.id,
+                    turn_number=0,
+                    action="ask",
+                    clusters_updated=False,
+                    display=Display(
+                        type="text",
+                        content=(
+                            f"The axis \"{payload.axis_hint}\" doesn't vary enough across "
+                            f"the dataset to produce meaningful clusters. "
+                            f"Try a different axis — one that is clearly present and "
+                            f"spans a range in the data."
+                        ),
+                    ),
+                    contradiction_detected=False,
+                    cognitive_load_score=1,
+                ),
+            )
+        except (ValueError, RuntimeError) as exc:
             raise HTTPException(
                 status_code=422,
-                detail=f"Engine produced an invalid operation: {exc}",
+                detail=f"Semantic re-embedding failed: {exc}",
             )
 
+        for cluster in new_clusters:
+            db.add(cluster)
+        for assignment in new_assignments:
+            db.add(assignment)
+        db.commit()
+
+        # Register the oracle turn in the conversation context so future turns
+        # can replay the full history correctly.
+        context.add_oracle_turn(payload.model_dump())
+
+        operations = [
+            {
+                "type": "semantic_reembed",
+                "axis_hint": payload.axis_hint,
+                "clusters_created": len(new_clusters),
+            }
+        ]
+        raw_display = None
+        turn_usage: dict | None = None
+        turn_cost: float | None = None
+
+    # ── Normal path: structural operations via f_output ───────────────────────
+    else:
+        total_points = (
+            db.query(DataPoint)
+            .filter(DataPoint.dataset_name == session.dataset_name)
+            .count()
+        )
+
+        try:
+            raw, usage = f_output(state, payload, context, total_points)
+            cost = estimate_cost_usd(usage)
+            print(
+                f"[turns] f_output  session={session.id}  turn={new_turn_number}  "
+                f"input_tokens={usage.get('input_tokens', 0)}  "
+                f"output_tokens={usage.get('output_tokens', 0)}  "
+                f"cost_usd=${cost:.4f}",
+                flush=True,
+            )
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Engine returned a malformed response: {exc}",
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502, detail=f"Engine call failed: {exc}"
+            )
+
+        if isinstance(raw, list):
+            operations = raw
+        else:
+            operations = raw.get("operations", [])
+        print(
+            f"[turns] operations  session={session.id}  turn={new_turn_number}  "
+            f"count={len(operations)}  types={[op.get('type') for op in operations]}",
+            flush=True,
+        )
+
+        if operations:
+            latest_snapshot_turn = (
+                db.query(func.max(SoftAssignment.turn_number))
+                .filter(SoftAssignment.cluster_id.in_([c.id for c in clusters]))
+                .scalar()
+            )
+            start_turn = new_turn_number
+            if latest_snapshot_turn is not None and latest_snapshot_turn >= start_turn:
+                start_turn = latest_snapshot_turn + 1
+
+            # Engine errors propagate as HTTP 422 so the oracle can see exactly
+            # what went wrong. The in-progress transaction rolls back cleanly.
+            try:
+                f_apply_operations(
+                    operations,
+                    session_id=session.id,
+                    turn_number=start_turn,
+                    db=db,
+                    axis_hint=session_axis_hint,
+                )
+                db.commit()
+            except (ValueError, KeyError) as exc:
+                db.rollback()
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Engine produced an invalid operation: {exc}",
+                )
+
+        raw_display = raw.get("display") if isinstance(raw, dict) else None
+        turn_usage = usage
+        turn_cost = cost
+
+    # ── Common path: planner + persist turn ───────────────────────────────────
     updated_state = build_session_state(db, session)
     uncertainty = f_cluster_uncertainty(session.id, db)
     cognitive_load = f_cognitive_load(updated_state, context)
     system_turn = f_next_best_step(updated_state, uncertainty, cognitive_load)
     system_turn.clusters_updated = bool(operations)
+    system_turn.token_usage = turn_usage
+    system_turn.cost_usd = turn_cost
 
-    # Always surface the LLM's actual reply, regardless of action.
-    # Previously only "show" got the real text — "stop" and "ask" got a
-    # hardcoded canned string, discarding whatever the model actually said.
-    raw_display = raw.get("display") if isinstance(raw, dict) else None
+    # Surface the LLM's real display text regardless of action (show/ask/stop).
     if isinstance(raw_display, str):
         system_turn.display.content = raw_display
 
-    # If the planner decided to stop, actually close the session so the UI
-    # reflects the final state and no further turns are processed.
+    # Close the session when the planner decides to stop.
     if system_turn.action == "stop":
         session.status = "closed"
 
@@ -207,9 +306,9 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
         system_turn.state_snapshot["operations"] = operations
 
     # Persist the turn once, with the final SystemTurn as system_output. Creating
-    # the row only here (rather than up-front with the raw engine output) keeps
-    # the stored shape always valid against TurnRead/SystemTurn, and means a turn
-    # that fails mid-processing never lands a half-baked row in the DB.
+    # the row only here (rather than up-front) keeps the stored shape always valid
+    # against TurnRead/SystemTurn — a turn that fails mid-processing never lands
+    # a half-baked row in the DB.
     new_turn = Turn(
         session_id=session.id,
         turn_number=new_turn_number,
