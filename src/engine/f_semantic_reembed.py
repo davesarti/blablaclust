@@ -21,6 +21,7 @@ axis_weight=0.7 means 70% of clustering signal comes from the axis.
 """
 
 import numpy as np
+from sklearn.linear_model import Ridge
 from sentence_transformers import SentenceTransformer
 
 from src.harness import call_llm, loads_llm_json, render_prompt
@@ -101,8 +102,13 @@ def _cosine_axis_scores(
 
 
 # For large datasets, only this many points are scored via LLM; the rest
-# inherit the score of their nearest neighbour in the original embedding space.
-LLM_SAMPLE_SIZE = 200
+# inherit the score of their nearest neighbour in the original embedding space
+# (or via Ridge regression when N_sample > D=384).
+# At N=600 the regime flips from N<D to N>D, making Ridge regression viable.
+LLM_SAMPLE_SIZE = 600
+
+# Ridge alpha — used only when LLM_SAMPLE_SIZE > embedding dimension (~384).
+_RIDGE_ALPHA = 1.0
 
 
 def _llm_score_sample(
@@ -187,26 +193,37 @@ def _llm_axis_scores(
 
     sample_embs = np.array([p.embedding for p in sampled], dtype=np.float64)
     all_embs    = np.array([p.embedding for p in points],  dtype=np.float64)
+    n_sample, d = sample_embs.shape
 
-    # Nearest-neighbour propagation in the original embedding space.
-    # Ridge regression was tested (α=1.0 and α=0.01) but performed worse:
-    # D=384 >> N_sample=200 causes either over-regularisation (std compressed,
-    # silhouette 0.34) or overfitting with out-of-range extrapolation (silhouette
-    # 0.36) vs NN silhouette ~0.55. See report experiment table for details.
-    sample_norms = np.linalg.norm(sample_embs, axis=1, keepdims=True) + 1e-8
-    all_norms    = np.linalg.norm(all_embs,    axis=1, keepdims=True) + 1e-8
-    sims    = (all_embs / all_norms) @ (sample_embs / sample_norms).T
-    nearest = sims.argmax(axis=1)
-    scores  = sample_scores[nearest].copy()
+    if n_sample > d:
+        # N_sample > D: Ridge regression is viable (well-determined system).
+        reg = Ridge(alpha=_RIDGE_ALPHA)
+        reg.fit(sample_embs, sample_scores)
+        scores = reg.predict(all_embs)
+        train_r2 = reg.score(sample_embs, sample_scores)
+        print(
+            f"[semantic-reembed] Ridge propagation  "
+            f"alpha={_RIDGE_ALPHA}  train_R²={train_r2:.3f}  "
+            f"std={scores.std():.3f}  min={scores.min():.2f}  max={scores.max():.2f}",
+            flush=True,
+        )
+    else:
+        # N_sample <= D: Ridge over-regularises or overfits; fall back to NN.
+        sample_norms = np.linalg.norm(sample_embs, axis=1, keepdims=True) + 1e-8
+        all_norms    = np.linalg.norm(all_embs,    axis=1, keepdims=True) + 1e-8
+        sims    = (all_embs / all_norms) @ (sample_embs / sample_norms).T
+        nearest = sims.argmax(axis=1)
+        scores  = sample_scores[nearest].copy()
+        print(
+            f"[semantic-reembed] NN propagation (N={n_sample}<=D={d})  "
+            f"std={scores.std():.3f}  min={scores.min():.2f}  max={scores.max():.2f}",
+            flush=True,
+        )
+
+    # Sampled points always keep their exact LLM score (no propagation error).
     for local_i, global_i in enumerate(sample_idx):
         scores[global_i] = sample_scores[local_i]
 
-    print(
-        f"[semantic-reembed] NN propagation  "
-        f"std={scores.std():.3f}  "
-        f"min={scores.min():.2f}  max={scores.max():.2f}",
-        flush=True,
-    )
     return scores
 
 
