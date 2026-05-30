@@ -185,18 +185,48 @@ def _llm_axis_scores(
     )
     sample_scores = _llm_score_sample(sampled, axis_label, batch_size)
 
-    # Nearest-neighbour interpolation in the original embedding space.
     sample_embs = np.array([p.embedding for p in sampled], dtype=np.float64)
     all_embs    = np.array([p.embedding for p in points],  dtype=np.float64)
+
+    # ── Nearest-neighbour baseline (logged for comparison) ────────────────────
     sample_norms = np.linalg.norm(sample_embs, axis=1, keepdims=True) + 1e-8
     all_norms    = np.linalg.norm(all_embs,    axis=1, keepdims=True) + 1e-8
-    # cosine similarity matrix (N, LLM_SAMPLE_SIZE)
-    sims    = (all_embs / all_norms) @ (sample_embs / sample_norms).T
-    nearest = sims.argmax(axis=1)           # each of the N points → its closest sample
-    scores  = sample_scores[nearest].copy()
-    # Exact sampled points keep their own score (not neighbour's).
+    sims         = (all_embs / all_norms) @ (sample_embs / sample_norms).T
+    nearest      = sims.argmax(axis=1)
+    nn_scores    = sample_scores[nearest].copy()
+    for local_i, global_i in enumerate(sample_idx):
+        nn_scores[global_i] = sample_scores[local_i]
+
+    print(
+        f"[semantic-reembed] NN propagation  "
+        f"std={nn_scores.std():.3f}  "
+        f"min={nn_scores.min():.2f}  max={nn_scores.max():.2f}",
+        flush=True,
+    )
+
+    # ── Ridge regression propagation ─────────────────────────────────────────
+    # Finds the best linear direction in the 384-dim embedding space that
+    # predicts LLM scores, rather than inheriting from the nearest topic neighbour.
+    # More robust for tone/sentiment axes where MiniLM encodes topic but not tone.
+    from sklearn.linear_model import Ridge
+
+    reg = Ridge(alpha=1.0)
+    reg.fit(sample_embs, sample_scores)
+    scores = reg.predict(all_embs)
+
+    # Sampled points keep their own LLM score (ground truth, override regression).
     for local_i, global_i in enumerate(sample_idx):
         scores[global_i] = sample_scores[local_i]
+
+    ridge_r2  = float(reg.score(sample_embs, sample_scores))
+    print(
+        f"[semantic-reembed] Ridge propagation  "
+        f"train_R²={ridge_r2:.3f}  "
+        f"std={scores.std():.3f}  "
+        f"min={scores.min():.2f}  max={scores.max():.2f}",
+        flush=True,
+    )
+
     return scores
 
 

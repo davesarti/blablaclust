@@ -137,8 +137,49 @@ Funziona quando `cosine_variance > COSINE_VARIANCE_THRESHOLD`.
 **Strategia LLM batch scoring (fallback)**
 
 LLM valuta ogni testo da 0 a 10 lungo l'asse (batch di 25).
-Per dataset grandi (N > `LLM_SAMPLE_SIZE = 200`): campiona 200 punti, propaga
-via nearest-neighbour coseno. Riduce da ~48 a ~8 chiamate su 1200 punti.
+Per dataset grandi (N > `LLM_SAMPLE_SIZE = 200`): campiona 200 punti e li fa
+scorare, poi propaga i punteggi agli altri N-200 punti via **Ridge regression**
+(alpha=1.0) invece di nearest-neighbour coseno. Riduce da ~48 a ~8 chiamate LLM.
+
+**Perché Ridge invece di nearest-neighbour**
+
+Il nearest-neighbour usa la similarità coseno di MiniLM per trovare il punto
+"più simile" al quale ereditare il punteggio. Il problema: MiniLM cattura la
+similarità di *topic*, non di *tono*. Per assi tonali (angry tone, formality)
+una recensione calma di elettronica eredita il punteggio dalla recensione arrabbiata
+di elettronica più vicina per topic — propagazione sbagliata.
+
+La Ridge regression cerca invece la migliore combinazione lineare di tutte le 384
+dimensioni dell'embedding che predice i punteggi LLM dei 200 punti campionati.
+Anche se MiniLM non codifica esplicitamente il tono in una singola dimensione,
+esiste una combinazione lineare debole che correla con esso (struttura della frase,
+scelta lessicale, lunghezza). Con 200 labeled points Ridge la trova.
+
+I log di terminale riportano entrambe le metriche per confronto:
+
+```
+[semantic-reembed] NN propagation   std=X.XXX  min=X.XX  max=X.XX
+[semantic-reembed] Ridge propagation  train_R²=X.XXX  std=X.XXX  min=X.XX  max=X.XX
+```
+
+**`train_R²`**: quanto bene la direzione lineare fittata predice i punteggi LLM
+sui 200 punti di training. Valori attesi: 0.1–0.4 per assi tonali (segnale debole),
+0.4–0.8 per assi tematici (MiniLM cattura bene il topic).
+
+**`std` Ridge vs NN**: se `std_ridge > std_nn`, Ridge ha trovato più varianza
+lungo l'asse → separazione k-means potenzialmente migliore.
+
+---
+
+### Esperimento: Ridge vs NN — risultati empirici
+
+*I valori qui sotto vengono aggiornati man mano che vengono condotti i test manuali.*
+
+| Sessione | Asse | std NN | std Ridge | R² Ridge | Silhouette finale | Note |
+|----------|------|--------|-----------|----------|-------------------|------|
+| — | — | — | — | — | — | da compilare |
+
+---
 
 **`AxisNotDiscriminativeError`**
 
@@ -371,6 +412,9 @@ Refactor del path semantico in `turns.py`:
 | `ad462aa` | feat(prompt): add clarify action for ambiguous semantic-axis inputs |
 | `bc7b10c` | fix(prompt): handle confirmation reply after clarify |
 | `a063783` | fix: deterministic clarify-confirm flow for semantic reembed |
+| `783e6c0` | fix(naming): axis_context uses degree-based criterion instead of topic-relatedness |
+| `6b79c4d` | fix(naming): remove hardcoded axis examples from axis_context prompt |
+| `(current)` | feat: Ridge regression propagation replaces nearest-neighbour in LLM fallback |
 
 ---
 
