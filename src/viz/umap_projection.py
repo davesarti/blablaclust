@@ -27,7 +27,7 @@ from typing import Any
 import numpy as np
 
 import src.logger as logger
-from src.models import ChatSession, Cluster, DataPoint, SoftAssignment
+from src.models import ChatSession, Cluster, DataPoint, SoftAssignment, Turn
 
 try:  # umap-learn is optional; PCA is the always-available fallback.
     import umap  # noqa: F401
@@ -138,6 +138,9 @@ def project_session(
               "assignments": {"<turn>": [cluster_id|None, ...]},  # parallel to points
               "clusters": {"<id>": {"name", "created_at_turn", "dissolved_at_turn"}},
               "silhouette_by_turn": {"<turn>": float|None},
+              "centroids_by_turn": {"<turn>": {"<cluster_id>": [cx, cy]}},
+              "reembed_turns": [int, ...],
+              "axis_arrows": {"<turn>": {"from": [x,y], "to": [x,y], "label": str}},
             }
 
     Raises:
@@ -217,6 +220,62 @@ def project_session(
         for i, p in enumerate(points)
     ]
 
+    # ── Centroids per turn in 2-D UMAP space ─────────────────────────────────
+    centroids_by_turn: dict[str, dict[str, list[float]]] = {}
+    for t in turns:
+        cluster_point_idxs: dict[str, list[int]] = defaultdict(list)
+        for pid, (_, cid) in best[t].items():
+            if pid in idx:
+                cluster_point_idxs[cid].append(idx[pid])
+        centroids_by_turn[str(t)] = {
+            cid: [float(np.mean(coords[idxs, 0])), float(np.mean(coords[idxs, 1]))]
+            for cid, idxs in cluster_point_idxs.items()
+        }
+
+    # ── Semantic re-embed turns: turn where ≥2 clusters dissolved AND ≥2 created ─
+    reembed_turns: list[int] = []
+    for t in turns:
+        dissolved = [cid for cid, m in clusters_meta.items() if m["dissolved_at_turn"] == t]
+        created   = [cid for cid, m in clusters_meta.items() if m["created_at_turn"] == t]
+        if len(dissolved) >= 2 and len(created) >= 2:
+            reembed_turns.append(t)
+
+    # ── Axis arrows: PCA direction of new cluster centroids at reembed turns ──
+    # Also read axis_label from the turn's state_snapshot operations.
+    axis_labels: dict[int, str] = {}
+    if reembed_turns:
+        turn_rows = (
+            db.query(Turn)
+            .filter(Turn.session_id == session_id)
+            .all()
+        )
+        for row in turn_rows:
+            ops = ((row.system_output or {}).get("state_snapshot") or {}).get("operations") or []
+            for op in ops:
+                if isinstance(op, dict) and op.get("type") == "semantic_reembed":
+                    label = op.get("axis_label") or op.get("axis_hint") or ""
+                    if label:
+                        axis_labels[row.turn_number] = str(label)
+
+    axis_arrows: dict[str, dict] = {}
+    for t in reembed_turns:
+        created = [cid for cid, m in clusters_meta.items() if m["created_at_turn"] == t]
+        cents_dict = centroids_by_turn.get(str(t), {})
+        pts_2d = np.array([cents_dict[cid] for cid in created if cid in cents_dict])
+        if len(pts_2d) < 2:
+            continue
+        mean_2d = pts_2d.mean(axis=0)
+        centered = pts_2d - mean_2d
+        # First principal component = axis direction in 2D UMAP space.
+        _, _, vt = np.linalg.svd(centered, full_matrices=False)
+        direction = vt[0]
+        span = float(np.max(np.abs(centered @ direction))) * 1.2
+        axis_arrows[str(t)] = {
+            "from":  (mean_2d - span * direction).tolist(),
+            "to":    (mean_2d + span * direction).tolist(),
+            "label": axis_labels.get(t, ""),
+        }
+
     return {
         "session_id": session_id,
         "dataset_name": dataset,
@@ -227,4 +286,7 @@ def project_session(
         "assignments": assignments,
         "clusters": clusters_meta,
         "silhouette_by_turn": _silhouette_by_turn(session_id),
+        "centroids_by_turn": centroids_by_turn,
+        "reembed_turns": reembed_turns,
+        "axis_arrows": axis_arrows,
     }
