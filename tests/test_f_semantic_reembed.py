@@ -46,23 +46,24 @@ class TestCosineAxisScores:
 
         with patch(f"{MOD}.SentenceTransformer", return_value=mock_model):
             from src.engine.f_semantic_reembed import _cosine_axis_scores
-            scores = _cosine_axis_scores(points, "angry")
+            scores = _cosine_axis_scores(points, "very angry text", "calm satisfied text")
 
         assert scores.shape == (6,)
         assert scores.dtype == np.float64
 
-    def test_encodes_positive_and_negative_poles(self):
+    def test_encodes_the_provided_pole_texts(self):
+        """The function encodes the pole texts it receives, not derived phrases."""
         points = _make_points(3)
         mock_model = MagicMock()
         mock_model.encode.return_value = np.zeros(4, dtype=np.float64)
 
         with patch(f"{MOD}.SentenceTransformer", return_value=mock_model):
             from src.engine.f_semantic_reembed import _cosine_axis_scores
-            _cosine_axis_scores(points, "sentiment")
+            _cosine_axis_scores(points, "high pole text", "low pole text")
 
         encode_calls = [str(c.args[0]) for c in mock_model.encode.call_args_list]
-        assert any("very sentiment" in c for c in encode_calls)
-        assert any("not sentiment at all" in c for c in encode_calls)
+        assert any("high pole text" in c for c in encode_calls)
+        assert any("low pole text" in c for c in encode_calls)
 
     def test_score_direction(self):
         """A point aligned with pole_pos scores positive; one aligned with pole_neg
@@ -90,10 +91,10 @@ class TestCosineAxisScores:
 
         with patch(f"{MOD}.SentenceTransformer", return_value=mock_model):
             from src.engine.f_semantic_reembed import _cosine_axis_scores
-            scores = _cosine_axis_scores([dp_pos, dp_neg], "test")
+            scores = _cosine_axis_scores([dp_pos, dp_neg], "high text", "low text")
 
-        # dp_pos: dot([1,0,0,0],[1,0,0,0]) - dot([1,0,0,0],[0,1,0,0]) = 1 - 0 = 1
-        # dp_neg: dot([0,1,0,0],[1,0,0,0]) - dot([0,1,0,0],[0,1,0,0]) = 0 - 1 = -1
+        # dp_pos aligns with pole_pos → score = 1 - 0 = 1
+        # dp_neg aligns with pole_neg → score = 0 - 1 = -1
         assert scores[0] > scores[1]
         assert pytest.approx(scores[0], abs=1e-5) == 1.0
         assert pytest.approx(scores[1], abs=1e-5) == -1.0
@@ -109,11 +110,9 @@ class TestLlmAxisScores:
         points = _make_points(5)
         mock_response = MagicMock()
 
-        with (
-            patch(f"{MOD}.call_llm", return_value=mock_response),
-            patch(f"{MOD}.render_prompt", return_value="prompt"),
-            patch(f"{MOD}.extract_json_text", return_value="[3, 7, 2, 9, 5]"),
-        ):
+        with patch(f"{MOD}.call_llm", return_value=mock_response), \
+             patch(f"{MOD}.render_prompt", return_value="prompt"), \
+             patch(f"{MOD}.loads_llm_json", return_value=[3, 7, 2, 9, 5]):
             from src.engine.f_semantic_reembed import _llm_axis_scores
             scores = _llm_axis_scores(points, "angry")
 
@@ -125,11 +124,9 @@ class TestLlmAxisScores:
         points = _make_points(5)
         mock_response = MagicMock()
 
-        with (
-            patch(f"{MOD}.call_llm", return_value=mock_response) as mock_call,
-            patch(f"{MOD}.render_prompt", return_value="prompt"),
-            patch(f"{MOD}.extract_json_text", return_value="[5, 5]"),
-        ):
+        with patch(f"{MOD}.call_llm", return_value=mock_response) as mock_call, \
+             patch(f"{MOD}.render_prompt", return_value="prompt"), \
+             patch(f"{MOD}.loads_llm_json", return_value=[5, 5]):
             from src.engine.f_semantic_reembed import _llm_axis_scores
             _llm_axis_scores(points, "angry", batch_size=2)
 
@@ -139,23 +136,16 @@ class TestLlmAxisScores:
     def test_large_dataset_uses_sampling(self):
         """With N > LLM_SAMPLE_SIZE, LLM calls are capped at ceil(200/batch)."""
         from src.engine.f_semantic_reembed import LLM_SAMPLE_SIZE
-        n_points = LLM_SAMPLE_SIZE + 50  # just above threshold
+        n_points = LLM_SAMPLE_SIZE + 50
         points = _make_points(n_points)
         mock_response = MagicMock()
 
-        with (
-            patch(f"{MOD}.call_llm", return_value=mock_response) as mock_call,
-            patch(f"{MOD}.render_prompt", return_value="prompt"),
-            patch(f"{MOD}.extract_json_text", return_value="[5] * 25"),
-            patch(f"{MOD}.deviation"),
-        ):
-            # patch extract_json_text to return neutral list for any batch size
-            import json as _json
-            def _fake_extract(text):
-                return "[5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5]"
-            with patch(f"{MOD}.extract_json_text", side_effect=_fake_extract):
-                from src.engine.f_semantic_reembed import _llm_axis_scores
-                scores = _llm_axis_scores(points, "angry", batch_size=25)
+        with patch(f"{MOD}.call_llm", return_value=mock_response) as mock_call, \
+             patch(f"{MOD}.render_prompt", return_value="prompt"), \
+             patch(f"{MOD}.loads_llm_json", return_value=[5.0] * 25), \
+             patch(f"{MOD}.deviation"):
+            from src.engine.f_semantic_reembed import _llm_axis_scores
+            scores = _llm_axis_scores(points, "angry", batch_size=25)
 
         # Should call LLM ceil(200/25)=8 times, not ceil(250/25)=10 times
         assert mock_call.call_count == (LLM_SAMPLE_SIZE + 24) // 25
@@ -165,11 +155,9 @@ class TestLlmAxisScores:
         """A JSON parse error must not abort — fill batch with 5.0."""
         points = _make_points(3)
 
-        with (
-            patch(f"{MOD}.call_llm", side_effect=ValueError("timeout")),
-            patch(f"{MOD}.render_prompt", return_value="prompt"),
-            patch(f"{MOD}.deviation"),
-        ):
+        with patch(f"{MOD}.call_llm", side_effect=ValueError("timeout")), \
+             patch(f"{MOD}.render_prompt", return_value="prompt"), \
+             patch(f"{MOD}.deviation"):
             from src.engine.f_semantic_reembed import _llm_axis_scores
             scores = _llm_axis_scores(points, "angry")
 
@@ -180,12 +168,10 @@ class TestLlmAxisScores:
         points = _make_points(4)
         mock_response = MagicMock()
 
-        with (
-            patch(f"{MOD}.call_llm", return_value=mock_response),
-            patch(f"{MOD}.render_prompt", return_value="prompt"),
-            patch(f"{MOD}.extract_json_text", return_value="[8]"),  # only 1, need 4
-            patch(f"{MOD}.deviation"),
-        ):
+        with patch(f"{MOD}.call_llm", return_value=mock_response), \
+             patch(f"{MOD}.render_prompt", return_value="prompt"), \
+             patch(f"{MOD}.loads_llm_json", return_value=[8]), \
+             patch(f"{MOD}.deviation"):
             from src.engine.f_semantic_reembed import _llm_axis_scores
             scores = _llm_axis_scores(points, "angry")
 
@@ -195,11 +181,9 @@ class TestLlmAxisScores:
         points = _make_points(3)
         mock_response = MagicMock()
 
-        with (
-            patch(f"{MOD}.call_llm", return_value=mock_response),
-            patch(f"{MOD}.render_prompt", return_value="prompt") as mock_render,
-            patch(f"{MOD}.extract_json_text", return_value="[1, 2, 3]"),
-        ):
+        with patch(f"{MOD}.call_llm", return_value=mock_response), \
+             patch(f"{MOD}.render_prompt", return_value="prompt") as mock_render, \
+             patch(f"{MOD}.loads_llm_json", return_value=[1, 2, 3]):
             from src.engine.f_semantic_reembed import _llm_axis_scores
             _llm_axis_scores(points, "battery life")
 
@@ -213,13 +197,17 @@ class TestLlmAxisScores:
 # ---------------------------------------------------------------------------
 
 
+_FAKE_POLES = ("high pole text", "low pole text")
+
+
 class TestReembedForAxis:
     def test_output_shape_is_n_by_d_plus_1(self):
         """Output shape must be (N, D+1) where D is the original embedding dim."""
         points = _make_points(6, dim=4)  # D=4
         cosine_scores = np.linspace(0.0, 5.0, 6, dtype=np.float64)  # high variance
 
-        with patch(f"{MOD}._cosine_axis_scores", return_value=cosine_scores):
+        with patch(f"{MOD}._generate_axis_poles", return_value=_FAKE_POLES), \
+             patch(f"{MOD}._cosine_axis_scores", return_value=cosine_scores):
             from src.engine.f_semantic_reembed import reembed_for_axis
             result = reembed_for_axis(points, "battery")
 
@@ -231,14 +219,25 @@ class TestReembedForAxis:
         points = _make_points(6)
         cosine_scores = np.linspace(0.0, 5.0, 6, dtype=np.float64)
 
-        with (
-            patch(f"{MOD}._cosine_axis_scores", return_value=cosine_scores),
-            patch(f"{MOD}._llm_axis_scores") as mock_llm,
-        ):
+        with patch(f"{MOD}._generate_axis_poles", return_value=_FAKE_POLES), \
+             patch(f"{MOD}._cosine_axis_scores", return_value=cosine_scores), \
+             patch(f"{MOD}._llm_axis_scores") as mock_llm:
             from src.engine.f_semantic_reembed import reembed_for_axis
             reembed_for_axis(points, "angry")
 
         mock_llm.assert_not_called()
+
+    def test_generate_axis_poles_called_with_axis_label(self):
+        """reembed_for_axis must call _generate_axis_poles with the axis label."""
+        points = _make_points(6)
+        cosine_scores = np.linspace(0.0, 5.0, 6, dtype=np.float64)
+
+        with patch(f"{MOD}._generate_axis_poles", return_value=_FAKE_POLES) as mock_gen, \
+             patch(f"{MOD}._cosine_axis_scores", return_value=cosine_scores):
+            from src.engine.f_semantic_reembed import reembed_for_axis
+            reembed_for_axis(points, "quality")
+
+        mock_gen.assert_called_once_with("quality")
 
     def test_low_variance_falls_back_to_llm(self):
         """When cosine variance <= threshold, _llm_axis_scores must be called."""
@@ -246,10 +245,9 @@ class TestReembedForAxis:
         cosine_scores = np.zeros(6, dtype=np.float64)  # variance = 0
         llm_scores = np.linspace(1.0, 6.0, 6, dtype=np.float64)
 
-        with (
-            patch(f"{MOD}._cosine_axis_scores", return_value=cosine_scores),
-            patch(f"{MOD}._llm_axis_scores", return_value=llm_scores) as mock_llm,
-        ):
+        with patch(f"{MOD}._generate_axis_poles", return_value=_FAKE_POLES), \
+             patch(f"{MOD}._cosine_axis_scores", return_value=cosine_scores), \
+             patch(f"{MOD}._llm_axis_scores", return_value=llm_scores) as mock_llm:
             from src.engine.f_semantic_reembed import reembed_for_axis
             reembed_for_axis(points, "angry")
 
@@ -257,10 +255,9 @@ class TestReembedForAxis:
 
     def test_axis_weight_column_scaling(self):
         """Original cols are scaled by sqrt(1-w); axis col by sqrt(w)."""
-        # axis_weight=0.75 → orig_scale=sqrt(0.25)=0.5, axis_scale=sqrt(0.75)≈0.866
         dp0 = DataPoint()
         dp0.id = "p0"
-        dp0.embedding = [1.0, 0.0]  # unit vector → row-normed [1, 0]
+        dp0.embedding = [1.0, 0.0]
         dp0.data = {}
         dp0.dataset_name = "ds"
 
@@ -270,15 +267,14 @@ class TestReembedForAxis:
         dp1.data = {}
         dp1.dataset_name = "ds"
 
-        # High-variance cosine scores so cosine path is taken.
         cosine_scores = np.array([0.0, 5.0], dtype=np.float64)
 
-        with patch(f"{MOD}._cosine_axis_scores", return_value=cosine_scores):
+        with patch(f"{MOD}._generate_axis_poles", return_value=_FAKE_POLES), \
+             patch(f"{MOD}._cosine_axis_scores", return_value=cosine_scores):
             from src.engine.f_semantic_reembed import reembed_for_axis
             result = reembed_for_axis([dp0, dp1], "test", axis_weight=0.75)
 
         assert result.shape == (2, 3)
-        # dp0 embedding [1, 0] → row-normed [1, 0] → scaled by sqrt(1-0.75)=0.5
         assert pytest.approx(float(result[0, 0]), abs=0.01) == 0.5
         assert pytest.approx(float(result[0, 1]), abs=0.01) == 0.0
 
@@ -297,7 +293,8 @@ class TestReembedForAxis:
         points = _make_points(4, dim=8)
         cosine_scores = np.linspace(0.0, 3.0, 4, dtype=np.float64)
 
-        with patch(f"{MOD}._cosine_axis_scores", return_value=cosine_scores):
+        with patch(f"{MOD}._generate_axis_poles", return_value=_FAKE_POLES), \
+             patch(f"{MOD}._cosine_axis_scores", return_value=cosine_scores):
             from src.engine.f_semantic_reembed import reembed_for_axis
             result = reembed_for_axis(points, "quality")
 
@@ -312,12 +309,80 @@ class TestReembedForAxis:
             reembed_for_axis,
         )
         points = _make_points(6, dim=8)
-        # Cosine scores with near-zero variance → forces LLM fallback.
         flat_cosine = np.full(6, 0.0, dtype=np.float64)
-        # LLM scores all neutral → std ≈ 0, well below LLM_STD_THRESHOLD.
         flat_llm = np.full(6, 5.0, dtype=np.float64)
 
-        with patch(f"{MOD}._cosine_axis_scores", return_value=flat_cosine), \
+        with patch(f"{MOD}._generate_axis_poles", return_value=_FAKE_POLES), \
+             patch(f"{MOD}._cosine_axis_scores", return_value=flat_cosine), \
              patch(f"{MOD}._llm_axis_scores", return_value=flat_llm):
             with pytest.raises(AxisNotDiscriminativeError, match="battery life"):
                 reembed_for_axis(points, "battery life")
+
+
+# ---------------------------------------------------------------------------
+# _generate_axis_poles
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateAxisPoles:
+    """_generate_axis_poles must call the LLM with the axis label and return
+    (high_text, low_text). On any failure it must fall back to abstract phrases
+    rather than crashing."""
+
+    def _llm_response(self, high: str, low: str):
+        import json
+        from src.harness import LLMResponse
+        return LLMResponse(
+            text=json.dumps({"high": high, "low": low}),
+            usage={"input_tokens": 10, "output_tokens": 50,
+                   "cache_read_tokens": 0, "cache_creation_tokens": 0},
+            model="test",
+        )
+
+    def test_returns_high_and_low_texts(self):
+        from src.engine.f_semantic_reembed import _generate_axis_poles
+        resp = self._llm_response(
+            high="Absolutely furious, the worst experience ever.",
+            low="Perfectly satisfied, works exactly as described.",
+        )
+        with patch(f"{MOD}.call_llm", return_value=resp):
+            high, low = _generate_axis_poles("angry tone")
+        assert "furious" in high
+        assert "satisfied" in low
+
+    def test_prompt_contains_axis_label(self):
+        from src.engine.f_semantic_reembed import _generate_axis_poles
+        resp = self._llm_response(high="very angry text", low="very calm text")
+        captured = []
+
+        def capture(messages, system, **kwargs):
+            captured.append(system)
+            return resp
+
+        with patch(f"{MOD}.call_llm", side_effect=capture):
+            _generate_axis_poles("battery life")
+
+        assert captured and "battery life" in captured[0]
+
+    def test_falls_back_on_llm_error(self):
+        """Any LLM failure must return abstract phrases, not raise."""
+        from src.engine.f_semantic_reembed import _generate_axis_poles
+        with patch(f"{MOD}.call_llm", side_effect=RuntimeError("API down")):
+            high, low = _generate_axis_poles("quality")
+        assert high == "very quality"
+        assert low == "not quality at all"
+
+    def test_falls_back_on_empty_response(self):
+        """An empty high/low in the JSON also triggers fallback."""
+        from src.engine.f_semantic_reembed import _generate_axis_poles
+        from src.harness import LLMResponse
+        resp = LLMResponse(
+            text='{"high": "", "low": "something"}',
+            usage={"input_tokens": 0, "output_tokens": 0,
+                   "cache_read_tokens": 0, "cache_creation_tokens": 0},
+            model="test",
+        )
+        with patch(f"{MOD}.call_llm", return_value=resp):
+            high, low = _generate_axis_poles("speed")
+        assert high == "very speed"
+        assert low == "not speed at all"

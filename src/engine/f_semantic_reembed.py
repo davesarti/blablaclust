@@ -20,12 +20,10 @@ so sqrt-scaling gives exact geometric fractions:
 axis_weight=0.7 means 70% of clustering signal comes from the axis.
 """
 
-import json
-
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from src.harness import call_llm, extract_json_text, render_prompt
+from src.harness import call_llm, loads_llm_json, render_prompt
 from src.logger import deviation
 from src.models import DataPoint
 
@@ -43,30 +41,62 @@ class AxisNotDiscriminativeError(ValueError):
     """The requested axis doesn't meaningfully vary across the dataset."""
 
 
+def _generate_axis_poles(axis_label: str) -> tuple[str, str]:
+    """Ask the LLM to generate two example texts as concrete axis poles.
+
+    Returns (high_pole_text, low_pole_text). Domain-appropriate examples embed
+    better than abstract phrases like "very {axis}" because they live in the
+    same distribution as the data points.
+
+    Falls back to abstract phrases ("very {axis}" / "not {axis} at all") on any
+    error so the pipeline degrades gracefully without crashing.
+    """
+    try:
+        prompt = render_prompt("semantic_axis_poles", axis_label=axis_label)
+        response = call_llm(
+            [{"role": "user", "content": f"Generate poles for axis: {axis_label}"}],
+            system=prompt,
+            max_tokens=512,
+        )
+        parsed = loads_llm_json(response.text)
+        high = str(parsed.get("high", "")).strip()
+        low = str(parsed.get("low", "")).strip()
+        if not high or not low:
+            raise ValueError(f"empty pole text: {parsed!r}")
+        return high, low
+    except Exception as exc:
+        deviation(
+            "semantic_axis_poles: LLM pole generation failed — using abstract phrases",
+            axis_label=axis_label,
+            error=str(exc),
+        )
+        return f"very {axis_label}", f"not {axis_label} at all"
+
+
 def _cosine_axis_scores(
     points: list[DataPoint],
-    axis_label: str,
+    pole_pos_text: str,
+    pole_neg_text: str,
 ) -> np.ndarray:
-    """Score each point along a semantic axis via cosine similarity with anchor poles.
+    """Score each point along a semantic axis via cosine similarity with pole texts.
 
-    The axis is defined by two sentinel phrases encoded with the same model:
-      positive pole: "very {axis_label}"
-      negative pole: "not {axis_label} at all"
-
-    Score for point p = dot(emb_p, pole_pos) - dot(emb_p, pole_neg)
+    Score for point p = cos_sim(emb_p, pole_pos) - cos_sim(emb_p, pole_neg)
 
     Returns an (N,) float64 array of signed scores.
     """
     model = SentenceTransformer("all-MiniLM-L6-v2")
-    pole_pos = model.encode(f"very {axis_label}", convert_to_numpy=True).astype(np.float64)
-    pole_neg = model.encode(
-        f"not {axis_label} at all", convert_to_numpy=True
-    ).astype(np.float64)
+    pole_pos = model.encode(pole_pos_text, convert_to_numpy=True).astype(np.float64)
+    pole_neg = model.encode(pole_neg_text, convert_to_numpy=True).astype(np.float64)
+    # Normalize defensively — SentenceTransformer usually returns unit vectors,
+    # but explicit normalization ensures correct cosine similarity.
+    pole_pos /= np.linalg.norm(pole_pos) + 1e-8
+    pole_neg /= np.linalg.norm(pole_neg) + 1e-8
 
     scores = np.empty(len(points), dtype=np.float64)
     for i, p in enumerate(points):
         emb = np.array(p.embedding, dtype=np.float64)
-        scores[i] = float(np.dot(emb, pole_pos) - np.dot(emb, pole_neg))
+        emb_norm = emb / (np.linalg.norm(emb) + 1e-8)
+        scores[i] = float(np.dot(emb_norm, pole_pos) - np.dot(emb_norm, pole_neg))
     return scores
 
 
@@ -97,7 +127,7 @@ def _llm_score_sample(
         messages = [{"role": "user", "content": texts}]
         try:
             response = call_llm(messages, system=prompt)
-            raw = json.loads(extract_json_text(response.text))
+            raw = loads_llm_json(response.text)
             if isinstance(raw, list) and len(raw) >= len(batch):
                 batch_scores = [float(raw[j]) for j in range(len(batch))]
             else:
@@ -202,7 +232,13 @@ def reembed_for_axis(
             f"points missing embeddings (first 5): {missing[:5]}"
         )
 
-    cosine_scores = _cosine_axis_scores(points, axis_label)
+    pole_pos_text, pole_neg_text = _generate_axis_poles(axis_label)
+    print(
+        f"[semantic-reembed] poles  "
+        f"pos={pole_pos_text[:70]!r}  neg={pole_neg_text[:70]!r}",
+        flush=True,
+    )
+    cosine_scores = _cosine_axis_scores(points, pole_pos_text, pole_neg_text)
     cosine_var = float(np.var(cosine_scores))
     if cosine_var > COSINE_VARIANCE_THRESHOLD:
         print(
