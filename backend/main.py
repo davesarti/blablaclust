@@ -25,9 +25,11 @@ from backend.routers.clusters import router as clusters_router
 from backend.routers.datasets import router as datasets_router
 from backend.routers.sessions import router as sessions_router
 from backend.routers.turns import router as turns_router
+from backend.routers.umap import router as umap_router
 
 app = FastAPI()
 app.include_router(datasets_router)
 app.include_router(sessions_router)
 app.include_router(turns_router)
 app.include_router(clusters_router)
+app.include_router(umap_router)
