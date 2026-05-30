@@ -35,7 +35,9 @@ diagnostic only; consumers (UI, eval) should not rely on it as a quality signal.
 **A2. Turns to convergence (primary process metric)** — turns until the Planner
 returns `stop` ([`f_next_best_step`](../src/engine/f_next_best_step.py)) or `status`
 = `converged`. **Weighted by feedback type** (`FeedbackEntry.type`: a `global`
-reframe ≫ a `point` nudge; weights frozen in the harness). Termination is recorded
+reframe ≫ a `point` nudge; weights frozen in
+[`backend/routers/sessions.py`](../backend/routers/sessions.py):
+`global` 2.0, `cluster` 1.0, `point` 0.5, `instructional` 0.0). Termination is recorded
 via `state_snapshot.reason` with **two codes**:
 
 - `converged` — Planner did not trigger any stop; healthy outcome.
@@ -83,7 +85,11 @@ members. The bottom-2 stress-test the cluster's edges. Aggregates: mean and
 ([`prompts/f_eval_compliance.txt`](../prompts/f_eval_compliance.txt)) — pairs
 each oracle turn's request with the operations the system performed and scores
 fidelity of request → operation translation. Judges only what the system did,
-not whether the oracle was clear (B4 handles that).
+not whether the oracle was clear (B4 handles that). **Caveat**: the compliance
+judge receives whatever `target_cluster_ids` the oracle provides; sessions
+where target IDs are omitted (e.g. `contradictory_oracle.json`) score 0 on the
+operation-target matching signal even when textual intent is clear. Use B3 scores
+from such scenarios to test agent robustness, not compliance fidelity.
 
 **B4. Oracle contradiction**
 ([`prompts/f_eval_contradiction.txt`](../prompts/f_eval_contradiction.txt)) —
@@ -116,9 +122,56 @@ end-of-session.
 | ID | Metric | Family | Role | Status |
 |---|---|---|---|---|
 | A1 | Silhouette + soft-assignment calibration | Math | Secondary diagnostic | Silhouette implemented; calibration unvalidated |
-| A2 | Turns to convergence (type-weighted) | Math | **Primary process** | Implemented; three termination codes |
+| A2 | Turns to convergence (type-weighted) | Math | **Primary process** | Implemented; two termination codes (`converged`, `cognitive_overload`) |
 | A3 | Cognitive load vs. oracle input | Math (engine-authored) | Interaction cost | Implemented (Executor-authored) |
 | B1 | Overall verdict (synthesis of B2 + B3 + B4) | LLM-judge | **Primary outcome** | Implemented |
 | B2 | Cluster coherence (per-cluster) | LLM-judge | Output quality | Implemented |
 | B3 | Oracle compliance (request → operation fidelity) | LLM-judge | System behaviour | Implemented |
 | B4 | Oracle contradiction (how clear was the oracle) | LLM-judge | Forgiveness context for B1 | Implemented |
+
+## Evaluation runner
+
+```bash
+# start the API server first
+PYTHONPATH=. python scripts/serve_ui.py
+
+# run all scenarios
+PYTHONPATH=. python scripts/run_eval.py --scenarios scenarios/*.json --out reports/<timestamp>/
+```
+
+Output in `reports/<timestamp>/`:
+- `results.jsonl` — one record per scenario, machine-readable
+- `summary.md` — human-readable per-scenario breakdown with aggregate means/medians
+
+**`results.jsonl` record schema:**
+```jsonc
+{
+  "scenario": "sentiment_split",
+  "session_id": "uuid...",
+  "k_initial": 5, "k_final": 6,
+  "A1": {"silhouette_initial": 0.31, "silhouette_final": 0.34, "trend": [...]},
+  "A2": {"turns": 7, "weighted_turns": 5.4, "termination": "converged",
+         "last_action": "show", "ops_per_turn": [["split"], ["rename"], []]},
+  "A3": {"cognitive_load_by_turn": [1,2,1,3,1,2,1], "mean_cognitive_load": 1.6,
+         "cognitive_load_driver_by_turn": [...], "final_cognitive_load_breakdown": {...}},
+  "B1": {"overall_score": 0.78, "notes": "..."},
+  "B2": {"coherence_mean": 0.72, "coherence_min": 0.55, "per_cluster": [...]},
+  "B3": {"compliance_score": 0.81, "notes": "..."},
+  "B4": {"contradiction_score": 0.15, "notes": "...", "examples": [...]},
+  "wall_time_s": 48.2
+}
+```
+
+## Scenarios (v1 corpus)
+
+Five scenarios in `scenarios/`, each a JSON file with `{name, dataset, k_initial, oracle_turns}`:
+
+| File | Purpose | Expected outcome |
+|---|---|---|
+| `stable_oracle.json` | Oracle approves initial clustering with minimal changes | Fast `converged`, high B1/B2 |
+| `sentiment_split.json` | Oracle splits a mixed cluster by sentiment, renames, accepts | Split + rename ops fire; `converged` |
+| `topic_merge.json` | Oracle merges over-fragmented topic clusters | Merge ops fire; `converged` |
+| `high_load_oracle.json` | Oracle floods with many conflicting tweaks | Termination = `cognitive_overload` |
+| `contradictory_oracle.json` | Oracle splits by sentiment then reverses twice before accepting | Agent robustness (no crash, valid state); B3 unreliable — see B3 caveat above |
+
+All five exercise every termination code. Estimated cost: ~$0.50–$1.00 per full run on a Flash-class model.

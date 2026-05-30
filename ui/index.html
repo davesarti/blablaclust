@@ -449,6 +449,21 @@
     .tier-good { color: var(--green); }
     .tier-mid  { color: #9a7a30; }
     .tier-weak { color: var(--red); }
+    .eval-expected {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      letter-spacing: 0.02em;
+    }
+    .eval-expected::before {
+      content: "Expected ";
+      color: var(--text-faint);
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-right: 4px;
+    }
     .eval-value {
       font-family: var(--mono);
       font-size: 13px;
@@ -1385,18 +1400,18 @@
     <div id="eval-error"   class="eval-error"   style="display:none"></div>
     <div id="eval-content"                       style="display:none">
 
-      <!-- B1 hero -->
+      <!-- Overall quality hero -->
       <div class="eval-metric full" style="margin-bottom: 4px;">
-        <div class="eval-metric-label">B1 · Overall quality (synthesis judge)</div>
+        <div class="eval-metric-label">Overall quality</div>
         <div class="eval-metric-desc">
           One verdict combining coherence, compliance, and oracle contradiction.
           High contradiction forgives weak coherence/compliance.
-          <strong style="font-style:normal; color:var(--text);">Good: ≥ 0.70</strong>.
         </div>
         <div class="eval-score-row">
           <div class="eval-score-big" id="ev-overall">—</div>
           <div class="eval-score-unit">/ 1.0</div>
         </div>
+        <div class="eval-expected">≥ 0.70</div>
         <div class="eval-notes" id="ev-notes"></div>
       </div>
 
@@ -1407,41 +1422,41 @@
       </div>
       <div class="eval-metric-grid">
         <div class="eval-metric">
-          <div class="eval-metric-label">B2 · Coherence</div>
+          <div class="eval-metric-label">Coherence</div>
           <div class="eval-metric-desc">
             Are clusters internally focused? Mean across all clusters.
-            <strong style="font-style:normal; color:var(--text);">Good: mean ≥ 0.70, no cluster &lt; 0.50.</strong>
           </div>
           <div class="eval-score-row">
             <div class="eval-score-mid" id="ev-coherence">—</div>
             <div class="eval-score-unit">mean</div>
           </div>
+          <div class="eval-expected">mean ≥ 0.70, no cluster &lt; 0.50</div>
           <div class="eval-sub"  id="ev-coherence-sub"></div>
           <div class="eval-detail" id="ev-coherence-weakest"></div>
         </div>
         <div class="eval-metric">
-          <div class="eval-metric-label">B3 · Compliance</div>
+          <div class="eval-metric-label">Compliance</div>
           <div class="eval-metric-desc">
             Did the system faithfully execute each oracle request?
-            <strong style="font-style:normal; color:var(--text);">Good: ≥ 0.70.</strong>
           </div>
           <div class="eval-score-row">
             <div class="eval-score-mid" id="ev-compliance">—</div>
             <div class="eval-score-unit">/ 1.0</div>
           </div>
+          <div class="eval-expected">≥ 0.70</div>
           <div class="eval-notes" id="ev-compliance-sub"></div>
         </div>
         <div class="eval-metric full">
-          <div class="eval-metric-label">B4 · Oracle contradiction</div>
+          <div class="eval-metric-label">Oracle contradiction</div>
           <div class="eval-metric-desc">
             How hard was the oracle to understand (contradictions, drift, vague targets)?
-            Higher = harder. Feeds B1 as forgiveness context.
-            <strong style="font-style:normal; color:var(--text);">Good: ≤ 0.30.</strong>
+            Higher = harder. Feeds overall quality as forgiveness context.
           </div>
           <div class="eval-score-row">
             <div class="eval-score-mid" id="ev-contradiction">—</div>
             <div class="eval-score-unit">/ 1.0 — higher = harder</div>
           </div>
+          <div class="eval-expected">≤ 0.30</div>
           <div class="eval-notes" id="ev-contradiction-sub"></div>
           <ul class="eval-examples" id="ev-contradiction-examples"></ul>
         </div>
@@ -1454,34 +1469,34 @@
       </div>
       <div class="eval-metric-grid">
         <div class="eval-metric">
-          <div class="eval-metric-label">A2 · Dialogue efficiency</div>
+          <div class="eval-metric-label">Dialogue efficiency</div>
           <div class="eval-metric-desc">
             How many turns did it take, and how did the session end?
-            <strong style="font-style:normal; color:var(--text);">Good: few turns, ends converged.</strong>
           </div>
           <div class="eval-value" id="ev-turns">—</div>
+          <div class="eval-expected">few turns, ends converged</div>
           <div class="eval-sub"  id="ev-weighted-turns"></div>
           <div id="ev-termination"></div>
         </div>
         <div class="eval-metric">
-          <div class="eval-metric-label">A3 · Cognitive load</div>
+          <div class="eval-metric-label">Cognitive load</div>
           <div class="eval-metric-desc">
             Per-turn 1–5 score from turns, tokens, cluster count. Saturates at 5 → halt.
-            <strong style="font-style:normal; color:var(--text);">Good: stays at 1–2.</strong>
           </div>
           <div class="eval-score-row">
             <div class="eval-score-mid" id="ev-cog-load">—</div>
             <div class="eval-score-unit">mean / 5</div>
           </div>
+          <div class="eval-expected">stays at 1–2</div>
           <div class="eval-detail" id="ev-cog-driver"></div>
         </div>
         <div class="eval-metric full">
-          <div class="eval-metric-label">A1 · Silhouette (cluster separation)</div>
+          <div class="eval-metric-label">Silhouette (cluster separation)</div>
           <div class="eval-metric-desc">
             Geometric tightness of clusters (−1 to 1). Tracks initial → final.
-            <strong style="font-style:normal; color:var(--text);">Good: stable or rising.</strong>
           </div>
           <div class="eval-value" id="ev-silhouette">—</div>
+          <div class="eval-expected">stable or rising across turns</div>
           <div class="eval-sub"  id="ev-silhouette-sub"></div>
         </div>
       </div>

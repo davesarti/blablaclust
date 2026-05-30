@@ -11,6 +11,14 @@ This sprint I stepped out of my usual backend/DB area and worked on a **clusteri
 
 - **Schema/model audit + cleanup** (own area): swept the Pydantic schemas against the ORM models and API usage. Dropped the dead `SoftAssignment` schema and the never-populated `SystemTurn.token_usage`/`cost_usd`. Added `embedding_model` to `ChatSessionState`. Unified the `turn_number` floor at `>= 0` across `Turn` and the schemas. Tightened `Display` (`type` → `Literal["text"]`, `items` → `List[Dict]`). Fixed a `TurnRead` divergence in `create_turn`: the turn row is now persisted once with the final `SystemTurn`, so a failed turn no longer leaves a half-baked row. Tests + docs updated; 82 passing.
 
+- **Session name + UI completion** (`src/models.py`, `backend/routers/sessions.py`, `backend/session_state.py`, `ui/index.html`): added `name` to the session schema and persisted it through the sessions router. Surfaced dataset and session name on both the landing page and the session main page; implemented chat history rendering, back button, and session delete. Raised the token limit and fixed the resume-session flow on the landing page so returning users land on the right state.
+
+- **Harness JSON extraction** (`src/harness.py`): added handling for the case where the LLM wraps a JSON response in explanatory prose — the harness now strips the surrounding text and extracts the JSON payload cleanly, preventing parse failures when the model narrates its output.
+
+- **Eval quality specs** (`docs/quality_specs.md`, `prompts/f_eval.txt`): wrote up the clustering-quality criteria the self-assessment should target and moved them out of the inline prompt into a dedicated spec doc.
+
+- **Soft-assignment softmax fix** (`src/engine/initial_clustering.py`, `tests/test_initial_clustering.py`): the fixed-temperature softmax left every point near-uniform (~1/k), so all points read as equally uncertain. Scaled the temperature to a fraction of the mean squared distance — sharpens the split and stays scale-invariant — and added tests for non-uniformity, scale-invariance, and probability normalisation.
+
 ## Challenges:
 The main challenge this sprint was adapting my work to bug fixes rather than building something new. P1's core mandate — the DB and backend layer — was already satisfied after sprint 2, so there was no large feature left on my own side to own. Instead, the useful contribution became picking up bug fixes and hardening work wherever it was needed: the point-level reassign in P2's engine, schema/model cleanup, and other stabilisation across the codebase. The shift was less technical than it was about reorienting — moving from "what do I build" to "where can I unblock the team and stabilise what already exists" once my primary area was done.
 
