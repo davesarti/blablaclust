@@ -30,6 +30,39 @@ Use the cluster names and descriptions as signals when deciding what to propose:
   same subject but represent intentionally opposite axes and must stay separate.
 - Suggest a SPLIT when a cluster's name or description is too broad and covers clearly
   distinct sub-themes that could each stand alone as coherent groups.
+- Emit a SEMANTIC_REEMBED when the oracle wants the WHOLE DATASET reorganised
+  along a semantic axis / dimension / property of the texts — not when they
+  want to manipulate specific existing clusters. The phrasing varies freely
+  and may be in any language; the signal is INTENT, not surface form. Treat
+  all of these as the same intent:
+    - A bare noun phrase naming an attribute of the texts
+      (e.g. "sentiment", "battery life", "formal vs casual", "tono arrabbiato").
+    - Any framing that points at such an attribute via verbs of grouping /
+      organising / sorting / re-clustering / perspective-taking, optionally
+      with a connector like "by / along / according to / in terms of / per"
+      (e.g. "cluster by tone", "raggruppa per sentimento", "look at this
+      through battery life").
+    - Whole-dataset "split / divide / break down" requests where the target
+      is the dataset as a whole along an attribute, NOT a specific named
+      cluster (e.g. "split everything by tone").
+  Extract axis_label as the bare noun phrase naming the dimension, in the
+  oracle's own language, with imperative and prepositional wrappers removed
+  ("cluster by sentiment" → "sentiment"; "raggruppa per tono arrabbiato" →
+  "tono arrabbiato"; "look at this through battery life" → "battery life").
+  Keep two-pole contrasts intact ("formal vs casual", "happy vs sad"). Drop
+  fillers and punctuation. Keep it under ~40 chars.
+
+  Do NOT emit SEMANTIC_REEMBED when the oracle:
+    - Names or references specific existing clusters by name, UUID, or ordinal
+      ("the first cluster", "the negative one", "Cluster 2").
+    - Specifies a target NUMBER of clusters ("make 5 clusters", "I want 3 groups").
+    - Asks to merge / rename / move points within the current structure.
+  Those are STRUCTURAL ops (merge / split / rename / move) — they keep the
+  current axis intact.
+
+  When in doubt — if the message names a property of the texts (sentiment,
+  tone, topic, quality, formality, …) but does NOT name a specific cluster or
+  a target count — prefer SEMANTIC_REEMBED.
 - When in doubt, respect the oracle's existing structure. If the history shows that the
   oracle already separated or named these clusters deliberately, do not propose reversing
   that decision unless the oracle explicitly asks.
@@ -37,7 +70,7 @@ Use the cluster names and descriptions as signals when deciding what to propose:
 Respond with a single valid JSON object. No markdown fences, no commentary outside the JSON.
 
 {{
-  "action": "<one of: merge | split | rename | move | no_change | explain>",
+  "action": "<one of: merge | split | rename | move | semantic_reembed | no_change | explain>",
   "operations": [
     {{
       "type": "merge",
@@ -59,6 +92,10 @@ Respond with a single valid JSON object. No markdown fences, no commentary outsi
       "type": "move",
       "point_ids": ["<data_point_id_1>", "<data_point_id_2>"],
       "target_cluster_id": "<existing cluster id>"
+    }},
+    {{
+      "type": "semantic_reembed",
+      "axis_label": "<short noun phrase naming the axis, e.g. 'battery life' or 'angry tone'>"
     }}
   ],
   "display": "<plain English explanation of what changed and why, max 3 sentences, shown directly to oracle>"
@@ -76,9 +113,11 @@ CONSTRAINTS
   - If K == N: no count-change operation needed; interpret the rest of the oracle's message as a rename or structural request.
   - CRITICAL: do NOT "consolidate then expand" across two operations. If the oracle wants more clusters, go directly to splits — merging first and then splitting wastes a turn and confuses the oracle.
 - operations can be an empty array when action is "no_change" or "explain".
-- Each operation must have a "type" field: merge | split | rename | move.
+- Each operation must have a "type" field: merge | split | rename | move | semantic_reembed.
 - For "split", "k" is the number of sub-clusters to create (integer >= 2, default 2). Set k > 2 only when the oracle explicitly asks to split into a specific number of groups (e.g. "split into 3", "divide into 5 parts").
 - For "split", "new_names" is OPTIONAL. Include it (an array of strings, one per sub-cluster in order) ONLY when the oracle explicitly named the children — e.g. "split it into 'Music' and 'Books'". If the oracle did not name them, omit the field entirely so the system can auto-name from cluster content.
 - When the oracle supplies cluster names (in "new_name" on merge/rename, or in "new_names" on split), copy them VERBATIM — character-for-character — into the operation. Do NOT rephrase, expand, abbreviate, censor, sanitize, translate, capitalize differently, or "improve" them. If the oracle says split into "miss" and "piss", the names are exactly "miss" and "piss". If the oracle says rename to "blabla", the name is exactly "blabla". The oracle's chosen label is authoritative; your job is to apply it, not to edit it.
 - For "move", point_ids may ONLY contain data point IDs the oracle explicitly referenced (see Target points above, or IDs named earlier in the conversation). NEVER invent point IDs or move points the oracle did not name — bulk reassignment is the clustering algorithm's job, not yours. Use "move" for point-level feedback such as resolving a boundary point or correcting a single misplaced point.
+- A "semantic_reembed" operation is EXCLUSIVE: when you emit one it MUST be the only entry in operations[]. Never combine it with merge, split, rename, or move in the same response — the re-embedding dissolves every existing cluster, so any other op IDs in the same response would be invalid afterwards.
+- axis_label MUST be the bare noun phrase naming the dimension (≤ 40 chars), with imperative or prepositional wrappers stripped. Examples of correct extraction: "cluster by sentiment" → "sentiment"; "let's re-embed along formal vs casual" → "formal vs casual"; "look at it through the lens of battery life" → "battery life"; "battery life" → "battery life". It must NEVER be a full sentence, a structural instruction ("make 5 clusters"), an existing cluster name, or a generic word like "data" / "clusters" / "groups".
 - If feedback_type is "explain", set action to "explain" and leave operations empty.

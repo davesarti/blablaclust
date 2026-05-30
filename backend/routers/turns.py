@@ -20,6 +20,47 @@ from src.schemas import Display, InputOracle, SystemTurn, TurnRead
 router = APIRouter(prefix="/turns", tags=["turns"])
 
 
+def _active_axis_from_history(prior_turns: list[Turn]) -> str | None:
+    """Return the axis_label of the most recent semantic_reembed op, if any."""
+    for turn in reversed(prior_turns):
+        output = turn.system_output or {}
+        ops = (output.get("state_snapshot") or {}).get("operations") or []
+        for op in ops:
+            if isinstance(op, dict) and op.get("type") == "semantic_reembed":
+                # Older sessions stored the axis under "axis_hint"; new ones use
+                # "axis_label". Accept either so resumed sessions still work.
+                label = op.get("axis_label") or op.get("axis_hint")
+                if label:
+                    return str(label)
+    return None
+
+
+def _run_semantic_reembed(
+    session: ChatSession,
+    axis_label: str,
+    turn_number: int,
+    db: Session,
+):
+    """Re-cluster all dataset points along axis_label. Returns (clusters, assigns)."""
+    print(
+        f"[turns] semantic-reembed  session={session.id}  "
+        f"axis_label='{axis_label}'  turn={turn_number}",
+        flush=True,
+    )
+    all_data_points = (
+        db.query(DataPoint)
+        .filter(DataPoint.dataset_name == session.dataset_name)
+        .all()
+    )
+    return semantic_clustering(
+        data_points=all_data_points,
+        axis_hint=axis_label,
+        session_id=session.id,
+        turn_number=turn_number,
+        db=db,
+    )
+
+
 @router.get("", response_model=list[TurnRead])
 def list_turns(
     session_id: str = Query(...),
@@ -130,61 +171,100 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     # persisted oracle turn (0 if none), so the next one is state.turn_number + 1.
     new_turn_number = state.turn_number + 1
 
-    # Retrieve the axis_hint stored in Turn 1 (if any) so subsequent turns can
-    # name clusters consistently along the session's semantic axis.
-    session_axis_hint: str | None = None
-    if prior_turns:
-        first_input = prior_turns[0].oracle_input
-        if isinstance(first_input, dict):
-            session_axis_hint = first_input.get("axis_hint") or None
+    # Active semantic axis = axis_label from the most recent prior semantic_reembed
+    # op, if any. Used so merge/split on subsequent turns name children along the
+    # same axis. None when the session never re-embedded.
+    session_axis_hint = _active_axis_from_history(prior_turns)
 
-    # ── Semantic re-embedding path ─────────────────────────────────────────────
-    # When the oracle provides axis_hint on Turn 1, we re-orient the entire
-    # embedding space around the specified semantic axis before anything else.
-    # This replaces the f_output/f_apply_operations path for this turn.
-    if new_turn_number == 1 and payload.axis_hint:
+    # Always call f_output: the LLM is the single intent-classification step. It
+    # may emit any of merge / split / rename / move / semantic_reembed.
+    total_points = (
+        db.query(DataPoint)
+        .filter(DataPoint.dataset_name == session.dataset_name)
+        .count()
+    )
+
+    try:
+        raw, usage = f_output(state, payload, context, total_points)
+        cost = estimate_cost_usd(usage)
         print(
-            f"[turns] semantic-reembed path  session={session.id}  "
-            f"axis_hint='{payload.axis_hint}'",
+            f"[turns] f_output  session={session.id}  turn={new_turn_number}  "
+            f"input_tokens={usage.get('input_tokens', 0)}  "
+            f"output_tokens={usage.get('output_tokens', 0)}  "
+            f"cost_usd=${cost:.4f}",
             flush=True,
         )
-        all_data_points = (
-            db.query(DataPoint)
-            .filter(DataPoint.dataset_name == session.dataset_name)
-            .all()
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Engine returned a malformed response: {exc}",
         )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502, detail=f"Engine call failed: {exc}"
+        )
+
+    if isinstance(raw, list):
+        operations = raw
+    else:
+        operations = raw.get("operations", [])
+    print(
+        f"[turns] operations  session={session.id}  turn={new_turn_number}  "
+        f"count={len(operations)}  types={[op.get('type') for op in operations]}",
+        flush=True,
+    )
+
+    raw_display = raw.get("display") if isinstance(raw, dict) else None
+    turn_usage = usage
+    turn_cost = cost
+
+    # ── Re-embedding op routes to the semantic_clustering pipeline ────────────
+    # The prompt declares semantic_reembed exclusive; if the LLM accidentally
+    # mixes it with structural ops we take the re-embed (it would dissolve the
+    # other ops' target clusters anyway) and log a warning.
+    reembed_op = next(
+        (op for op in operations if op.get("type") == "semantic_reembed"), None
+    )
+    if reembed_op is not None:
+        if len(operations) > 1:
+            print(
+                f"[turns] semantic_reembed mixed with other ops — taking re-embed only  "
+                f"session={session.id}  other_types="
+                f"{[op.get('type') for op in operations if op is not reembed_op]}",
+                flush=True,
+            )
+        axis_label = (reembed_op.get("axis_label") or "").strip()
+        if not axis_label:
+            raise HTTPException(
+                status_code=422,
+                detail="semantic_reembed operation requires a non-empty axis_label",
+            )
         try:
-            new_clusters, new_assignments = semantic_clustering(
-                data_points=all_data_points,
-                axis_hint=payload.axis_hint,
-                session_id=session.id,
-                turn_number=1,
+            new_clusters, new_assignments = _run_semantic_reembed(
+                session=session,
+                axis_label=axis_label,
+                turn_number=new_turn_number,
                 db=db,
-                # k omitted: semantic_clustering caps to min(active, 3) by default
             )
         except AxisNotDiscriminativeError:
-            # The axis doesn't vary in the dataset — ask the oracle to try a
-            # different one WITHOUT advancing the turn counter (turn_number=0
-            # keeps state.session.turn=0 in the UI so axis_hint is sent again).
             return TurnRead(
                 session_id=session.id,
-                turn_number=0,
+                turn_number=new_turn_number - 1,  # don't advance — let oracle retry
                 oracle_input=payload,
                 system_output=SystemTurn(
                     session_id=session.id,
-                    turn_number=0,
+                    turn_number=new_turn_number - 1,
                     action="ask",
                     clusters_updated=False,
                     display=Display(
                         type="text",
                         content=(
-                            f"The axis \"{payload.axis_hint}\" doesn't vary enough across "
+                            f"The axis \"{axis_label}\" doesn't vary enough across "
                             f"the dataset to produce meaningful clusters. "
                             f"Try a different axis — one that is clearly present and "
                             f"spans a range in the data."
                         ),
                     ),
-                    contradiction_detected=False,
                     cognitive_load_score=1,
                 ),
             )
@@ -199,91 +279,42 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
         for assignment in new_assignments:
             db.add(assignment)
         db.commit()
-
-        # Register the oracle turn in the conversation context so future turns
-        # can replay the full history correctly.
-        context.add_oracle_turn(payload.model_dump())
-
+        # Normalize the persisted op shape — keep the axis under axis_label so
+        # _active_axis_from_history can find it on the next turn.
         operations = [
             {
                 "type": "semantic_reembed",
-                "axis_hint": payload.axis_hint,
+                "axis_label": axis_label,
                 "clusters_created": len(new_clusters),
             }
         ]
-        raw_display = None
-        turn_usage: dict | None = None
-        turn_cost: float | None = None
 
-    # ── Normal path: structural operations via f_output ───────────────────────
-    else:
-        total_points = (
-            db.query(DataPoint)
-            .filter(DataPoint.dataset_name == session.dataset_name)
-            .count()
+    # ── Structural ops route to f_apply_operations ────────────────────────────
+    elif operations:
+        latest_snapshot_turn = (
+            db.query(func.max(SoftAssignment.turn_number))
+            .filter(SoftAssignment.cluster_id.in_([c.id for c in clusters]))
+            .scalar()
         )
+        start_turn = new_turn_number
+        if latest_snapshot_turn is not None and latest_snapshot_turn >= start_turn:
+            start_turn = latest_snapshot_turn + 1
 
         try:
-            raw, usage = f_output(state, payload, context, total_points)
-            cost = estimate_cost_usd(usage)
-            print(
-                f"[turns] f_output  session={session.id}  turn={new_turn_number}  "
-                f"input_tokens={usage.get('input_tokens', 0)}  "
-                f"output_tokens={usage.get('output_tokens', 0)}  "
-                f"cost_usd=${cost:.4f}",
-                flush=True,
+            f_apply_operations(
+                operations,
+                session_id=session.id,
+                turn_number=start_turn,
+                db=db,
+                axis_hint=session_axis_hint,
             )
-        except (json.JSONDecodeError, ValueError) as exc:
+            db.commit()
+        except (ValueError, KeyError) as exc:
+            db.rollback()
             raise HTTPException(
-                status_code=502,
-                detail=f"Engine returned a malformed response: {exc}",
+                status_code=422,
+                detail=f"Engine produced an invalid operation: {exc}",
             )
-        except Exception as exc:
-            raise HTTPException(
-                status_code=502, detail=f"Engine call failed: {exc}"
-            )
-
-        if isinstance(raw, list):
-            operations = raw
-        else:
-            operations = raw.get("operations", [])
-        print(
-            f"[turns] operations  session={session.id}  turn={new_turn_number}  "
-            f"count={len(operations)}  types={[op.get('type') for op in operations]}",
-            flush=True,
-        )
-
-        if operations:
-            latest_snapshot_turn = (
-                db.query(func.max(SoftAssignment.turn_number))
-                .filter(SoftAssignment.cluster_id.in_([c.id for c in clusters]))
-                .scalar()
-            )
-            start_turn = new_turn_number
-            if latest_snapshot_turn is not None and latest_snapshot_turn >= start_turn:
-                start_turn = latest_snapshot_turn + 1
-
-            # Engine errors propagate as HTTP 422 so the oracle can see exactly
-            # what went wrong. The in-progress transaction rolls back cleanly.
-            try:
-                f_apply_operations(
-                    operations,
-                    session_id=session.id,
-                    turn_number=start_turn,
-                    db=db,
-                    axis_hint=session_axis_hint,
-                )
-                db.commit()
-            except (ValueError, KeyError) as exc:
-                db.rollback()
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"Engine produced an invalid operation: {exc}",
-                )
-
-        raw_display = raw.get("display") if isinstance(raw, dict) else None
-        turn_usage = usage
-        turn_cost = cost
 
     # ── Common path: planner + persist turn ───────────────────────────────────
     updated_state = build_session_state(db, session)
