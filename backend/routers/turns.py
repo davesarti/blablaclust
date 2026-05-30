@@ -177,11 +177,10 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
                     display=Display(
                         type="text",
                         content=(
-                            f"The axis \"{payload.axis_hint}\" doesn't distinguish the "
-                            f"data well enough to re-cluster. Please describe a different "
-                            f"semantic axis — one that clearly varies across the reviews "
-                            f"(e.g. an emotion, a product feature, or a quality dimension "
-                            f"that is actually present in the dataset)."
+                            f"The axis \"{payload.axis_hint}\" doesn't vary enough across "
+                            f"the dataset to produce meaningful clusters. "
+                            f"Try a different axis — one that is clearly present and "
+                            f"spans a range in the data."
                         ),
                     ),
                     contradiction_detected=False,
