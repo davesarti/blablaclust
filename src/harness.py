@@ -74,7 +74,9 @@ def extract_json_text(text: str) -> str:
     text = text.strip()
     match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
     if match:
-        return match.group(1).strip()
+        extracted = match.group(1).strip()
+        if extracted:  # skip empty code fences — fall through to {...} search
+            return extracted
     # Fall back: extract the first top-level {...} block, ignoring surrounding prose
     match = re.search(r"(\{[\s\S]*\})", text)
     if match:

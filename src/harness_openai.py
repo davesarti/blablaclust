@@ -155,6 +155,8 @@ def call_gpt(
     if DRY_RUN:
         return _make_dry_run_response(model)
 
+    import time as _time
+
     client = OpenAI()
     full_messages = _build_openai_messages(messages, system)
 
@@ -165,17 +167,26 @@ def call_gpt(
             messages=full_messages,
         )
 
-    completion = _retry_sync_openai(_call)
-    content = completion.choices[0].message.content
-    if content is None:
-        raise ValueError(
-            f"OpenAI returned no text content "
-            f"(finish_reason={completion.choices[0].finish_reason!r}, model={model!r})"
-        )
-    return LLMResponse(
-        text=content,
-        usage=extract_usage_openai(completion),
-        model=model,
+    # Retry up to MAX_RETRIES extra times when the API returns empty content
+    # (content is None or ""). OpenRouter/gpt-4o-mini occasionally returns an
+    # empty body that is not flagged as a transient error by status code.
+    last_completion = None
+    for attempt in range(MAX_RETRIES + 1):
+        last_completion = _retry_sync_openai(_call)
+        content = last_completion.choices[0].message.content
+        if content:
+            return LLMResponse(
+                text=content,
+                usage=extract_usage_openai(last_completion),
+                model=model,
+            )
+        if attempt < MAX_RETRIES:
+            delay = min(BASE_DELAY * (2 ** attempt), MAX_DELAY)
+            _time.sleep(delay)
+
+    raise ValueError(
+        f"LLM returned empty content after {MAX_RETRIES + 1} attempts "
+        f"(finish_reason={last_completion.choices[0].finish_reason!r}, model={model!r})"
     )
 
 
@@ -198,17 +209,22 @@ async def call_gpt_async(
             messages=full_messages,
         )
 
-    completion = await _retry_async_openai(_call)
-    content = completion.choices[0].message.content
-    if content is None:
-        raise ValueError(
-            f"OpenAI returned no text content "
-            f"(finish_reason={completion.choices[0].finish_reason!r}, model={model!r})"
-        )
-    return LLMResponse(
-        text=content,
-        usage=extract_usage_openai(completion),
-        model=model,
+    last_completion = None
+    for attempt in range(MAX_RETRIES + 1):
+        last_completion = await _retry_async_openai(_call)
+        content = last_completion.choices[0].message.content
+        if content:
+            return LLMResponse(
+                text=content,
+                usage=extract_usage_openai(last_completion),
+                model=model,
+            )
+        if attempt < MAX_RETRIES:
+            await asyncio.sleep(min(BASE_DELAY * (2 ** attempt), MAX_DELAY))
+
+    raise ValueError(
+        f"LLM returned empty content after {MAX_RETRIES + 1} attempts "
+        f"(finish_reason={last_completion.choices[0].finish_reason!r}, model={model!r})"
     )
 
 
