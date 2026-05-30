@@ -9,11 +9,12 @@ from backend.session_state import build_session_state
 from src.engine.f_apply_operations import f_apply_operations
 from src.engine.f_next_best_step import f_next_best_step
 from src.engine.f_output import f_output
+from src.engine.f_semantic_reembed import AxisNotDiscriminativeError
 from src.engine.f_uncertainty import f_cluster_uncertainty
 from src.engine.semantic_clustering import semantic_clustering
 from src.harness import ConversationContext, estimate_cost_usd
 from src.models import ChatSession, Cluster as DbCluster, DataPoint, SoftAssignment, Turn
-from src.schemas import InputOracle, TurnRead
+from src.schemas import Display, InputOracle, SystemTurn, TurnRead
 
 router = APIRouter(prefix="/turns", tags=["turns"])
 
@@ -159,6 +160,33 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
                 turn_number=1,
                 db=db,
                 # k omitted: semantic_clustering caps to min(active, 3) by default
+            )
+        except AxisNotDiscriminativeError:
+            # The axis doesn't vary in the dataset — ask the oracle to try a
+            # different one WITHOUT advancing the turn counter (turn_number=0
+            # keeps state.session.turn=0 in the UI so axis_hint is sent again).
+            return TurnRead(
+                session_id=session.id,
+                turn_number=0,
+                oracle_input=payload,
+                system_output=SystemTurn(
+                    session_id=session.id,
+                    turn_number=0,
+                    action="ask",
+                    clusters_updated=False,
+                    display=Display(
+                        type="text",
+                        content=(
+                            f"The axis \"{payload.axis_hint}\" doesn't distinguish the "
+                            f"data well enough to re-cluster. Please describe a different "
+                            f"semantic axis — one that clearly varies across the reviews "
+                            f"(e.g. an emotion, a product feature, or a quality dimension "
+                            f"that is actually present in the dataset)."
+                        ),
+                    ),
+                    contradiction_detected=False,
+                    cognitive_load_score=1,
+                ),
             )
         except (ValueError, RuntimeError) as exc:
             raise HTTPException(

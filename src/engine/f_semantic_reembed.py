@@ -33,6 +33,15 @@ from src.models import DataPoint
 # does not discriminate the axis well — fall back to LLM scoring instead.
 COSINE_VARIANCE_THRESHOLD = 0.01
 
+# Minimum std of LLM scores (0-10 scale) to consider the axis discriminative.
+# Below this threshold the axis doesn't separate the data and the oracle is
+# asked to pick a different one rather than silently falling back to topic clustering.
+LLM_STD_THRESHOLD = 1.0
+
+
+class AxisNotDiscriminativeError(ValueError):
+    """The requested axis doesn't meaningfully vary across the dataset."""
+
 
 def _cosine_axis_scores(
     points: list[DataPoint],
@@ -211,12 +220,19 @@ def reembed_for_axis(
             flush=True,
         )
         axis_scores = _llm_axis_scores(points, axis_label)
+        llm_std = float(axis_scores.std())
         print(
             f"[semantic-reembed] LLM scores  "
             f"min={axis_scores.min():.1f} max={axis_scores.max():.1f} "
-            f"mean={axis_scores.mean():.2f} std={axis_scores.std():.2f}",
+            f"mean={axis_scores.mean():.2f} std={llm_std:.2f}",
             flush=True,
         )
+        if llm_std < LLM_STD_THRESHOLD:
+            raise AxisNotDiscriminativeError(
+                f"The axis '{axis_label}' does not vary significantly across the "
+                f"dataset (LLM score std={llm_std:.2f} < threshold={LLM_STD_THRESHOLD}). "
+                f"Try an axis that is clearly present and varies in the data."
+            )
 
     # Standardise axis scores (zero-mean, unit-variance). Combined with
     # row-normalised embeddings (unit norm), both components have expected

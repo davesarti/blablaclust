@@ -302,3 +302,22 @@ class TestReembedForAxis:
             result = reembed_for_axis(points, "quality")
 
         assert result.dtype == np.float32
+
+    def test_raises_axis_not_discriminative_when_llm_scores_are_uniform(self):
+        """When cosine variance is too low AND LLM scores are nearly uniform,
+        reembed_for_axis must raise AxisNotDiscriminativeError so the oracle is
+        asked to provide a different axis instead of silently falling back."""
+        from src.engine.f_semantic_reembed import (
+            AxisNotDiscriminativeError,
+            reembed_for_axis,
+        )
+        points = _make_points(6, dim=8)
+        # Cosine scores with near-zero variance → forces LLM fallback.
+        flat_cosine = np.full(6, 0.0, dtype=np.float64)
+        # LLM scores all neutral → std ≈ 0, well below LLM_STD_THRESHOLD.
+        flat_llm = np.full(6, 5.0, dtype=np.float64)
+
+        with patch(f"{MOD}._cosine_axis_scores", return_value=flat_cosine), \
+             patch(f"{MOD}._llm_axis_scores", return_value=flat_llm):
+            with pytest.raises(AxisNotDiscriminativeError, match="battery life"):
+                reembed_for_axis(points, "battery life")
