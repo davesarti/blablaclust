@@ -79,13 +79,15 @@ def name_clusters(
     if axis_hint:
         axis_context = (
             f"\nAXIS CONTEXT\n"
-            f"These clusters were produced by re-embedding along the semantic axis "
-            f'"{axis_hint}". Name each cluster to reflect its position on this axis.\n'
-            f"Choose names that describe degree or intensity along the '{axis_hint}' "
-            f"spectrum — for example 'High {axis_hint.title()}', "
-            f"'Medium {axis_hint.title()}', 'Low {axis_hint.title()}' — or use "
-            f"natural synonyms that make the position immediately clear. "
-            f"Do NOT use topic labels like 'Electronics' or 'Book Reviews'.\n"
+            f"This session is oriented along the semantic axis \"{axis_hint}\".\n"
+            f"For each cluster, read its sample texts and apply this rule:\n"
+            f"- If the texts clearly relate to '{axis_hint}', name the cluster by "
+            f"its position on the axis (e.g. 'High {axis_hint.title()}', "
+            f"'Low {axis_hint.title()}', or natural synonyms like "
+            f"'Excellent {axis_hint.title()}' / 'Poor {axis_hint.title()}').\n"
+            f"- If the texts do NOT relate to '{axis_hint}', use a descriptive "
+            f"topic name that reflects what the cluster is actually about "
+            f"(e.g. 'Shipping and Returns', 'Product Durability').\n"
         )
     else:
         axis_context = ""

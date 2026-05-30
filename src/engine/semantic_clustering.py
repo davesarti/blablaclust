@@ -12,8 +12,9 @@ Design decisions vs. alternatives:
   change the old names no longer describe the new groupings correctly, so fresh
   clusters with LLM-generated names starting from the re-embedded data are more
   useful to the oracle.
-- k defaults to the number of currently active clusters (preserving the
-  oracle's original k choice). The caller can override this.
+- k is selected automatically via silhouette score (k=2..K_AUTO_MAX) when not
+  provided explicitly. This lets the data geometry decide how many natural bins
+  the axis has rather than hard-capping at 3.
 - The caller owns the DB transaction — no commit is made here.
 """
 
@@ -37,6 +38,40 @@ from src.models import (
 )
 
 SEMANTIC_BACKEND = "semantic_reembed"
+
+K_AUTO_MIN = 2
+K_AUTO_MAX = 5
+
+
+def _auto_select_k(X: np.ndarray, k_min: int, k_max: int) -> int:
+    """Pick k in [k_min, k_max] that maximises silhouette score on X.
+
+    Fits k-means for each candidate k and returns the one with the highest
+    average silhouette score. If k_max < k_min (tiny dataset) returns k_min
+    without fitting any model.
+    """
+    from sklearn.metrics import silhouette_score
+
+    if k_max < k_min:
+        return k_min
+
+    best_k, best_sil = k_min, -np.inf
+    for candidate_k in range(k_min, k_max + 1):
+        m = _fit_kmeans(X, candidate_k)
+        sil = float(silhouette_score(X, m.labels_))
+        print(
+            f"[semantic-clustering] auto-k  k={candidate_k}  silhouette={sil:.3f}",
+            flush=True,
+        )
+        if sil > best_sil:
+            best_k, best_sil = candidate_k, sil
+
+    print(
+        f"[semantic-clustering] auto-k selected k={best_k}  "
+        f"best_silhouette={best_sil:.3f}",
+        flush=True,
+    )
+    return best_k
 
 
 def semantic_clustering(
@@ -64,9 +99,9 @@ def semantic_clustering(
         turn_number: Turn at which the new snapshot is written. Must be > 0
             (turn 0 is reserved for the pre-oracle initial clustering).
         db: SQLAlchemy session. Changes are staged but not committed.
-        k: Number of clusters to produce. Defaults to min(active_clusters, 3)
-            — a semantic axis is 1-D and separates well into at most 3 bins
-            (high/medium/low). Pass explicitly to override.
+        k: Number of clusters to produce. When None (default), selected
+            automatically via silhouette score over k=K_AUTO_MIN..K_AUTO_MAX.
+            Pass explicitly to override.
         axis_weight: Fraction [0, 1] of k-means distance signal attributed to
             the semantic axis (default 0.7). The remaining 1-axis_weight comes
             from the original embeddings. 0.7 means 70% axis, 30% topic.
@@ -88,8 +123,7 @@ def semantic_clustering(
             f"semantic_clustering requires turn_number > 0, got {turn_number}"
         )
 
-    # Load existing active clusters — we need their count for the default k
-    # and we will dissolve them as part of this operation.
+    # Load existing active clusters — we will dissolve them as part of this operation.
     existing = (
         db.query(DbCluster)
         .filter(
@@ -104,37 +138,35 @@ def semantic_clustering(
             "run initial clustering first"
         )
 
-    # A semantic axis is a 1-D signal; k=3 (high/medium/low) is the natural
-    # maximum before clusters become degenerate. Cap the inherited k at 3 so
-    # the oracle gets meaningful tone-based bins rather than topic repetition.
-    AXIS_K_CAP = 3
-    if k is None:
-        inherited_k = len(existing)
-        k = min(inherited_k, AXIS_K_CAP)
-        print(
-            f"[semantic-clustering] k defaulted to {k}"
-            + (f" (capped from {inherited_k})" if k < inherited_k else ""),
-            flush=True,
-        )
-    if k < 1:
+    if k is not None and k < 1:
         raise ValueError(f"k must be >= 1, got {k}")
 
     valid = [dp for dp in data_points if dp.embedding is not None]
     if not valid:
         raise ValueError("no data points have embeddings")
+
+    print(
+        f"[semantic-clustering] session={session_id}  axis='{axis_hint}'  "
+        f"n_embedded={len(valid)}  turn={turn_number}",
+        flush=True,
+    )
+
+    # Compute the hybrid (N, D+1) embedding matrix.
+    # Must happen before k selection so silhouette-based auto-k uses real geometry.
+    X = reembed_for_axis(valid, axis_hint, axis_weight=axis_weight)
+
+    if k is None:
+        k = _auto_select_k(X, K_AUTO_MIN, min(K_AUTO_MAX, len(valid) - 1))
+
     if k > len(valid):
         raise ValueError(
             f"k={k} exceeds number of embedded points ({len(valid)})"
         )
 
     print(
-        f"[semantic-clustering] session={session_id}  axis='{axis_hint}'  "
-        f"k={k}  n_embedded={len(valid)}  turn={turn_number}",
+        f"[semantic-clustering] k={k}",
         flush=True,
     )
-
-    # Compute the hybrid (N, D+1) embedding matrix for the full dataset.
-    X = reembed_for_axis(valid, axis_hint, axis_weight=axis_weight)
 
     # Run k-means in the hybrid space.
     model = _fit_kmeans(X, k)

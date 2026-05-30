@@ -16,7 +16,13 @@ from sqlalchemy.pool import StaticPool
 
 import src.logger as logger
 from src.engine.initial_clustering import initial_clustering
-from src.engine.semantic_clustering import SEMANTIC_BACKEND, semantic_clustering
+from src.engine.semantic_clustering import (
+    K_AUTO_MAX,
+    K_AUTO_MIN,
+    SEMANTIC_BACKEND,
+    _auto_select_k,
+    semantic_clustering,
+)
 from src.models import Base, ChatSession, Cluster, DataPoint, SoftAssignment
 
 SESSION_ID = "sess-semantic"
@@ -178,8 +184,59 @@ def test_creates_k_new_active_clusters(db):
         assert c.session_id == SESSION_ID
 
 
-def test_default_k_capped_at_3_when_initial_k_is_small(db):
-    """When active clusters <= 3 the default k equals the cluster count."""
+def test_auto_k_called_when_k_is_none(db):
+    """When k is not provided, _auto_select_k is called and its result is used."""
+    data_points = db.query(DataPoint).filter(DataPoint.dataset_name == "ds").all()
+
+    with (
+        PATCH_POLES,
+        PATCH_COSINE,
+        PATCH_NAME,
+        patch(
+            "src.engine.semantic_clustering._auto_select_k", return_value=2
+        ) as mock_auto,
+    ):
+        new_clusters, _ = semantic_clustering(
+            data_points=data_points,
+            axis_hint="angry",
+            session_id=SESSION_ID,
+            turn_number=1,
+            db=db,
+            auto_name=False,
+        )
+    db.commit()
+
+    mock_auto.assert_called_once()
+    assert len(new_clusters) == 2
+
+
+def test_explicit_k_bypasses_auto_selection(db):
+    """When k is passed explicitly, _auto_select_k is never called."""
+    data_points = db.query(DataPoint).filter(DataPoint.dataset_name == "ds").all()
+
+    with (
+        PATCH_POLES,
+        PATCH_COSINE,
+        PATCH_NAME,
+        patch("src.engine.semantic_clustering._auto_select_k") as mock_auto,
+    ):
+        new_clusters, _ = semantic_clustering(
+            data_points=data_points,
+            axis_hint="angry",
+            session_id=SESSION_ID,
+            turn_number=1,
+            db=db,
+            k=3,
+            auto_name=False,
+        )
+    db.commit()
+
+    mock_auto.assert_not_called()
+    assert len(new_clusters) == 3
+
+
+def test_auto_k_result_is_in_valid_range(db):
+    """With real silhouette selection, auto-k is always in [K_AUTO_MIN, K_AUTO_MAX]."""
     data_points = db.query(DataPoint).filter(DataPoint.dataset_name == "ds").all()
 
     with PATCH_POLES, PATCH_COSINE, PATCH_NAME:
@@ -193,38 +250,7 @@ def test_default_k_capped_at_3_when_initial_k_is_small(db):
         )
     db.commit()
 
-    assert len(new_clusters) == 2  # initial k=2, below cap of 3 → kept at 2
-
-
-def test_default_k_capped_at_3_when_initial_k_exceeds_cap(db):
-    """When active clusters > 3 the default k is capped at 3 for 1-D axis."""
-    data_points = db.query(DataPoint).filter(DataPoint.dataset_name == "ds").all()
-
-    # Add extra clusters so active count = 5 > AXIS_K_CAP(3).
-    for i in range(3):
-        db.add(
-            Cluster(
-                id=f"extra-{i}",
-                session_id=SESSION_ID,
-                name=f"Extra {i}",
-                description="",
-                created_at_turn=0,
-            )
-        )
-    db.commit()
-
-    with PATCH_POLES, PATCH_COSINE, PATCH_NAME:
-        new_clusters, _ = semantic_clustering(
-            data_points=data_points,
-            axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
-            auto_name=False,
-        )
-    db.commit()
-
-    assert len(new_clusters) == 3  # capped from 5 → 3
+    assert K_AUTO_MIN <= len(new_clusters) <= K_AUTO_MAX
 
 
 def test_writes_full_snapshot_at_turn_1_all_points_covered(db):
@@ -563,3 +589,31 @@ def test_auto_name_receives_new_clusters_and_assignments(db):
 
     assert captured["clusters"] is new_clusters
     assert captured["assignments"] is new_assignments
+
+
+# ---------------------------------------------------------------------------
+# _auto_select_k unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestAutoSelectK:
+    """Unit tests for the silhouette-based automatic k selector."""
+
+    def test_returns_kmin_when_kmax_less_than_kmin(self):
+        """Edge case: k_max < k_min returns k_min without running k-means."""
+        X = np.zeros((5, 3), dtype=np.float32)
+        assert _auto_select_k(X, k_min=3, k_max=1) == 3
+
+    def test_selects_k2_for_clearly_bimodal_data(self):
+        """Two tight well-separated clusters → silhouette peaks at k=2."""
+        group_a = np.tile([0.0, 0.0, 0.0], (20, 1))
+        group_b = np.tile([100.0, 100.0, 100.0], (20, 1))
+        X = np.vstack([group_a, group_b]).astype(np.float32)
+        assert _auto_select_k(X, k_min=2, k_max=5) == 2
+
+    def test_result_is_always_in_range(self):
+        """Auto-k always returns a value in [k_min, k_max]."""
+        rng = np.random.default_rng(42)
+        X = rng.standard_normal((30, 4)).astype(np.float32)
+        k = _auto_select_k(X, k_min=2, k_max=4)
+        assert 2 <= k <= 4
