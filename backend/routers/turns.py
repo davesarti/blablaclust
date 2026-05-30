@@ -35,6 +35,32 @@ def _active_axis_from_history(prior_turns: list[Turn]) -> str | None:
     return None
 
 
+_AFFIRMATION_WORDS = frozenset({
+    "yes", "sì", "si", "ok", "okay", "sure", "yep", "yeah",
+    "go ahead", "do it", "correct", "confirm", "proceed",
+    "please", "absolutely", "definitely", "do that", "please do",
+    "vai", "fallo", "procedi", "confermo", "esatto",
+})
+
+
+def _is_affirmation(text: str) -> bool:
+    normalized = text.strip().lower().rstrip("!.?, ")
+    return normalized in _AFFIRMATION_WORDS
+
+
+def _pending_clarify_axis(prior_turns: list[Turn]) -> str | None:
+    """Return the pending axis_label stored by the most recent clarify turn, if any."""
+    if not prior_turns:
+        return None
+    last = prior_turns[-1]
+    ops = ((last.system_output or {}).get("state_snapshot") or {}).get("operations") or []
+    for op in ops:
+        if isinstance(op, dict) and op.get("type") == "clarify_pending":
+            label = op.get("axis_label")
+            return str(label) if label else None
+    return None
+
+
 def _run_semantic_reembed(
     session: ChatSession,
     axis_label: str,
@@ -176,33 +202,51 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     # same axis. None when the session never re-embedded.
     session_axis_hint = _active_axis_from_history(prior_turns)
 
-    # Always call f_output: the LLM is the single intent-classification step. It
-    # may emit any of merge / split / rename / move / semantic_reembed.
-    total_points = (
-        db.query(DataPoint)
-        .filter(DataPoint.dataset_name == session.dataset_name)
-        .count()
-    )
-
-    try:
-        raw, usage = f_output(state, payload, context, total_points)
-        cost = estimate_cost_usd(usage)
+    # ── Clarify-confirmation short-circuit ───────────────────────────────────
+    # If the previous turn stored a clarify_pending axis and the oracle's reply
+    # is a short affirmation, skip the LLM and directly trigger semantic_reembed.
+    pending_axis = _pending_clarify_axis(prior_turns)
+    if pending_axis and _is_affirmation(payload.raw_text):
         print(
-            f"[turns] f_output  session={session.id}  turn={new_turn_number}  "
-            f"input_tokens={usage.get('input_tokens', 0)}  "
-            f"output_tokens={usage.get('output_tokens', 0)}  "
-            f"cost_usd=${cost:.4f}",
+            f"[turns] clarify confirmed  session={session.id}  "
+            f"axis='{pending_axis}'  oracle_text={payload.raw_text!r}",
             flush=True,
         )
-    except (json.JSONDecodeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Engine returned a malformed response: {exc}",
+        raw: dict = {
+            "action": "semantic_reembed",
+            "operations": [{"type": "semantic_reembed", "axis_label": pending_axis}],
+            "display": f"Reorganising all clusters along the '{pending_axis}' axis.",
+        }
+        context.add_oracle_turn(payload.model_dump())
+        context.add_system_turn(raw)
+        usage: dict = {}
+        cost: float = 0.0
+    else:
+        # Normal path: the LLM is the single intent-classification step.
+        total_points = (
+            db.query(DataPoint)
+            .filter(DataPoint.dataset_name == session.dataset_name)
+            .count()
         )
-    except Exception as exc:
-        raise HTTPException(
-            status_code=502, detail=f"Engine call failed: {exc}"
-        )
+        try:
+            raw, usage = f_output(state, payload, context, total_points)
+            cost = estimate_cost_usd(usage)
+            print(
+                f"[turns] f_output  session={session.id}  turn={new_turn_number}  "
+                f"input_tokens={usage.get('input_tokens', 0)}  "
+                f"output_tokens={usage.get('output_tokens', 0)}  "
+                f"cost_usd=${cost:.4f}",
+                flush=True,
+            )
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Engine returned a malformed response: {exc}",
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502, detail=f"Engine call failed: {exc}"
+            )
 
     if isinstance(raw, list):
         operations = raw
@@ -217,6 +261,21 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     raw_display = raw.get("display") if isinstance(raw, dict) else None
     turn_usage = usage
     turn_cost = cost
+
+    # ── Clarify action: store pending axis, execute nothing ───────────────────
+    # When f_output asks for clarification, save the candidate axis in the
+    # state_snapshot so the next turn can detect it with _pending_clarify_axis.
+    snapshot_operations: list = []
+    if isinstance(raw, dict) and raw.get("action") == "clarify":
+        pending_label = (raw.get("axis_label") or "").strip()
+        if pending_label:
+            snapshot_operations = [{"type": "clarify_pending", "axis_label": pending_label}]
+            print(
+                f"[turns] clarify stored  session={session.id}  "
+                f"axis='{pending_label}'",
+                flush=True,
+            )
+        operations = []  # no clustering changes this turn
 
     # ── Re-embedding op routes to the semantic_clustering pipeline ────────────
     # The prompt declares semantic_reembed exclusive; if the LLM accidentally
@@ -333,8 +392,9 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     if system_turn.action == "stop":
         session.status = "closed"
 
-    if operations:
-        system_turn.state_snapshot["operations"] = operations
+    ops_to_store = snapshot_operations if snapshot_operations else operations
+    if ops_to_store:
+        system_turn.state_snapshot["operations"] = ops_to_store
 
     # Persist the turn once, with the final SystemTurn as system_output. Creating
     # the row only here (rather than up-front) keeps the stored shape always valid
