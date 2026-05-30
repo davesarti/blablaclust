@@ -80,11 +80,12 @@ def name_clusters(
         axis_context = (
             f"\nAXIS CONTEXT\n"
             f"These clusters were produced by re-embedding along the semantic axis "
-            f'"{axis_hint}". Name each cluster to reflect where it falls along this '
-            f"axis — use degree/tone labels (e.g. for 'angry tone': 'Very Angry', "
-            f"'Mildly Frustrated', 'Neutral/Satisfied') rather than topic labels "
-            f"like 'Book Reviews' or 'Electronics'. The name must make the axis "
-            f"position immediately clear to the oracle.\n"
+            f'"{axis_hint}". Name each cluster to reflect its position on this axis.\n'
+            f"Choose names that describe degree or intensity along the '{axis_hint}' "
+            f"spectrum — for example 'High {axis_hint.title()}', "
+            f"'Medium {axis_hint.title()}', 'Low {axis_hint.title()}' — or use "
+            f"natural synonyms that make the position immediately clear. "
+            f"Do NOT use topic labels like 'Electronics' or 'Book Reviews'.\n"
         )
     else:
         axis_context = ""
