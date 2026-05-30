@@ -173,11 +173,22 @@ lungo l'asse → separazione k-means potenzialmente migliore.
 
 ### Esperimento: Ridge vs NN — risultati empirici
 
-*I valori qui sotto vengono aggiornati man mano che vengono condotti i test manuali.*
+I log di terminale riportano entrambe le metriche per ogni sessione che usa il fallback LLM.
 
-| Sessione | Asse | std NN | std Ridge | R² Ridge | Silhouette finale | Note |
-|----------|------|--------|-----------|----------|-------------------|------|
-| — | — | — | — | — | — | da compilare |
+| Sessione | Asse | std NN | std Ridge (α) | R² Ridge | Silhouette | Note |
+|----------|------|--------|---------------|----------|------------|------|
+| 1 | angry tone | 2.815 | 1.507 (α=1.0) | 0.525 | 0.340 | Ridge peggio di NN (0.551 prev.) |
+| 2 | angry tone | — | — (α=0.01) | — | — | in corso |
+
+**Analisi sessione 1 (α=1.0):**
+- R²=0.525 è sorprendentemente alto per un asse tonale in MiniLM — esiste una direzione lineare reale
+- Ma std Ridge (1.507) < std NN (2.815): la regolarizzazione forte schiaccia le predizioni verso la media
+- Distribuzione Ridge più gaussiana/continua → k-means separa meno nettamente → silhouette cala (0.551→0.340)
+- NN copia valori estremi (0 e 10) creando distribuzione bimodale artificiale ma efficace per k-means
+
+**Decisione dopo i test:**
+Se α=0.01 non recupera la silhouette almeno al livello NN (≥0.5), si torna a NN.
+NN ha basi teoriche più deboli ma risultati empirici migliori su questo dataset/asse.
 
 ---
 
