@@ -61,9 +61,7 @@ Respond with a single valid JSON object. No markdown fences, no commentary outsi
       "target_cluster_id": "<existing cluster id>"
     }}
   ],
-  "display": "<plain English explanation of what changed and why, max 3 sentences, shown directly to oracle>",
-  "contradiction_detected": <true | false>,
-  "cognitive_load_score": <integer between 1 and 5>
+  "display": "<plain English explanation of what changed and why, max 3 sentences, shown directly to oracle>"
 }}
 
 CONSTRAINTS
@@ -79,5 +77,3 @@ CONSTRAINTS
 - When the oracle supplies cluster names (in "new_name" on merge/rename, or in "new_names" on split), copy them VERBATIM — character-for-character — into the operation. Do NOT rephrase, expand, abbreviate, censor, sanitize, translate, capitalize differently, or "improve" them. If the oracle says split into "miss" and "piss", the names are exactly "miss" and "piss". If the oracle says rename to "blabla", the name is exactly "blabla". The oracle's chosen label is authoritative; your job is to apply it, not to edit it.
 - For "move", point_ids may ONLY contain data point IDs the oracle explicitly referenced (see Target points above, or IDs named earlier in the conversation). NEVER invent point IDs or move points the oracle did not name — bulk reassignment is the clustering algorithm's job, not yours. Use "move" for point-level feedback such as resolving a boundary point or correcting a single misplaced point.
 - If feedback_type is "explain", set action to "explain" and leave operations empty.
-- If contradiction_detected is true, briefly note the conflict in the display field.
-- cognitive_load_score reflects how much information the oracle must process this turn (1=trivial, 5=overwhelming).

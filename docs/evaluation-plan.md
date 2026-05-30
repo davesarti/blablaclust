@@ -4,7 +4,17 @@
 measure and why; this plan freezes **how** we build the measurement, in what order,
 and what a finished v1 looks like.*
 
-## Status: v1 complete ✓
+## Status: v1 complete ✓ (with post-v1 revisions)
+
+> **Post-v1 updates:** the metric layout was reorganised. **B2 cognitive load
+> moved to A3** (it is deterministic engine output, not an LLM judge). **B1 was
+> split into four independent metrics**: B1 = the overall synthesis verdict,
+> B2 = per-cluster coherence (was internal sub-call), B3 = oracle compliance
+> (was internal sub-call, `oracle_clarity` removed), and **a new B4 =
+> oracle-contradiction judge** that scores how hard the oracle was to
+> understand. B4 feeds B1 as forgiveness context. An earlier "one-point
+> validation" B4 was implemented and removed before this restructure — sections
+> below that describe that old B4 are historical.
 
 All deliverables below are implemented and end-to-end tested. Run:
 
@@ -22,10 +32,13 @@ machine-readable). Five scenarios cover all termination codes and the main opera
 
 [`f_next_best_step.py`](../src/engine/f_next_best_step.py) currently emits a single
 `state_snapshot.reason = "max_turns_or_load_reached"` that conflates two outcomes
-the spec wants split. Replace with three distinct codes — `converged`,
-`cognitive_overload`, `max_turns_reached` — so the runner can bucket runs without
-post-hoc string matching. Touches one file. **Blocks the runner's A2 reporting**;
-do this first.
+the spec wants split. Replace with two codes — `converged` and
+`cognitive_overload` — and write `state_snapshot.cognitive_load_driver` alongside
+so the runner can bucket overloads by `turns` / `tokens` / `clusters` without
+post-hoc string matching. (An earlier revision split this into three codes
+including `max_turns_reached`; the A3 redesign folded the turn-count signal
+into `cognitive_overload` with a driver, removing the redundant code.) Touches
+one file. **Blocks the runner's A2 reporting**; do this first.
 
 ### 2. B4 one-point validation — *new function + prompt*
 
@@ -54,8 +67,7 @@ correctness checks. One scenario → one session → one record.
 4. Pull A1 trend from `logs/clustering_runs.jsonl` (entries scoped by `session_id`).
 5. Read all turns via `GET /turns?session_id=…`; derive A2 (turn count, weighted by
    `FeedbackEntry.type`), termination code from final turn's `state_snapshot.reason`,
-   B2 trend (`cognitive_load_score` per turn), B3 detections from
-   `contradiction_detected`.
+   and B2 trend (`cognitive_load_score` per turn).
 6. End-of-session: call `f_eval(state, total_points)` → B1.
 7. Sample N (e.g. 5) points per active cluster; for each call `f_validate_point` → B4.
 8. Tear the session down (`DELETE /sessions/{sid}/delete`).
@@ -69,11 +81,11 @@ correctness checks. One scenario → one session → one record.
   "k_initial": 5, "k_final": 6,
   "A1": {"silhouette_initial": 0.31, "silhouette_final": 0.34, "trend": [...]},
   "A2": {"turns": 7, "weighted_turns": 5.4, "termination": "converged"},
-  "B1": {"coherence_score": 0.78, "notes": "..."},
-  "B2": {"cognitive_load_by_turn": [1,2,1,3,1,2,1], "by_feedback_type": {...}},
-  "B3": {"contradictions_detected": 1, "resolved": true},
-  "B4": {"endorsement_rate": 0.84, "mean_confidence": 0.71, "n_sampled": 30},
-  "cost_usd_estimate": 0.12,
+  "A3": {"cognitive_load_by_turn": [1,2,1,3,1,2,1], "mean_cognitive_load": 1.6},
+  "B1": {"overall_score": 0.78, "notes": "..."},
+  "B2": {"coherence_mean": 0.72, "coherence_min": 0.55, "per_cluster": [...]},
+  "B3": {"compliance_score": 0.81, "notes": "..."},
+  "B4": {"contradiction_score": 0.15, "notes": "...", "examples": [...]},
   "wall_time_s": 48.2
 }
 ```
@@ -90,16 +102,14 @@ oracle_turns: [{raw_text, feedback_type, target_cluster_ids?, target_point_ids?}
 - **`sentiment_split.json`** — straightforward refinement: oracle asks to split a
   mixed cluster by sentiment, rename, accept. Should converge cleanly.
 - **`topic_merge.json`** — oracle asks to merge over-fragmented topic clusters.
-- **`contradictory_oracle.json`** — oracle says "split X" then later "merge X back
-  in"; tests B3.
 - **`high_load_oracle.json`** — oracle floods with many small, conflicting tweaks;
   expects termination=`cognitive_overload`.
 - **`stable_oracle.json`** — oracle approves initial clustering with minimal
   changes; expects fast `converged` termination, high B1.
 
-Five scenarios is enough to exercise every termination code and contradiction path
-without exploding LLM cost (~$0.50–$1.00 per full eval run on Gemini Flash, by the
-test-harness cost we observed).
+Four scenarios exercise every termination code without exploding LLM cost
+(~$0.50–$1.00 per full eval run on Gemini Flash, by the test-harness cost we
+observed).
 
 ### 5. A2 type-weights — *small constants file*
 
@@ -112,8 +122,6 @@ doesn't match intuition.
 
 ## Out of scope for v1
 
-- **Semantic contradiction detection** — B3 stays keyword-based; the prompt-aware
-  v2 detector is mentioned in the spec but deferred.
 - **Human-rater study** — the spec calls for N≈5–10 human raters scoring B1/B4 to
   validate the judge. Out of scope for the implementation work; we can start
   collecting human scores once the runner is producing comparable judge scores.
@@ -185,10 +193,11 @@ This is the script that ties everything together. You give it one or more scenar
 5. After all turns, collects all the metrics:
    - **A1**: did the silhouette score (a measure of cluster quality) go up or stay stable?
    - **A2**: how many turns did it take, what kind of feedback was it (global/point/etc.), and did it converge?
-   - **B1**: calls the `f_eval` judge (already existed) to rate the final clustering's coherence 0–1.
-   - **B2**: the cognitive load score from each turn — was the agent overwhelmed at any point?
-   - **B3**: were any contradictions detected between oracle turns?
-   - **B4**: runs the one-point judge on the most uncertain points in each cluster.
+   - **A3**: the cognitive load score from each turn — was the agent overwhelmed at any point?
+   - **B2**: calls the coherence judge to rate each final cluster 0–1 on internal focus.
+   - **B3**: calls the compliance judge to rate how faithfully the system carried out each oracle request.
+   - **B4**: calls the contradiction judge on the oracle's feedback history to flag how hard the oracle was to understand.
+   - **B1**: calls the synthesis judge with B2 + B3 + B4 as input; emits one overall verdict.
 6. Deletes the eval session so the database stays clean.
 7. Writes the results: a `results.jsonl` file (one line per scenario, machine-readable) and a `summary.md` (human-readable, with means and medians across all scenarios).
 
@@ -206,7 +215,7 @@ Two scenarios exist right now:
 - `stable_oracle.json`: the oracle basically approves the initial clustering and makes no structural changes. We expect fast convergence and a high coherence score.
 - `sentiment_split.json`: the oracle asks to split a cluster by sentiment, rename the results, then accepts. We expect the split and rename operations to fire correctly.
 
-Three more are planned (`topic_merge`, `contradictory_oracle`, `high_load_oracle`) to cover merging, contradiction detection, and cognitive-overload termination respectively.
+Two more are planned (`topic_merge`, `high_load_oracle`) to cover merging and cognitive-overload termination respectively.
 
 ### What you get at the end
 

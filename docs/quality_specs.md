@@ -29,85 +29,96 @@ per run by [`initial_clustering`](../src/engine/initial_clustering.py) to
 a low-silhouette grouping (e.g. "enthusiastic" vs "disappointed" reviews — same
 topic, opposite axis). Companion: **soft-assignment calibration** —
 [`f_uncertainty`](../src/engine/f_uncertainty.py) defines
-`uncertainty = 1 − max(prob)`. Validation depends on B4 (per-point endorsement
-rate); since B4 is not yet implemented, A1's calibration is **unvalidated in v1**
-and reported as a raw diagnostic only.
+`uncertainty = 1 − max(prob)`. Calibration is **unvalidated** and reported as a raw
+diagnostic only; consumers (UI, eval) should not rely on it as a quality signal.
 
 **A2. Turns to convergence (primary process metric)** — turns until the Planner
 returns `stop` ([`f_next_best_step`](../src/engine/f_next_best_step.py)) or `status`
 = `converged`. **Weighted by feedback type** (`FeedbackEntry.type`: a `global`
 reframe ≫ a `point` nudge; weights frozen in the harness). Termination is recorded
-via `state_snapshot.reason` with **three distinct codes**, not a binary
-genuine/forced split:
+via `state_snapshot.reason` with **two codes**:
 
-- `converged` — Planner returned `stop`; healthy outcome.
-- `cognitive_overload` — `cognitive_load >= 4` triggered halt; **system failure
-  signal**, reported separately.
-- `max_turns_reached` — hit `MAX_TURNS = 20`; ambiguous (long-but-healthy session
-  vs. non-convergence), reported separately and inspected case by case.
+- `converged` — Planner did not trigger any stop; healthy outcome.
+- `cognitive_overload` — A3 saturated at 5; **system failure signal**, reported
+  separately. The `state_snapshot.cognitive_load_driver` field distinguishes
+  which signal saturated (`turns` / `tokens` / `clusters`), so "ran out of
+  turns" and "prompt got too heavy" are still separable in the report.
 
 Aggregate "turns to convergence" statistics are computed over `converged` runs only;
-the other two codes are reported as failure rates.
+the `cognitive_overload` code is reported as a failure rate, broken down by driver.
+
+**A3. Cognitive load (LLM-side)** — `cognitive_load_score ∈ [1,5]` computed
+**deterministically by `f_cognitive_load`** from three signals: turn count,
+pre-trim prompt token size, and active cluster count. The composite is the
+max of three per-signal sub-scores against fixed caps
+(`src/engine/cognitive_load_caps.py`). The Planner reads `.score` and stops
+the session at 5; the eval report reports the `driver` (which signal saturated)
+to distinguish stop causes. This metric estimates **agent-side** load — when
+the LLM's prompt is bloated enough to start degrading. Oracle-side cognitive
+load (what the human has to process) is a separate concern not measured here.
+Deterministic and read straight from the per-turn `state_snapshot`.
 
 ## Family B — LLM-as-oracle + LLM-as-judge
 
 The scripted/LLM **oracle** produces
-turns shaped like `InputOracle`; a distinct **judge** scores the result, so the
-agent never grades itself.
+turns shaped like `InputOracle`; distinct **judges** score the result, so the
+agent never grades itself. Family B is four independent metrics; **B1 is the
+reasoning-based synthesis of the other three**.
 
-**B1. Oracle satisfaction (primary outcome)** — the judge
-([`prompts/f_eval.txt`](../prompts/f_eval.txt)) reads final clusters + feedback
-history and returns a `coherence_score`. Measured relative to what the oracle asked for.
+**B1. Overall verdict (primary outcome)**
+([`prompts/f_eval_overall.txt`](../prompts/f_eval_overall.txt)) — combines B2,
+B3, and B4 by reasoning, not arithmetic — a formula cannot distinguish "bad
+system" from "bad oracle." When coherence (B2) or compliance (B3) is low but
+contradiction (B4) is high, the system is forgiven; it executed a messy oracle
+faithfully. When compliance is low against low contradiction, the system is
+penalised.
 
-**B2. Cognitive load vs. oracle input** — `cognitive_load_score ∈ [1,5]` produced
-**by the Executor** (authoritative source; the Planner consumes but does not
-re-score it), plus an objective surface signal (item count + text length in
-`Display`). Reported **conditioned on `FeedbackEntry.type`**: a light `point` nudge
-should not produce a heavy turn.
+**B2. Cluster coherence**
+([`prompts/f_eval_coherence.txt`](../prompts/f_eval_coherence.txt)) — scores each
+cluster 0–1 on internal thematic coherence, seeing top-3 + bottom-2 sampled
+members. The bottom-2 stress-test the cluster's edges. Aggregates: mean and
+**min** (a single bad cluster pulls the run down).
 
-**B3. Contradiction tracking** — measure detection
-rate, severity, and resolution. Backed by
-[`detect_contradiction`](../src/harness.py) (keyword split↔merge on a shared
-cluster) and the Executor's `contradiction_detected`. Latest intent must win *and*
-the drift must be surfaced. **v1 limit**: detector is keyword-based and misses
-paraphrased/semantic contradictions. **v2 candidate**: embed contradiction pairs
-and threshold cosine similarity between successive feedback entries on the same
-cluster.
+**B3. Oracle compliance**
+([`prompts/f_eval_compliance.txt`](../prompts/f_eval_compliance.txt)) — pairs
+each oracle turn's request with the operations the system performed and scores
+fidelity of request → operation translation. Judges only what the system did,
+not whether the oracle was clear (B4 handles that).
 
-**B4. One-point validation** — for sampled points, ask the judge whether point *n*
-belongs in cluster *c*; report endorsement rate + mean confidence. Doubles as the
-validator for A1's soft-assignment calibration (endorsement should correlate
-negatively with `uncertainty`).
+**B4. Oracle contradiction**
+([`prompts/f_eval_contradiction.txt`](../prompts/f_eval_contradiction.txt)) —
+how hard would it have been for the system to understand the oracle's intent?
+Looks at the feedback history for self-contradictions, drift in judging
+criteria, vague targets, and ambiguity. Higher = harder. Feeds B1 as forgiveness
+context: a high B4 partially excuses low B2 / B3.
 
 ## Reproducibility & caveats
 
 - k-means seed fixed (`KMEANS_RANDOM_STATE = 42`); LLM calls logged with **prompt
   hash** ([`logs/llm_calls.jsonl`](../logs/llm_calls.jsonl)); oracle script + type
   weights frozen for v1.
-- **Judge model-dependence** (B1/B4): mitigated by a distinct judge, relative
+- **Judge model-dependence** (B1): mitigated by a distinct judge, relative
   scoring, and a small human study (N ≈ 5–10). **Protocol**: human raters receive
-  the same final-clusters + feedback-history payload the judge sees, score
-  `coherence` on the same 1–5 rubric, and (for B4) endorse/reject sampled
-  point-cluster assignments. We report Spearman correlation between human and
-  judge scores; correlation < 0.6 invalidates the judge for that metric.
-- **Contradiction detector is keyword-based** (B3): see B3 entry above for the v2
-  plan.
+  the same final-clusters + feedback-history payload the judge sees and score
+  `coherence` on the same 1–5 rubric. We report Spearman correlation between human
+  and judge scores; correlation < 0.6 invalidates the judge for that metric.
 
 ## Implementation status
 
-[`f_eval`](../src/engine/f_eval.py) is **implemented and exported but not yet wired
-into the live turn path** ([`backend/routers/turns.py`](../backend/routers/turns.py)
-runs only `f_output → f_apply_operations → f_uncertainty → f_next_best_step`). For
-v1 the eval harness **calls the judge (B1) out-of-band at end-of-session**; B4's
-per-point probe is a planned addition, not yet a function.
+The Family-B judges are **out-of-band**: the live turn path
+([`backend/routers/turns.py`](../backend/routers/turns.py)) runs only
+`f_output → f_apply_operations → f_uncertainty → f_next_best_step`; the eval harness
+calls the four judges (coherence, compliance, contradiction, overall) at
+end-of-session.
 
 ## Summary
 
 | ID | Metric | Family | Role | Status |
 |---|---|---|---|---|
-| A1 | Silhouette + soft-assignment calibration | Math | Secondary diagnostic | Silhouette implemented; calibration unvalidated (blocks on B4) |
-| A2 | Turns to convergence (type-weighted) | Math | **Primary process** | Implemented; three-way termination coding to add |
-| B1 | Oracle satisfaction (coherence/coverage) | LLM-judge | **Primary outcome** | Judge implemented, out-of-band only |
-| B2 | Cognitive load vs. oracle input | LLM + objective | Interaction cost | Implemented (Executor-authored) |
-| B3 | Contradiction tracking | LLM-oracle | Robustness | Implemented (keyword v1); semantic v2 planned |
-| B4 | One-point validation | LLM-judge | Per-point sanity | Planned |
+| A1 | Silhouette + soft-assignment calibration | Math | Secondary diagnostic | Silhouette implemented; calibration unvalidated |
+| A2 | Turns to convergence (type-weighted) | Math | **Primary process** | Implemented; three termination codes |
+| A3 | Cognitive load vs. oracle input | Math (engine-authored) | Interaction cost | Implemented (Executor-authored) |
+| B1 | Overall verdict (synthesis of B2 + B3 + B4) | LLM-judge | **Primary outcome** | Implemented |
+| B2 | Cluster coherence (per-cluster) | LLM-judge | Output quality | Implemented |
+| B3 | Oracle compliance (request → operation fidelity) | LLM-judge | System behaviour | Implemented |
+| B4 | Oracle contradiction (how clear was the oracle) | LLM-judge | Forgiveness context for B1 | Implemented |

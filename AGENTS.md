@@ -20,7 +20,7 @@ and extend, since the decision logic and the execution logic never mix.
 |---|---|---|
 | Sensor | `f_uncertainty` | Reads the DB and scores each data point by how ambiguous its cluster assignment is — feeds signal into the Planner |
 | Planner | `f_next_best_step` | Reads state + uncertainty scores, decides the next action: show / ask / stop |
-| Executor | `f_next_state` + `f_output` | Applies the oracle's feedback to the clustering by calling Claude |
+| Executor | `f_output` + `f_apply_operations` | Calls Claude to turn oracle feedback into structured operations, then applies them to the DB |
 | Judge | `f_eval` | Self-assesses the quality of the current clustering at the end of a session |
 
 ## Architecture
@@ -29,10 +29,13 @@ and extend, since the decision logic and the execution logic never mix.
 Oracle natural language input
            │
            ▼
-    f_next_state ────calls────▶ f_output ──▶ Claude (via harness.py)
-           │                                        │
-           │                              updated clusters (dict)
-           │◀───────────────────────────────────────┘
+    f_output ──▶ Claude (via harness.py)
+           │                  │
+           │        operations (merge / split / move / rename)
+           │◀─────────────────┘
+           │
+           ▼
+    f_apply_operations ──writes──▶ clusters + soft_assignments (DB)
            │
            ▼
     f_uncertainty ──reads──▶ SoftAssignment table (DB)

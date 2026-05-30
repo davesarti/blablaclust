@@ -1,7 +1,7 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from src.models import ChatSession, Cluster as DbCluster, SoftAssignment, Turn
+from src.models import ChatSession, Cluster as DbCluster, DataPoint, SoftAssignment, Turn
 from src.schemas import (
     ChatSessionState,
     Cluster as ClusterSchema,
@@ -81,9 +81,17 @@ def build_cluster_schemas(
         for session_id in {cluster.session_id for cluster in clusters}:
             stats.update(hard_cluster_stats(db, session_id))
 
+    # Resolve all representative point IDs to their display texts in one query.
+    all_rep_ids = [pid for _, (_, reps) in stats.items() for pid in reps]
+    text_by_id: dict[str, str] = {}
+    if all_rep_ids:
+        for dp in db.query(DataPoint).filter(DataPoint.id.in_(all_rep_ids)).all():
+            d = dp.data or {}
+            text_by_id[dp.id] = d.get("text") or d.get("title") or dp.id
+
     schemas: list[ClusterSchema] = []
     for cluster in clusters:
-        size, representative_points = stats.get(cluster.id, (0, []))
+        size, rep_ids = stats.get(cluster.id, (0, []))
         schemas.append(
             ClusterSchema(
                 id=cluster.id,
@@ -93,7 +101,7 @@ def build_cluster_schemas(
                 created_at_turn=cluster.created_at_turn,
                 dissolved_at_turn=cluster.dissolved_at_turn,
                 size=size,
-                representative_points=representative_points,
+                representative_points=[text_by_id.get(pid, pid) for pid in rep_ids],
             )
         )
     return schemas

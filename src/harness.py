@@ -32,8 +32,6 @@ _DRY_RUN_OUTPUT = json.dumps({
     "action": "no_change",
     "operations": [],
     "display": "[DRY RUN] This is a mock response. No API call was made.",
-    "contradiction_detected": False,
-    "cognitive_load_score": 1,
 })
 
 
@@ -379,25 +377,14 @@ def call_llm(
 
 
 # ---------------------------------------------------------------------------
-# Conversation state & contradiction tracking
+# Conversation state
 # ---------------------------------------------------------------------------
-
-#rappresenta una contraddizione che l'assistente ha identificato durante una conversazione.
-@dataclass
-class ContradictionRecord:
-    turn_number: int
-    description: str
-    earlier_turn: int
-    feedback_type_a: str
-    feedback_type_b: str
-    target_cluster_id: str | None
 
 
 @dataclass
 class ConversationContext:
     session_id: str
     turns: list[dict[str, str]] = field(default_factory=list)
-    contradictions: list[ContradictionRecord] = field(default_factory=list)
     _oracle_turns: list[dict] = field(default_factory=list, repr=False)
 
     def add_oracle_turn(self, oracle_turn: dict) -> None:
@@ -419,67 +406,6 @@ class ConversationContext:
             text = json.dumps(system_turn)
         self.turns.append({"role": "assistant", "content": text})
 
-    def detect_contradiction(
-        self,
-        new_oracle_turn: dict,
-        cluster_state: list[dict],
-    ) -> ContradictionRecord | None:
-        # Cerca contraddizioni tra il turno corrente e quelli precedenti sullo stesso cluster.
-        # Logica: se due turni usano keyword opposte (split↔merge) e condividono almeno un
-        # target_cluster_id, viene restituito un ContradictionRecord che descrive il conflitto.
-        # Logica puramente Python — nessuna chiamata LLM, quindi indipendente dal provider
-        # (funziona uguale con harness_openai o harness Anthropic).
-        #
-        # Need at least one prior turn to compare against.
-        if len(self._oracle_turns) < 2:
-            return None
-
-        _SPLIT_KEYWORDS = {"split", "divide", "separate", "break"}
-        _MERGE_KEYWORDS = {"merge", "combine", "join", "unify", "consolidate"}
-
-        def _intent(text: str) -> str | None:
-            words = set(text.lower().split())
-            if words & _SPLIT_KEYWORDS:
-                return "split"
-            if words & _MERGE_KEYWORDS:
-                return "merge"
-            return None
-
-        # _oracle_turns[-1] is the current turn (already appended by add_oracle_turn).
-        current = self._oracle_turns[-1]
-        current_intent = _intent(current.get("raw_text", ""))
-        if current_intent is None:
-            return None
-
-        current_clusters = set(current.get("target_cluster_ids", []))
-        opposite = {"split": "merge", "merge": "split"}
-        current_turn_number = len(self._oracle_turns)
-
-        for i, prior in enumerate(self._oracle_turns[:-1]):
-            prior_clusters = set(prior.get("target_cluster_ids", []))
-            shared = current_clusters & prior_clusters
-            if not shared:
-                continue
-            prior_intent = _intent(prior.get("raw_text", ""))
-            if prior_intent != opposite[current_intent]:
-                continue
-            target_id = next(iter(shared))
-            record = ContradictionRecord(
-                turn_number=current_turn_number,
-                description=(
-                    f"Turn {i + 1} requested '{prior_intent}' on cluster {target_id}, "
-                    f"but turn {current_turn_number} requests '{current_intent}'."
-                ),
-                earlier_turn=i + 1,
-                feedback_type_a=prior.get("feedback_type", ""),
-                feedback_type_b=current.get("feedback_type", ""),
-                target_cluster_id=target_id,
-            )
-            self.contradictions.append(record)
-            return record
-
-        return None
-
     def build_messages(self, model: str = DEFAULT_MODEL) -> list[dict[str, str]]:
         messages = list(self.turns)
         # Token-based trimming requires the Anthropic SDK's count_tokens endpoint.
@@ -492,14 +418,3 @@ class ConversationContext:
                     break
                 messages = messages[2:]  # drop oldest oracle+system pair
         return messages
-
-    '''
-    Calcola un punteggio grezzo di "carico cognitivo", espresso come il rapporto tra il numero di interazioni avute e un massimo teorico (max_turns). 
-    Restituisce un valore compreso tra 0.0 e 1.0.
-    '''
-    def get_cognitive_load_score(self, max_turns: int = 20) -> int:
-        # Use floor division instead of round() so the score only reaches 5
-        # (the stop threshold) when the session is genuinely near max_turns.
-        # round() caused premature saturation: round(14/20*5) = round(3.5) = 4,
-        # triggering stop at turn 14 instead of 20.
-        return max(1, min(len(self._oracle_turns) * 5 // max_turns + 1, 5))

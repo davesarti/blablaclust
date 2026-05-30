@@ -1,0 +1,48 @@
+You are delivering the final, overall verdict on a clustering session. Three
+independent judges have already scored it on separate axes. Your job is to
+combine their findings into one fair overall judgment.
+
+SESSION
+Session ID: {session_id}
+Turn: {turn_number}
+
+AXIS 1 — INTERNAL COHERENCE (are the final clusters internally focused?)
+Mean coherence: {coherence_mean}
+Weakest cluster coherence: {coherence_min}
+Per-cluster detail:
+{coherence_block}
+
+AXIS 2 — ORACLE COMPLIANCE (did the system do what the oracle asked?)
+Compliance score: {compliance_score}
+Compliance notes: {compliance_notes}
+
+AXIS 3 — ORACLE CONTRADICTION (how hard was it to understand the oracle?)
+Contradiction score: {contradiction_score}   (0 = clear/consistent, 1 = highly contradictory)
+Contradiction notes: {contradiction_notes}
+
+TASK
+Produce one `overall_score` (0.0–1.0) for how well this session went, and a
+verdict. Combine the axes with judgment, not arithmetic. Guiding principles:
+
+- High coherence AND high compliance is the clear success case. A low
+  contradiction score reinforces this; it cannot detract from it.
+- If coherence is LOW but compliance is HIGH and contradiction is HIGH, do NOT
+  penalise the system heavily — it faithfully executed a messy or
+  self-contradictory oracle, and the poor clusters are largely the oracle's
+  doing. Say so in the notes.
+- If compliance is LOW while contradiction is LOW, that is a genuine system
+  failure: the oracle was clear and the system still did the wrong thing.
+  Penalise.
+- If compliance is LOW and contradiction is HIGH, partially excuse the system
+  but not entirely — confused input often produces confused execution, yet a
+  good system still does its best.
+- A single weak cluster (low coherence_min) against otherwise strong coherence
+  is a localised issue, not a session-wide failure.
+
+Respond with a single valid JSON object. No markdown fences, no commentary
+outside the JSON.
+
+{{
+  "overall_score": <float between 0.0 and 1.0>,
+  "notes": "<2-3 sentences. State the verdict and which axis drove it. If a contradictory oracle excuses low coherence or compliance, say so explicitly.>"
+}}

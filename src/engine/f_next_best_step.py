@@ -3,12 +3,12 @@
 The three possible actions:
   - "show"  →  present the current clustering state to the oracle
   - "ask"   →  ask a targeted structural question (merge or split candidate)
-  - "stop"  →  end the session (oracle is cognitively overloaded or the
-                clustering has stabilised over many turns)
+  - "stop"  →  end the session (deterministic A3 load saturated)
 
 Decision logic (rule-based, no LLM needed):
-  1. If cognitive load is too high (score >= 5) or too many turns have passed
-     (turn_number > MAX_TURNS), stop.
+  1. If cognitive_load.score >= 5, stop. The driver and breakdown are
+     written into state_snapshot so the eval report can group stops by
+     which signal saturated.
   2. If two clusters overlap significantly, ask whether to merge them.
      If a cluster has low internal cohesion, ask whether to split it.
      Structural questions are asked one at a time, most urgent first.
@@ -16,17 +16,13 @@ Decision logic (rule-based, no LLM needed):
 """
 
 from src.engine.f_uncertainty import ClusterUncertainty
-from src.schemas import ChatSessionState, Display, SystemTurn
-from src.harness import ConversationContext
-
-# After this many turns the session is likely to have converged.
-MAX_TURNS = 20
+from src.schemas import ChatSessionState, CognitiveLoad, Display, SystemTurn
 
 
 def f_next_best_step(
     state: ChatSessionState,
     uncertainty: ClusterUncertainty,
-    context: ConversationContext,
+    cognitive_load: CognitiveLoad,
 ) -> SystemTurn:
     """Return the next action the system should take.
 
@@ -34,21 +30,13 @@ def f_next_best_step(
         state: Current clustering state (clusters, turn number, history).
         uncertainty: Output of f_cluster_uncertainty — cluster-level overlap
                      and cohesion signals.
-        context: Conversation memory, used to compute cognitive load.
+        cognitive_load: Output of f_cognitive_load — deterministic A3 score.
 
     Returns:
         A SystemTurn describing what to show/ask/stop and why.
     """
-    cognitive_load = context.get_cognitive_load_score()
-    contradiction = bool(state.contradictions)
-
-    # Rule 1: stop if the oracle is overloaded or the session has run long.
-    # Threshold is 5 (the maximum): load=4 means "heavy but manageable".
-    # Distinct reason codes let the eval harness bucket runs separately.
-    if cognitive_load >= 5 or state.turn_number > MAX_TURNS:
-        reason = (
-            "cognitive_overload" if cognitive_load >= 5 else "max_turns_reached"
-        )
+    # Rule 1: stop when the deterministic A3 score saturates.
+    if cognitive_load.score >= 5:
         return SystemTurn(
             session_id=state.session_id,
             turn_number=state.turn_number,
@@ -61,15 +49,24 @@ def f_next_best_step(
                     f"Final state has {len(state.clusters)} clusters."
                 ),
             ),
-            contradiction_detected=contradiction,
-            contradiction_detail=state.contradictions[-1] if contradiction else None,
-            cognitive_load_score=cognitive_load,
-            state_snapshot={"reason": reason},
+            cognitive_load_score=cognitive_load.score,
+            state_snapshot={
+                "reason": "cognitive_overload",
+                "cognitive_load_driver": cognitive_load.driver,
+                "cognitive_load_breakdown": {
+                    "turns": cognitive_load.turns_score,
+                    "tokens": cognitive_load.tokens_score,
+                    "clusters": cognitive_load.clusters_score,
+                },
+                "cognitive_load_raw": {
+                    "turns_used": cognitive_load.turns_used,
+                    "tokens_used": cognitive_load.tokens_used,
+                    "clusters_count": cognitive_load.clusters_count,
+                },
+            },
         )
 
     # Rule 2a: ask about a merge if two clusters overlap significantly.
-    # Overlap means many points sit between them with no clear home — the oracle
-    # should decide if the distinction is real or if they should be one cluster.
     if uncertainty.overlaps:
         top = uncertainty.overlaps[0]
         pct = round(top.overlap_fraction * 100)
@@ -96,15 +93,11 @@ def f_next_best_step(
                     }
                 ],
             ),
-            contradiction_detected=contradiction,
-            contradiction_detail=state.contradictions[-1] if contradiction else None,
-            cognitive_load_score=cognitive_load,
+            cognitive_load_score=cognitive_load.score,
             state_snapshot={"overlap_count": len(uncertainty.overlaps)},
         )
 
     # Rule 2b: ask about a split if a cluster has low internal cohesion.
-    # Low cohesion means the cluster is internally diffuse — points inside it
-    # are not confidently assigned to it, suggesting sub-themes worth separating.
     if uncertainty.low_cohesion:
         worst = uncertainty.low_cohesion[0]
         pct = round(worst.mean_max_prob * 100)
@@ -128,9 +121,7 @@ def f_next_best_step(
                     }
                 ],
             ),
-            contradiction_detected=contradiction,
-            contradiction_detail=state.contradictions[-1] if contradiction else None,
-            cognitive_load_score=cognitive_load,
+            cognitive_load_score=cognitive_load.score,
             state_snapshot={"low_cohesion_count": len(uncertainty.low_cohesion)},
         )
 
@@ -152,8 +143,6 @@ def f_next_best_step(
                 for c in state.clusters
             ],
         ),
-        contradiction_detected=contradiction,
-        contradiction_detail=state.contradictions[-1] if contradiction else None,
-        cognitive_load_score=cognitive_load,
+        cognitive_load_score=cognitive_load.score,
         state_snapshot={"reason": "stable_clustering"},
     )

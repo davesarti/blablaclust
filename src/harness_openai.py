@@ -11,7 +11,6 @@ from src.harness import (
     MAX_DELAY,
     MAX_RETRIES,
     ConversationContext,
-    ContradictionRecord,
     DRY_RUN,
     LLMResponse,
     _DRY_RUN_OUTPUT,

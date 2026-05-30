@@ -1,13 +1,11 @@
 """Tests for f_next_best_step — no API calls needed."""
 
-from unittest.mock import MagicMock
-
-from src.engine.f_next_best_step import MAX_TURNS, f_next_best_step
+from src.engine.f_next_best_step import f_next_best_step
 from src.engine.f_uncertainty import ClusterCohesion, ClusterOverlap, ClusterUncertainty
-from src.schemas import ChatSessionState, Cluster, FeedbackEntry
+from src.schemas import ChatSessionState, Cluster, CognitiveLoad, FeedbackEntry
 
 
-def _make_state(turn_number=1, n_clusters=3, contradictions=None):
+def _make_state(turn_number=1, n_clusters=3):
     clusters = [
         Cluster(
             id=f"c{i}",
@@ -28,14 +26,30 @@ def _make_state(turn_number=1, n_clusters=3, contradictions=None):
         status="active",
         clusters=clusters,
         feedback_history=[],
-        contradictions=contradictions or [],
     )
 
 
-def _make_context(load_score=1):
-    ctx = MagicMock()
-    ctx.get_cognitive_load_score.return_value = load_score
-    return ctx
+def _make_load(score=1, driver="turns", turns_used=0, tokens_used=0, clusters_count=0):
+    """Build a CognitiveLoad with the composite `score` driven by `driver`.
+
+    The per-signal score for `driver` is set to `score`; the others to 1 so the
+    composite (max) equals `score` and the priority resolution names `driver`.
+    Caveat: this trick depends on tokens > clusters > turns priority. When the
+    test wants driver="turns", we drop tokens_score and clusters_score below
+    the composite explicitly.
+    """
+    sub = {"turns": 1, "tokens": 1, "clusters": 1}
+    sub[driver] = score
+    return CognitiveLoad(
+        score=score,
+        driver=driver,
+        turns_score=sub["turns"],
+        tokens_score=sub["tokens"],
+        clusters_score=sub["clusters"],
+        turns_used=turns_used,
+        tokens_used=tokens_used,
+        clusters_count=clusters_count,
+    )
 
 
 def _empty_uncertainty():
@@ -63,25 +77,23 @@ def _cohesion_uncertainty(mean_max_prob=0.45):
 
 # ── tests ──────────────────────────────────────────────────────────────────
 
+
 def test_returns_system_turn():
     from src.schemas import SystemTurn
     state = _make_state()
-    ctx = _make_context()
-    result = f_next_best_step(state, _empty_uncertainty(), ctx)
+    result = f_next_best_step(state, _empty_uncertainty(), _make_load())
     assert isinstance(result, SystemTurn)
 
 
 def test_action_show_when_no_uncertainty():
     state = _make_state(turn_number=2)
-    ctx = _make_context(load_score=1)
-    result = f_next_best_step(state, _empty_uncertainty(), ctx)
+    result = f_next_best_step(state, _empty_uncertainty(), _make_load(score=1))
     assert result.action == "show"
 
 
 def test_action_ask_merge_when_clusters_overlap():
     state = _make_state(turn_number=2)
-    ctx = _make_context(load_score=1)
-    result = f_next_best_step(state, _overlap_uncertainty(0.2), ctx)
+    result = f_next_best_step(state, _overlap_uncertainty(0.2), _make_load(score=1))
     assert result.action == "ask"
     assert "Cluster 0" in result.display.content
     assert "Cluster 1" in result.display.content
@@ -90,9 +102,7 @@ def test_action_ask_merge_when_clusters_overlap():
 
 def test_ask_merge_message_uses_cluster_names_not_ids():
     state = _make_state(turn_number=2)
-    ctx = _make_context(load_score=1)
-    result = f_next_best_step(state, _overlap_uncertainty(0.2), ctx)
-    # Must show names, not raw UUIDs
+    result = f_next_best_step(state, _overlap_uncertainty(0.2), _make_load(score=1))
     assert "c0" not in result.display.content
     assert "c1" not in result.display.content
     assert "Cluster 0" in result.display.content
@@ -100,8 +110,7 @@ def test_ask_merge_message_uses_cluster_names_not_ids():
 
 def test_action_ask_split_when_low_cohesion():
     state = _make_state(turn_number=2)
-    ctx = _make_context(load_score=1)
-    result = f_next_best_step(state, _cohesion_uncertainty(0.45), ctx)
+    result = f_next_best_step(state, _cohesion_uncertainty(0.45), _make_load(score=1))
     assert result.action == "ask"
     assert "Cluster 0" in result.display.content
     assert "split" in result.display.content.lower() or "cohesion" in result.display.content.lower()
@@ -109,69 +118,77 @@ def test_action_ask_split_when_low_cohesion():
 
 def test_overlap_takes_priority_over_cohesion():
     state = _make_state(turn_number=2)
-    ctx = _make_context(load_score=1)
     both = ClusterUncertainty(
         overlaps=_overlap_uncertainty(0.2).overlaps,
         low_cohesion=_cohesion_uncertainty(0.45).low_cohesion,
     )
-    result = f_next_best_step(state, both, ctx)
+    result = f_next_best_step(state, both, _make_load(score=1))
     assert result.action == "ask"
-    # Should mention merge (overlap), not split (cohesion)
-    assert "Cluster 1" in result.display.content  # cluster_b_name only in overlap message
+    assert "Cluster 1" in result.display.content
 
 
-def test_action_stop_when_cognitive_load_high():
-    # Threshold is now 5 (was 4) — only maximum load triggers auto-stop.
+def test_action_stop_when_cognitive_load_saturated():
     state = _make_state(turn_number=5)
-    ctx = _make_context(load_score=5)
-    result = f_next_best_step(state, _empty_uncertainty(), ctx)
+    result = f_next_best_step(state, _empty_uncertainty(), _make_load(score=5))
     assert result.action == "stop"
+    assert result.state_snapshot["reason"] == "cognitive_overload"
 
 
 def test_action_show_when_cognitive_load_is_4():
-    # load=4 used to trigger stop prematurely — now it gives show.
     state = _make_state(turn_number=5)
-    ctx = _make_context(load_score=4)
-    result = f_next_best_step(state, _empty_uncertainty(), ctx)
+    result = f_next_best_step(state, _empty_uncertainty(), _make_load(score=4))
     assert result.action == "show"
 
 
-def test_action_stop_when_too_many_turns():
-    state = _make_state(turn_number=MAX_TURNS + 1)
-    ctx = _make_context(load_score=1)
-    result = f_next_best_step(state, _empty_uncertainty(), ctx)
-    assert result.action == "stop"
+def test_no_auto_stop_on_high_turn_count_without_overload():
+    state = _make_state(turn_number=100)
+    result = f_next_best_step(state, _empty_uncertainty(), _make_load(score=1))
+    assert result.action != "stop"
 
 
 def test_stop_takes_priority_over_show():
     state = _make_state(turn_number=5)
-    ctx = _make_context(load_score=5)
-    result = f_next_best_step(state, _overlap_uncertainty(0.9), ctx)
+    result = f_next_best_step(state, _overlap_uncertainty(0.9), _make_load(score=5))
     assert result.action == "stop"
-
-
-def test_contradiction_detected_flag():
-    state = _make_state(contradictions=["some contradiction"])
-    ctx = _make_context()
-    result = f_next_best_step(state, _empty_uncertainty(), ctx)
-    assert result.contradiction_detected is True
-
-
-def test_no_contradiction_when_clean():
-    state = _make_state(contradictions=[])
-    ctx = _make_context()
-    result = f_next_best_step(state, _empty_uncertainty(), ctx)
-    assert result.contradiction_detected is False
 
 
 def test_cognitive_load_score_in_result():
     state = _make_state()
-    ctx = _make_context(load_score=3)
-    result = f_next_best_step(state, _empty_uncertainty(), ctx)
+    result = f_next_best_step(state, _empty_uncertainty(), _make_load(score=3, driver="tokens"))
     assert result.cognitive_load_score == 3
 
 
 def test_uncertainty_empty_gives_show():
     state = _make_state()
-    ctx = _make_context()
-    assert f_next_best_step(state, _empty_uncertainty(), ctx).action == "show"
+    assert f_next_best_step(state, _empty_uncertainty(), _make_load()).action == "show"
+
+
+# ── new behaviour: driver + breakdown in stop snapshot ─────────────────────
+
+
+def test_stop_snapshot_records_load_driver():
+    state = _make_state(turn_number=10)
+    load = _make_load(score=5, driver="tokens", tokens_used=16000)
+    result = f_next_best_step(state, _empty_uncertainty(), load)
+    assert result.state_snapshot["cognitive_load_driver"] == "tokens"
+
+
+def test_stop_snapshot_records_load_breakdown_and_raw():
+    state = _make_state(turn_number=10, n_clusters=4)
+    load = CognitiveLoad(
+        score=5,
+        driver="tokens",
+        turns_score=2,
+        tokens_score=5,
+        clusters_score=1,
+        turns_used=8,
+        tokens_used=16000,
+        clusters_count=4,
+    )
+    result = f_next_best_step(state, _empty_uncertainty(), load)
+    assert result.state_snapshot["cognitive_load_breakdown"] == {
+        "turns": 2, "tokens": 5, "clusters": 1,
+    }
+    assert result.state_snapshot["cognitive_load_raw"] == {
+        "turns_used": 8, "tokens_used": 16000, "clusters_count": 4,
+    }

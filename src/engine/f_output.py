@@ -47,5 +47,6 @@ def f_output(
     context.add_system_turn(raw)
 
     # Return raw dict + usage so callers can persist token counts and cost.
-    # f_next_state is responsible for turning raw into a proper ChatSessionState.
+    # Callers (backend/routers/turns.py) hand raw["operations"] to
+    # f_apply_operations to materialize the new state in the DB.
     return raw, msg.usage

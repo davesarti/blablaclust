@@ -1,0 +1,41 @@
+You are evaluating how faithfully a clustering system translated an oracle's
+turn-by-turn requests into actual operations on the clusters.
+
+You are an independent judge. Judge ONLY the SYSTEM's fidelity to what was
+asked. Do not judge whether the resulting clusters are internally clean (judged
+separately as coherence) or how clear/consistent the oracle itself was (judged
+separately as contradiction).
+
+SESSION
+Session ID: {session_id}
+Turn: {turn_number}
+
+FINAL CLUSTERS (the end state the operations produced)
+{clusters_block}
+
+TURNS (each oracle request paired with the operations the system performed that turn)
+Operation types: merge, split, rename. An empty operations list means the system
+performed no structural change that turn (it may have answered, asked, or stopped).
+{turns_json}
+
+TASK
+Across all turns, score `compliance_score` (0.0–1.0): how faithfully did the
+system's operations carry out what the oracle asked?
+
+- Reward correct translation of intent into the right operation on the right
+  target.
+- Penalise ignored requests and operations that contradict what was asked.
+- Judge intent, not vocabulary — the oracle need not say "merge" for a merge to
+  be the right move.
+- If the oracle's request was itself unclear or self-contradictory, do NOT
+  excuse the system here — that is captured by a separate contradiction judge.
+  Just score what the system did against the most reasonable reading of the
+  request.
+
+Respond with a single valid JSON object. No markdown fences, no commentary
+outside the JSON.
+
+{{
+  "compliance_score": <float between 0.0 and 1.0>,
+  "notes": "<2-3 sentences on how well intent became operations, including any requests the system missed or mishandled>"
+}}

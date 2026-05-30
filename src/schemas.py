@@ -34,7 +34,6 @@ class ChatSessionState(BaseModel):
     status: Literal["active", "converged", "closed"]
     clusters: List[Cluster]
     feedback_history: List[FeedbackEntry]
-    contradictions: List[Any] = Field(default_factory=list)
 
 
 class ClusterPoint(BaseModel):
@@ -72,14 +71,30 @@ class Display(BaseModel):
     items: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+class CognitiveLoad(BaseModel):
+    """Deterministic LLM-side load score (A3).
+
+    `score` is the composite read by the Planner and surfaced through
+    `SystemTurn.cognitive_load_score`. `driver` names which signal hit the
+    composite. The per-signal scores and raw values are kept for the eval
+    pipeline.
+    """
+    score: int = Field(ge=1, le=5)
+    driver: Literal["turns", "tokens", "clusters"]
+    turns_score: int = Field(ge=1, le=5)
+    tokens_score: int = Field(ge=1, le=5)
+    clusters_score: int = Field(ge=1, le=5)
+    turns_used: int = Field(ge=0)
+    tokens_used: int = Field(ge=0)
+    clusters_count: int = Field(ge=0)
+
+
 class SystemTurn(BaseModel):
     session_id: str
     turn_number: int = Field(ge=0)
     action: Literal["show", "ask", "stop"]
     clusters_updated: bool
     display: Display
-    contradiction_detected: bool
-    contradiction_detail: Optional[str] = None
     cognitive_load_score: int = Field(ge=1, le=5)
     state_snapshot: Dict[str, Any] = Field(default_factory=dict)
     token_usage: Optional[Dict[str, int]] = None

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from backend.main import get_db
 from backend.session_state import build_session_state
 from src.engine.f_apply_operations import f_apply_operations
+from src.engine.f_cognitive_load import f_cognitive_load
 from src.engine.f_next_best_step import f_next_best_step
 from src.engine.f_output import f_output
 from src.engine.f_uncertainty import f_cluster_uncertainty
@@ -186,7 +187,8 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
 
     updated_state = build_session_state(db, session)
     uncertainty = f_cluster_uncertainty(session.id, db)
-    system_turn = f_next_best_step(updated_state, uncertainty, context)
+    cognitive_load = f_cognitive_load(updated_state, context)
+    system_turn = f_next_best_step(updated_state, uncertainty, cognitive_load)
     system_turn.clusters_updated = bool(operations)
 
     # Always surface the LLM's actual reply, regardless of action.

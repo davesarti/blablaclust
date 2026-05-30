@@ -1,6 +1,9 @@
+import datetime
+
 from sqlalchemy import (
 	JSON,
 	CheckConstraint,
+	DateTime,
 	Float,
 	ForeignKey,
 	Integer,
@@ -108,3 +111,16 @@ class SoftAssignment(Base):
 
 	data_point: Mapped[DataPoint] = relationship(back_populates="soft_assignments")
 	cluster: Mapped[Cluster] = relationship(back_populates="soft_assignments")
+
+
+class EvalCache(Base):
+	__tablename__ = "eval_cache"
+
+	key: Mapped[str] = mapped_column(String(64), primary_key=True)
+	session_id: Mapped[str] = mapped_column(
+		ForeignKey("sessions.id", ondelete="CASCADE"), index=True
+	)
+	response_json: Mapped[str] = mapped_column(Text)
+	created_at: Mapped[datetime.datetime] = mapped_column(
+		DateTime, default=datetime.datetime.utcnow
+	)

@@ -76,7 +76,6 @@ at runtime via `POST /datasets/upload` (handles insert + embedding in one call).
 │   ├── engine/                # Core clustering logic (P3)
 │   │   ├── f_output.py              # Executor: LLM → structured operations + usage
 │   │   ├── f_apply_operations.py    # Dispatch operations to cluster_operations
-│   │   ├── f_next_state.py          # Wrap f_output → rebuild ChatSessionState
 │   │   ├── f_next_best_step.py      # Decide: show / ask / stop
 │   │   ├── f_uncertainty.py         # Score data points by cluster ambiguity
 │   │   ├── f_parse_clustering_intent.py  # Free text → k + clustering axis

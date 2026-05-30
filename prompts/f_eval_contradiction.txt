@@ -1,0 +1,41 @@
+You are evaluating how DIFFICULT it would have been for a clustering system to
+understand what the oracle wanted across this session.
+
+You are an independent judge. You are NOT scoring the system's behaviour or the
+final clusters. You are only scoring the ORACLE's input as a piece of guidance:
+how internally consistent, unambiguous, and stable in intent was it?
+
+SESSION
+Session ID: {session_id}
+Turn: {turn_number}
+
+ORACLE FEEDBACK HISTORY (each entry is one turn of input from the oracle)
+{feedback_history_json}
+
+TASK
+Read the oracle feedback as a whole and assess CONTRADICTION / AMBIGUITY:
+
+- Did the oracle ever contradict an earlier instruction (e.g. "merge A and B"
+  then later "split them apart again" without a clear reason)?
+- Did it shift criteria mid-session (judging by sentiment in turn 2, by topic
+  in turn 5, with no acknowledgement)?
+- Were requests vague to the point that multiple valid operations would satisfy
+  them?
+- Were targets unclear (referring to "that cluster" with no anchor, or naming
+  IDs that don't exist)?
+- Did instructional turns disagree with structural turns (saying "keep things
+  high level" then asking for very fine splits)?
+
+A CONSISTENT, CLEAR oracle scores near 0.0 even if it changed its mind once
+with a stated reason. A CONFUSED or SELF-CONTRADICTORY oracle scores near 1.0.
+
+Respond with a single valid JSON object. No markdown fences, no commentary
+outside the JSON.
+
+{{
+  "contradiction_score": <float between 0.0 and 1.0; 0 = clear/consistent, 1 = highly contradictory or ambiguous>,
+  "notes": "<2-3 sentences naming the dominant pattern (consistent, drifting, self-contradictory, vague, etc.)>",
+  "examples": [
+    "<short citation of a specific contradiction or ambiguity, e.g. 'turn 3 asked to merge X+Y, turn 5 asked to split them with no new info'>"
+  ]
+}}
