@@ -433,6 +433,26 @@ Refactor del path semantico in `turns.py`:
 
 ---
 
+## Sviluppi futuri
+
+### UMAP: visualizzazione dell'asse semantico e confronto con cluster precedenti
+
+La mappa UMAP attuale mostra l'evoluzione dei cluster turn-by-turn ma non ha
+consapevolezza dell'asse semantico. Possibili estensioni:
+
+- **Colorazione per punteggio asse**: ogni punto colorato in base al suo
+  `axis_score` (gradiente continuo, es. rosso-blu per tono arrabbiato) invece
+  che per cluster ID — renderebbe visibile la direzione dell'asse nello spazio 2D.
+- **Overlay cluster precedenti**: dopo un re-embedding, mostrare i confini (o
+  i centroidi) dei cluster del turno precedente come cerchi tratteggiati sopra
+  ai nuovi cluster — l'oracle vede direttamente quali gruppi sono stati dissolti
+  e come i punti si sono ridistribuiti.
+- **Freccia dell'asse**: proiettare il vettore dell'asse semantico (differenza
+  tra il polo positivo e il polo negativo nello spazio UMAP) come freccia
+  annotata sulla mappa.
+
+---
+
 ## Problemi aperti
 
 ### 1. Linguaggio libero non interpretato correttamente
