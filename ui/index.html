@@ -1814,21 +1814,27 @@ async function loadRecentSessions() {
 
 // Populate the welcome-screen meta line from the datasets actually loaded in
 // the DB, instead of a hardcoded "1,500 reviews / Amazon Electronics" label.
-// UI-only: /datasets exposes dataset names (no per-row count), so we show the
-// real name(s) and fall back gracefully if the call fails.
 async function loadWelcomeStats() {
   const meta = document.getElementById('welcome-meta');
   if (!meta) return;
   try {
     const res = await fetch('/datasets');
     if (!res.ok) return;
-    const datasets = await res.json();
-    const names = (datasets || []).map(d => d.dataset_name).filter(Boolean);
+    const datasets = (await res.json()) || [];
+    const totalPoints = datasets.reduce((s, d) => s + (Number(d.n_points) || 0), 0);
+    const fmt = (n) => n.toLocaleString();
 
     let label;
-    if (names.length === 0)      label = 'No datasets loaded';
-    else if (names.length === 1) label = names[0];
-    else                         label = `${names.length} datasets available`;
+    if (datasets.length === 0) {
+      label = 'No datasets loaded';
+    } else if (datasets.length === 1) {
+      const d = datasets[0];
+      label = Number.isFinite(d.n_points)
+        ? `${d.dataset_name} · ${fmt(d.n_points)} records`
+        : d.dataset_name;
+    } else {
+      label = `${datasets.length} datasets · ${fmt(totalPoints)} records`;
+    }
 
     const mk = (txt) => {
       const s = document.createElement('span');

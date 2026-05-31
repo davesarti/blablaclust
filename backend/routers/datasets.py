@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from sqlalchemy import distinct
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.main import get_db
@@ -13,11 +13,23 @@ router = APIRouter(prefix="/datasets", tags=["datasets"])
 @router.get("")
 def list_datasets(db: Session = Depends(get_db)):
     rows = (
-        db.query(DataPoint.dataset_name)
-        .distinct()
+        db.query(
+            DataPoint.dataset_name,
+            func.count(DataPoint.id).label("n_points"),
+            func.count(DataPoint.embedding).label("has_embeddings"),
+        )
+        .group_by(DataPoint.dataset_name)
+        .order_by(DataPoint.dataset_name)
         .all()
     )
-    return [{"dataset_name": row.dataset_name} for row in rows]
+    return [
+        {
+            "dataset_name": row.dataset_name,
+            "n_points": int(row.n_points),
+            "has_embeddings": int(row.has_embeddings),
+        }
+        for row in rows
+    ]
 
 
 @router.post("/upload", response_model=DatasetUploadResponse)
