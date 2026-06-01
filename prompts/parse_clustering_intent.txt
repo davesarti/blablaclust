@@ -9,8 +9,8 @@ The user (called the "oracle") has described in natural language how they want t
 
 2. **axis** — the dimension or criterion along which they want to cluster. Examples:
    - "sentiment" (positive/negative/neutral)
-   - "topic" (food, service, atmosphere, ...)
-   - "quality" (good reviews vs bad reviews)
+   - "topic" (e.g. space exploration vs. baseball vs. politics)
+   - "tone" (formal vs. casual)
    - "semantic similarity" (general, no specific axis stated)
    - Use the oracle's own words when possible
 
