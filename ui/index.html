@@ -2190,7 +2190,9 @@ async function openUmap() {
   document.getElementById('umap-info').textContent = '';
   document.getElementById('umap-turn-label').textContent = 'Turn —';
   try {
-    const res = await fetch(`/sessions/${state.sessionId}/umap`);
+    // no-store: a merge/split adds a new snapshot turn server-side, so the
+    // projection must never be served from the browser HTTP cache.
+    const res = await fetch(`/sessions/${state.sessionId}/umap`, { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     _umapData = await res.json();
     for (const k in _umapColorMap) delete _umapColorMap[k];  // stable colours per load
@@ -2209,6 +2211,24 @@ async function openUmap() {
   }
 }
 
+// Wrap a data point's text to <=maxLines lines of ~width chars for a readable
+// hover tooltip (collapses whitespace, adds an ellipsis when truncated).
+function _umapWrap(s, width, maxLines) {
+  s = (s || '').replace(/\s+/g, ' ').trim();
+  if (!s) return '<i>(no text)</i>';
+  const words = s.split(' ');
+  const lines = []; let cur = '';
+  for (const w of words) {
+    if (cur && (cur + ' ' + w).length > width) { lines.push(cur); cur = w; }
+    else cur = cur ? cur + ' ' + w : w;
+    if (lines.length >= maxLines) break;
+  }
+  if (lines.length < maxLines && cur) lines.push(cur);
+  let out = lines.join('<br>');
+  if (lines.join(' ').length < s.length) out += '…';
+  return out;
+}
+
 function renderUmapTurn(ti) {
   if (!_umapData || !_umapData.turns.length) return;
   const turn   = _umapData.turns[ti];
@@ -2219,6 +2239,7 @@ function renderUmapTurn(ti) {
     const cid = labels[i] || 'unassigned';
     (groups[cid] = groups[cid] || []).push(i);
   }
+  const conf = (_umapData.confidence && _umapData.confidence[String(turn)]) || [];
   const traces = Object.entries(groups).map(([cid, idxs]) => {
     const meta  = _umapData.clusters[cid] || {};
     const cname = meta.name || cid;
@@ -2227,12 +2248,19 @@ function renderUmapTurn(ti) {
     return {
       x: idxs.map(i => pts[i].x),
       y: idxs.map(i => pts[i].y),
-      text: idxs.map(i => pts[i].text),
+      // [wrapped text, confidence] per point → clean, readable hover tooltip.
+      customdata: idxs.map(i => [
+        _umapWrap(pts[i].text, 44, 3),
+        conf[i] != null ? Math.round(conf[i] * 100) + '%' : 'n/a',
+      ]),
+      meta: cname,
       name: (isNew ? '✦ ' : '') + cname + ' (' + idxs.length + ')',
       mode: 'markers', type: 'scattergl',
       marker: { size: isNew ? 7 : 5, color: _umapColor(cid), opacity: isNew ? 0.95 : 0.7,
                 line: { width: isNew ? 1.1 : 0, color: '#222' } },
-      hovertemplate: '%{text}<extra>' + cname + '</extra>',
+      hovertemplate:
+        '<b>%{meta}</b><br>%{customdata[0]}' +
+        '<br><span style="color:#9a958c">confidence %{customdata[1]}</span><extra></extra>',
     };
   });
   // Merge/split deltas vs the previous snapshot turn.
@@ -2249,6 +2277,9 @@ function renderUmapTurn(ti) {
     legend: { font: { size: 10 } },
     paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
     font: { family: 'monospace', size: 11 },
+    hovermode: 'closest',
+    hoverlabel: { align: 'left', bgcolor: '#fbf9f4', bordercolor: '#d8d2c4',
+                  font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#2a2a28' } },
   };
   // ── Semantic re-embed overlays ────────────────────────────────────────────
   const isReembed = (_umapData.reembed_turns || []).includes(turn);
@@ -2308,8 +2339,11 @@ function renderUmapTurn(ti) {
   if (leftover) leftover.remove();
   Plotly.react(gd, traces, layout, { displayModeBar: false, responsive: true });
   document.getElementById('umap-turn-label').textContent = 'Turn ' + turn;
+  // Real cluster count = point groups only (exclude overlay traces: ghost
+  // centroids + axis arrow pushed for re-embed turns, and any 'unassigned').
+  const clusterCount = Object.keys(groups).filter(c => c !== 'unassigned').length;
   document.getElementById('umap-info').textContent =
-    traces.length + ' clusters · ' + String(_umapData.reducer).toUpperCase() +
+    clusterCount + ' clusters · ' + String(_umapData.reducer).toUpperCase() +
     (sil != null ? ' · silhouette ' + sil.toFixed(3) : '') +
     (newCount ? ' · ✦' + newCount + ' new' : '') +
     (dissolvedCount ? ' · −' + dissolvedCount + ' gone' : '');
