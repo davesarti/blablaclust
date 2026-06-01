@@ -2185,6 +2185,7 @@ async function openUmap() {
   if (!state.sessionId) { alert('Open a session first.'); return; }
   openModal('modal-umap');
   umapStopPlay();
+  if (window.Plotly) Plotly.purge('umap-plot');  // release any prior plot before re-render
   document.getElementById('umap-plot').innerHTML =
     '<div class="umap-status">Computing UMAP projection… (the first run can take a few seconds)</div>';
   document.getElementById('umap-info').textContent = '';
@@ -2255,7 +2256,9 @@ function renderUmapTurn(ti) {
       ]),
       meta: cname,
       name: (isNew ? '✦ ' : '') + cname + ' (' + idxs.length + ')',
-      mode: 'markers', type: 'scattergl',
+      // SVG scatter (not scattergl): 1200 pts render fine and we avoid WebGL
+      // context exhaustion — repeated opens/renders were leaving the plot blank.
+      mode: 'markers', type: 'scatter',
       marker: { size: isNew ? 7 : 5, color: _umapColor(cid), opacity: isNew ? 0.95 : 0.7,
                 line: { width: isNew ? 1.1 : 0, color: '#222' } },
       hovertemplate:
@@ -2295,7 +2298,7 @@ function renderUmapTurn(ti) {
         text: prevEntries.map(([cid]) => (_umapData.clusters[cid] || {}).name || cid),
         name: 'Previous clusters',
         mode: 'markers',
-        type: 'scattergl',
+        type: 'scatter',
         marker: { symbol: 'circle-open', size: 52, color: '#888',
                   line: { width: 2.5, color: '#888' } },
         hovertemplate: '<b>%{text}</b><br>(dissolved this turn)<extra></extra>',
