@@ -364,7 +364,7 @@ def estimate_cost_usd(usage: dict[str, int], model: str = DEFAULT_MODEL) -> floa
 def call_llm(
     messages: list[dict[str, str]],
     system: str,
-    max_tokens: int = 2048,
+    max_tokens: int = 8192,
 ) -> LLMResponse:
     provider = os.environ.get("LLM_PROVIDER", "claude").lower()
     if provider == "openai":

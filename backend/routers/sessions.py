@@ -3,10 +3,10 @@ import os
 import statistics
 import uuid
 
-from typing import Dict, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -35,6 +35,8 @@ _FEEDBACK_TYPE_WEIGHTS = {
 class CreateSessionRequest(BaseModel):
     dataset_name: str
     name: Optional[str] = None
+    oracle_kind: Literal["human", "persona"] = "human"
+    persona_snapshot: Optional[Dict[str, Any]] = Field(default=None)
 
 
 class PatchSessionStateRequest(BaseModel):
@@ -346,6 +348,7 @@ def read_sessions(db: Session = Depends(get_db)):
             "dataset_name": session.dataset_name,
             "embedding_model": session.embedding_model,
             "status": session.status,
+            "oracle_kind": session.oracle_kind,
         }
         for session in chat_sessions
     ]
@@ -363,12 +366,19 @@ def create_session(payload: CreateSessionRequest, db: Session = Depends(get_db))
             status_code=422,
             detail=f"No datapoints found for dataset '{payload.dataset_name}'",
         )
+    if payload.oracle_kind == "persona" and payload.persona_snapshot is None:
+        raise HTTPException(
+            status_code=422,
+            detail="oracle_kind='persona' requires a persona_snapshot",
+        )
     new_session = ChatSession(
         id=str(uuid.uuid4()),
         name=payload.name,
         dataset_name=payload.dataset_name,
         embedding_model="default",
         status="active",
+        oracle_kind=payload.oracle_kind,
+        persona_snapshot=payload.persona_snapshot,
     )
     db.add(new_session)
     db.commit()
@@ -379,6 +389,8 @@ def create_session(payload: CreateSessionRequest, db: Session = Depends(get_db))
         "dataset_name": new_session.dataset_name,
         "embedding_model": new_session.embedding_model,
         "status": new_session.status,
+        "oracle_kind": new_session.oracle_kind,
+        "persona_snapshot": new_session.persona_snapshot,
     }
 
 
