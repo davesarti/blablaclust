@@ -154,6 +154,19 @@ def test_project_session_assignments_parallel_to_points(db):
     assert None not in t0 and None not in res["assignments"]["1"]
 
 
+def test_project_session_confidence_parallel_to_points(db):
+    res = project_session(db, SESSION_ID, reducer="pca")
+    assert set(res["confidence"].keys()) == {"0", "1"}
+    for t in res["turns"]:
+        conf = res["confidence"][str(t)]
+        assert len(conf) == res["n_points"]
+        non_null = [c for c in conf if c is not None]
+        # fixture: every assigned point's winning probability is 0.8
+        assert non_null
+        assert all(0.0 <= c <= 1.0 for c in non_null)
+        assert all(abs(c - 0.8) < 1e-6 for c in non_null)
+
+
 def test_project_session_cluster_metadata(db):
     res = project_session(db, SESSION_ID, reducer="pca")
     assert res["clusters"]["c1"]["dissolved_at_turn"] == 1

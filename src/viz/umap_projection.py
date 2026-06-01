@@ -203,12 +203,19 @@ def project_session(
 
     turns = sorted(best.keys())
     assignments: dict[str, list[str | None]] = {}
+    # Per-point assignment confidence = the winning soft-probability. Lets the
+    # UI convey the underlying distribution (e.g. how decisively a point sits in
+    # its cluster) instead of only the hard argmax.
+    confidence: dict[str, list[float | None]] = {}
     for t in turns:
         arr: list[str | None] = [None] * len(point_ids)
-        for pid, (_, cid) in best[t].items():
+        conf: list[float | None] = [None] * len(point_ids)
+        for pid, (prob, cid) in best[t].items():
             if pid in idx:
                 arr[idx[pid]] = cid
+                conf[idx[pid]] = round(float(prob), 4)
         assignments[str(t)] = arr
+        confidence[str(t)] = conf
 
     points_out = [
         {
@@ -284,6 +291,7 @@ def project_session(
         "points": points_out,
         "turns": turns,
         "assignments": assignments,
+        "confidence": confidence,
         "clusters": clusters_meta,
         "silhouette_by_turn": _silhouette_by_turn(session_id),
         "centroids_by_turn": centroids_by_turn,

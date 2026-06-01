@@ -6,7 +6,7 @@ conversation. The expensive reduction runs once per dataset and is cached in
 process memory (embeddings are immutable for a dataset).
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from backend.main import get_db
@@ -19,8 +19,16 @@ _coords_cache: dict = {}
 
 
 @router.get("/{session_id}/umap")
-def get_session_umap(session_id: str, db: Session = Depends(get_db)) -> dict:
-    """2-D projection of the session's points with per-turn cluster colouring."""
+def get_session_umap(
+    session_id: str, response: Response, db: Session = Depends(get_db)
+) -> dict:
+    """2-D projection of the session's points with per-turn cluster colouring.
+
+    Marked ``no-store`` so the browser never serves a stale projection after a
+    merge/split adds a new snapshot turn — the per-turn assignments must always
+    reflect the latest DB state.
+    """
+    response.headers["Cache-Control"] = "no-store"
     try:
         return project_session(db, session_id, coords_cache=_coords_cache)
     except ValueError as exc:
