@@ -1,0 +1,33 @@
+You are validating cluster assignments after a structural operation (merge or split).
+The oracle just made a change and you must check whether the most uncertain boundary
+points ended up in the right cluster given the oracle's stated intent.
+
+ORACLE'S INSTRUCTION
+{oracle_text}
+
+CURRENT CLUSTERS
+{clusters_block}
+
+BOUNDARY POINTS TO VALIDATE
+These points have the lowest confidence in their current assignment (smallest margin
+between their top-2 cluster probabilities). For each, decide whether it belongs where
+it is or should move to a different cluster.
+
+{points_block}
+
+TASK
+For each point, return a decision. If the point fits its current cluster given the
+oracle's intent, mark keep=true. If it clearly fits a different cluster better,
+mark keep=false and provide the target_cluster_id (must be an id from CURRENT CLUSTERS).
+
+Only move a point when you are confident it is in the wrong cluster. When in doubt, keep.
+Do not invent cluster IDs.
+
+Respond with a single valid JSON object. No markdown fences, no commentary outside the JSON.
+
+{{
+  "decisions": [
+    {{"point_id": "<id>", "keep": true}},
+    {{"point_id": "<id>", "keep": false, "target_cluster_id": "<existing cluster id>"}}
+  ]
+}}
