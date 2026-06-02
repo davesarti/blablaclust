@@ -661,6 +661,18 @@
       gap: 8px;
       margin-bottom: 6px;
     }
+    .cluster-number {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--ca, var(--text-muted));
+      background: color-mix(in srgb, var(--ca, var(--border-s)) 12%, transparent);
+      border: 1px solid color-mix(in srgb, var(--ca, var(--border)) 30%, transparent);
+      border-radius: 4px;
+      padding: 1px 5px;
+      flex-shrink: 0;
+      line-height: 1.6;
+    }
     .card-header .emoji { font-size: 15px; line-height: 1; flex-shrink: 0; }
     .card-header h3 {
       font-size: 12px;
@@ -1659,7 +1671,7 @@ function renderClusters() {
   const grid     = document.getElementById('cluster-grid');
   const visible  = state.clusters.filter(c => c.count > 0);
   const maxCount = Math.max(...visible.map(c => c.count), 1);
-  grid.innerHTML = visible.map(c => `
+  grid.innerHTML = visible.map((c, idx) => `
     <div class="cluster-card ${state.selectedClusterIds.has(c.id) ? 'selected' : ''}"
          onclick="selectCluster('${c.id}')"
          tabindex="0"
@@ -1667,6 +1679,7 @@ function renderClusters() {
          aria-pressed="${state.selectedClusterIds.has(c.id)}"
          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectCluster('${c.id}')}">
       <div class="card-header">
+        <span class="cluster-number">${idx + 1}</span>
         <span class="emoji">${c.emoji}</span>
         <h3>${c.name}</h3>
         <span class="count-pill">${c.count}</span>
@@ -1691,9 +1704,9 @@ function updateInputPlaceholder() {
   const n = names.length;
   if (n === 0) { el.placeholder = 'Share your feedback on the clusters…'; return; }
   const parts = [];
-  if (n >= 2) parts.push(`merge "${names[0]}" and "${names[1]}"`);
-  parts.push(`split "${names[n - 1]}" into 3`);
-  parts.push(`rename "${names[0]}" to "…"`);
+  if (n >= 2) parts.push(`merge cluster 1 and 2`);
+  parts.push(`split cluster ${n} into 3`);
+  parts.push(`rename cluster 1 to "…"`);
   parts.push(`make ${n + 1} clusters`);
   parts.push(`cluster by sentiment`);
   el.placeholder = `e.g. ${parts.join('  ·  ')}`;

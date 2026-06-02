@@ -7,6 +7,9 @@ Turn: {turn_number}
 Total data points: {total_points}
 
 CURRENT CLUSTERS
+Each cluster is listed with its position number [N], its UUID id, name, size and description.
+The oracle may refer to clusters by number (e.g. "cluster 2", "the third cluster", "#4").
+Resolve number references to the correct UUID using the list below.
 {clusters_json}
 
 ORACLE INPUT
@@ -119,7 +122,7 @@ Respond with a single valid JSON object. No markdown fences, no commentary outsi
 
 CONSTRAINTS
 - Use only cluster IDs present in the provided CURRENT CLUSTERS list. Do not invent IDs.
-- NEVER use a cluster name as a cluster_id. cluster_id must always be the UUID string from the list above.
+- NEVER use a cluster name or number as a cluster_id. cluster_id must always be the UUID string from the list above. When the oracle says "cluster 2", look up [2] and use its UUID.
 - To merge several clusters into one, emit a SINGLE merge operation whose cluster_ids lists ALL of them (e.g. ["id_1", "id_2", "id_3"]). NEVER chain multiple merge operations — each merge dissolves its inputs, so a later op referencing them will fail.
 - A merge operation MUST always include at least 2 distinct cluster_ids. If the oracle asks to "eliminate", "remove", or "delete" a cluster, there is no delete operation — instead merge it with the most similar remaining cluster and include BOTH ids in cluster_ids.
 - You cannot reference a cluster created by an earlier operation in the same list (e.g. after a merge you do not know the new cluster's UUID). If you need to merge then split, just emit the merge — the oracle will ask for the split in the next turn.
