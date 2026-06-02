@@ -5,6 +5,8 @@ asks the LLM (via the harness) to label all clusters in a single call.
 Mutates the Cluster objects in place.
 """
 
+import difflib
+
 from src.harness import call_llm, render_prompt, loads_llm_json
 from src.logger import log
 from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoftAssignment
@@ -126,10 +128,22 @@ def name_clusters(
         parsed = loads_llm_json(response.text)
 
         clusters_by_id = {c.id: c for c in clusters}
+        parsed_keys = list(parsed.keys())
         for cluster_id in nameable_ids:
             entry = parsed.get(cluster_id)
             if not isinstance(entry, dict):
-                continue  # missing or malformed entry — keep placeholder
+                # The LLM may have mistyped one character of the UUID key.
+                # Try a fuzzy match on the parsed keys — same fix as the
+                # UUID repair in f_apply_operations for the inverse direction.
+                matches = difflib.get_close_matches(cluster_id, parsed_keys, n=1, cutoff=0.9)
+                if matches:
+                    log.warning(
+                        "cluster_naming: LLM mistyped cluster_id key %s -> %s, "
+                        "recovering via fuzzy match", cluster_id, matches[0]
+                    )
+                    entry = parsed.get(matches[0])
+            if not isinstance(entry, dict):
+                continue  # truly missing — keep placeholder
             cluster = clusters_by_id[cluster_id]
             if name := entry.get("name"):
                 cluster.name = str(name)[:255]
