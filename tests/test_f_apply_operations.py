@@ -158,3 +158,46 @@ def test_missing_required_field_raises_key_error():
     op = {"type": "merge"}  # cluster_ids missing
     with pytest.raises(KeyError):
         f_apply_operations([op], session_id="s1", turn_number=3, db=_db())
+
+
+# ── cluster_id transcription repair ─────────────────────────────────────────
+
+from src.engine.f_apply_operations import _resolve_cluster_id, _normalize_cluster_ids
+
+_ACTIVE = [
+    "00322caf-296b-4b03-9080-99a5305bc071",
+    "32e99fb7-fc54-4e13-ab72-89a911be06bb",
+    "7333b026-a001-4532-86e9-fc77b2d0b108",
+]
+
+
+def test_resolve_exact_id_unchanged():
+    assert _resolve_cluster_id(_ACTIVE[0], _ACTIVE, set(_ACTIVE)) == _ACTIVE[0]
+
+
+def test_resolve_single_char_typo_corrected():
+    # The real bug: LLM mistyped one hex digit of an otherwise-valid UUID.
+    typo = "00322caf-296b-4b03-9080-99a5303bc071"  # 5 -> 3
+    assert _resolve_cluster_id(typo, _ACTIVE, set(_ACTIVE)) == _ACTIVE[0]
+
+
+def test_resolve_unrelated_id_left_alone():
+    # A totally different id must NOT be silently snapped to a real cluster —
+    # it should pass through and fail loudly downstream.
+    bogus = "deadbeef-0000-0000-0000-000000000000"
+    assert _resolve_cluster_id(bogus, _ACTIVE, set(_ACTIVE)) == bogus
+
+
+def test_resolve_empty_and_non_string_pass_through():
+    assert _resolve_cluster_id("", _ACTIVE, set(_ACTIVE)) == ""
+    assert _resolve_cluster_id(None, _ACTIVE, set(_ACTIVE)) is None
+
+
+def test_normalize_repairs_merge_ids_in_place():
+    typo = "00322caf-296b-4b03-9080-99a5303bc071"  # 5 -> 3
+    ops = [{"type": "merge", "cluster_ids": [typo, _ACTIVE[1]]}]
+    db = MagicMock()
+    rows = [MagicMock(id=i) for i in _ACTIVE]
+    db.query.return_value.filter.return_value.all.return_value = rows
+    _normalize_cluster_ids(ops, session_id="s1", db=db)
+    assert ops[0]["cluster_ids"] == [_ACTIVE[0], _ACTIVE[1]]
