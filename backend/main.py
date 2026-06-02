@@ -22,9 +22,39 @@ def _run_migrations() -> None:
     """
     with engine.connect() as conn:
         insp = inspect(engine)
+
         sessions_cols = {c["name"] for c in insp.get_columns("sessions")}
         if "preference_summary" not in sessions_cols:
             conn.execute(text("ALTER TABLE sessions ADD COLUMN preference_summary TEXT"))
+            conn.commit()
+
+        # Remove NOT NULL constraint on data_points.dataset_name (legacy column).
+        # The ORM no longer maps this column; inserts fail on DBs created before
+        # the Dataset model was introduced. Recreate the table if still constrained.
+        dp_cols = {c["name"]: c for c in insp.get_columns("data_points")}
+        if "dataset_name" in dp_cols and not dp_cols["dataset_name"]["nullable"]:
+            conn.execute(text("PRAGMA foreign_keys = OFF"))
+            conn.execute(text("""
+                CREATE TABLE data_points_new (
+                    id VARCHAR(36) NOT NULL,
+                    dataset_name VARCHAR(255),
+                    data JSON NOT NULL,
+                    embedding JSON,
+                    dataset_id TEXT,
+                    PRIMARY KEY (id)
+                )
+            """))
+            conn.execute(text("""
+                INSERT INTO data_points_new
+                SELECT id, dataset_name, data, embedding, dataset_id FROM data_points
+            """))
+            conn.execute(text("DROP TABLE data_points"))
+            conn.execute(text("ALTER TABLE data_points_new RENAME TO data_points"))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_data_points_dataset_id "
+                "ON data_points (dataset_id)"
+            ))
+            conn.execute(text("PRAGMA foreign_keys = ON"))
             conn.commit()
 
 
