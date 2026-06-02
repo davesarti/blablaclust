@@ -6,21 +6,6 @@ import type { DatasetPreview, DatasetUploadResponse } from '../../api/client'
 
 // ── Dataset row ──────────────────────────────────────────────────────────────
 
-function EmbedBar({ n, total }: { n: number; total: number }) {
-  const pct = total > 0 ? Math.round((n / total) * 100) : 0
-  const color = pct === 100 ? 'var(--color-accent)' : pct > 0 ? '#9a7a30' : 'var(--color-surface3)'
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface3)', minWidth: 60 }}>
-        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: color }} />
-      </div>
-      <span className="font-mono text-[12px] shrink-0" style={{ color }}>
-        {pct === 100 ? '✓ embedded' : pct > 0 ? `${pct}%` : 'no emb'}
-      </span>
-    </div>
-  )
-}
-
 interface DatasetRowProps {
   dataset: Dataset
   onPreview: (id: string) => void
@@ -34,22 +19,16 @@ function DatasetRow({ dataset, onPreview, onDelete, previewing, deleting }: Data
   return (
     <div className="flex items-center gap-4 px-5 py-4 border-b border-border last:border-0 hover:bg-surface2/40 transition-colors">
       <div className="flex-1 min-w-0">
-        <div className="font-mono text-[15px] font-bold text-ink truncate">{dataset.dataset_name}</div>
+        <div className="flex items-baseline gap-2">
+          <span className="font-mono text-[15px] font-bold text-ink truncate">{dataset.dataset_name}</span>
+          <span className="font-mono text-[12px] text-faint shrink-0">{dataset.n_points.toLocaleString()} pts</span>
+        </div>
         {dataset.description && (
           <div className="text-[13px] text-faint mt-0.5 leading-snug">{dataset.description}</div>
         )}
       </div>
 
-      <div className="shrink-0 text-right min-w-[80px]">
-        <div className="font-mono text-[15px] font-bold text-ink">{dataset.n_points.toLocaleString()}</div>
-        <div className="font-mono text-[11px] text-faint uppercase tracking-wider">points</div>
-      </div>
-
-      <div className="shrink-0 w-40">
-        <EmbedBar n={dataset.has_embeddings} total={dataset.n_points} />
-      </div>
-
-      <div className="flex items-center gap-2 shrink-0">
+<div className="flex items-center gap-2 shrink-0">
         <button
           onClick={() => onPreview(dataset.dataset_id)}
           disabled={previewing}
@@ -86,10 +65,6 @@ function DatasetRow({ dataset, onPreview, onDelete, previewing, deleting }: Data
 // ── Preview panel ─────────────────────────────────────────────────────────────
 
 function PreviewPanel({ preview, onClose }: { preview: DatasetPreview; onClose: () => void }) {
-  const cols = preview.points.length > 0
-    ? Object.keys(preview.points[0].data).filter(k => k !== 'embedding')
-    : []
-
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -111,38 +86,20 @@ function PreviewPanel({ preview, onClose }: { preview: DatasetPreview; onClose: 
         <p className="text-[14px] text-muted italic leading-relaxed px-1">{preview.description}</p>
       )}
 
-      <div className="overflow-x-auto rounded-sm border border-border" style={{ background: 'var(--color-surface)' }}>
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr style={{ background: 'var(--color-surface2)' }}>
-              {cols.map(c => (
-                <th key={c} className="font-mono text-[11px] font-bold tracking-widest uppercase text-faint px-4 py-2.5 border-b border-border whitespace-nowrap">
-                  {c}
-                </th>
-              ))}
-              <th className="font-mono text-[11px] font-bold tracking-widest uppercase text-faint px-4 py-2.5 border-b border-border">emb</th>
-            </tr>
-          </thead>
-          <tbody>
-            {preview.points.map((p, i) => (
-              <tr key={p.id} className={i % 2 === 0 ? '' : ''} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                {cols.map(c => {
-                  const val = String(p.data[c] ?? '')
-                  return (
-                    <td key={c} className="px-4 py-2.5 text-[13px] text-ink max-w-[280px]">
-                      <span className="line-clamp-1 block">{val.length > 100 ? val.slice(0, 100) + '…' : val}</span>
-                    </td>
-                  )
-                })}
-                <td className="px-4 py-2.5">
-                  <span className={`font-mono text-[11px] font-bold ${p.has_embedding ? 'text-green-700' : 'text-faint'}`}>
-                    {p.has_embedding ? '✓' : '–'}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="rounded-sm border border-border" style={{ background: 'var(--color-surface)' }}>
+        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border" style={{ background: 'var(--color-surface2)' }}>
+          <span className="shrink-0 w-7 font-mono text-[11px] font-bold tracking-widest uppercase text-faint">#</span>
+          <span className="flex-1 font-mono text-[11px] font-bold tracking-widest uppercase text-faint">text</span>
+        </div>
+        {preview.points.map((p, i) => (
+          <div key={p.id} className="flex items-start gap-3 px-4 py-2.5"
+            style={{ borderBottom: i < preview.points.length - 1 ? '1px solid var(--color-border)' : undefined }}>
+            <span className="shrink-0 w-7 font-mono text-[11px] text-faint mt-0.5">{i + 1}</span>
+            <span className="flex-1 text-[13px] text-ink leading-relaxed">
+              {p.text}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -155,7 +112,6 @@ type UploadState = 'idle' | 'uploading' | 'done' | 'error'
 function UploadPanel({ onUploaded }: { onUploaded: () => void }) {
   const [file, setFile] = useState<File | null>(null)
   const [name, setName] = useState('')
-  const [genEmb, setGenEmb] = useState(true)
   const [state, setState] = useState<UploadState>('idle')
   const [result, setResult] = useState<DatasetUploadResponse | null>(null)
   const [error, setError] = useState('')
@@ -177,7 +133,7 @@ function UploadPanel({ onUploaded }: { onUploaded: () => void }) {
     if (!file || !name.trim()) return
     setState('uploading'); setError('')
     try {
-      const r = await uploadDataset(file, name.trim(), genEmb)
+      const r = await uploadDataset(file, name.trim(), true)
       setResult(r); setState('done'); onUploaded()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e)); setState('error')
@@ -235,7 +191,7 @@ function UploadPanel({ onUploaded }: { onUploaded: () => void }) {
         ) : (
           <>
             <span className="font-mono text-[13px] text-faint">Drop a CSV file here</span>
-            <span className="font-mono text-[11px] text-faint opacity-60">or click to browse · expects: label, title, text</span>
+            <span className="font-mono text-[11px] text-faint opacity-60">or click to browse · expects: text column</span>
           </>
         )}
       </div>
@@ -252,14 +208,6 @@ function UploadPanel({ onUploaded }: { onUploaded: () => void }) {
           />
         </label>
 
-        <label className="flex flex-col gap-1.5 justify-end">
-          <span className="font-mono text-[11px] font-bold tracking-widest uppercase text-faint">Embeddings</span>
-          <label className="flex items-center gap-2 px-3 py-2.5 rounded-sm border border-border cursor-pointer h-[44px]"
-            style={{ background: 'var(--color-bg)' }}>
-            <input type="checkbox" checked={genEmb} onChange={e => setGenEmb(e.target.checked)} className="accent-accent" />
-            <span className="font-mono text-[13px] text-muted">Generate (~60 s)</span>
-          </label>
-        </label>
       </div>
 
       {error && (
@@ -274,7 +222,7 @@ function UploadPanel({ onUploaded }: { onUploaded: () => void }) {
         {state === 'uploading' ? (
           <>
             <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin-slow" />
-            {genEmb ? 'Uploading & generating embeddings…' : 'Uploading…'}
+            Uploading & generating embeddings…
           </>
         ) : (
           '↑ Upload dataset'
@@ -366,8 +314,6 @@ export default function DatasetsModal({ onClose }: Props) {
                     <div className="flex items-center gap-4 px-5 py-2.5 border-b border-border"
                       style={{ background: 'var(--color-surface2)' }}>
                       <span className="flex-1 font-mono text-[11px] font-bold tracking-widest uppercase text-faint">Name</span>
-                      <span className="shrink-0 w-[80px] font-mono text-[11px] font-bold tracking-widest uppercase text-faint text-right">Points</span>
-                      <span className="shrink-0 w-40 font-mono text-[11px] font-bold tracking-widest uppercase text-faint">Embeddings</span>
                       <span className="shrink-0 w-48" />
                     </div>
                     {datasets.map(d => (

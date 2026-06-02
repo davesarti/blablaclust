@@ -19,11 +19,9 @@ MAX_TEXT_CHARS = 400
 
 
 def _point_text(dp: DataPoint) -> str:
-    title = (dp.data or {}).get("title", "") or ""
-    text = (dp.data or {}).get("text", "") or ""
-    combined = f"{title} {text}".strip()
-    if len(combined) > MAX_TEXT_CHARS:
-        combined = combined[:MAX_TEXT_CHARS].rstrip() + "…"
+    combined = (dp.text or "")[:MAX_TEXT_CHARS]
+    if len(dp.text or "") > MAX_TEXT_CHARS:
+        combined = combined.rstrip() + "…"
     return combined
 
 

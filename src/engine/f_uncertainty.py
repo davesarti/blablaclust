@@ -237,9 +237,7 @@ def f_uncertainty(
     data_points = db.query(DataPoint).filter(DataPoint.id.in_(point_ids)).all()
     text_by_id: dict[str, str] = {}
     for dp in data_points:
-        title = (dp.data or {}).get("title", "") or ""
-        text = (dp.data or {}).get("text", "") or ""
-        text_by_id[dp.id] = f"{title} {text}".strip()
+        text_by_id[dp.id] = dp.text or ""
 
     results: list[BoundaryPoint] = []
     for point_id, cluster_scores in scores_by_point.items():

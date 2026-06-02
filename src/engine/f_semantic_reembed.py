@@ -126,7 +126,7 @@ def _llm_score_sample(
     for i in range(0, len(points), batch_size):
         batch = points[i : i + batch_size]
         texts = "\n".join(
-            f"{j}. {(p.data or {}).get('text', '')[:200]}"
+            f"{j}. {(p.text or '')[:200]}"
             for j, p in enumerate(batch)
         )
         prompt = render_prompt(

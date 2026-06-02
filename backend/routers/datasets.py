@@ -88,7 +88,7 @@ def preview_dataset(dataset_id: str, limit: int = 20, db: Session = Depends(get_
         "dataset_name": dataset.name,
         "description": dataset.description or "",
         "points": [
-            {"id": p.id, "data": p.data, "has_embedding": p.embedding is not None}
+            {"id": p.id, "text": p.text, "has_embedding": p.embedding is not None}
             for p in points
         ],
     }

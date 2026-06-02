@@ -39,7 +39,7 @@ class ChatSessionState(BaseModel):
 
 class ClusterPoint(BaseModel):
     id: str
-    data: Dict[str, Any]
+    text: str
     probability: float = Field(ge=0.0, le=1.0)
 
 

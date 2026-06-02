@@ -19,7 +19,7 @@ from src.engine.f_eval import (
     f_eval_contradiction,
     f_eval_overall,
 )
-from src.models import ChatSession, DataPoint, Dataset, SoftAssignment, Turn
+from src.models import ChatSession, DataPoint, Dataset, EvalCache, SoftAssignment, Turn
 from src.schemas import ChatSessionState
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -186,8 +186,7 @@ def _coherence_samples(db: Session, state: ChatSessionState) -> list[dict]:
     text_by_id: dict[str, str] = {}
     if needed_ids:
         for dp in db.query(DataPoint).filter(DataPoint.id.in_(needed_ids)).all():
-            d = dp.data or {}
-            text_by_id[dp.id] = d.get("text") or d.get("title") or dp.id
+            text_by_id[dp.id] = dp.text or dp.id
 
     cluster_by_id = {c.id: c for c in state.clusters}
     samples: list[dict] = []
@@ -428,6 +427,21 @@ def patch_session_state(
     db.refresh(session)
 
     return build_session_state(db, session)
+
+
+@router.get("/{session_id}/eval", response_model=EvalResponse)
+def get_eval_cached(session_id: str, db: Session = Depends(get_db)):
+    row = (
+        db.query(EvalCache)
+        .filter(EvalCache.session_id == session_id)
+        .order_by(EvalCache.created_at.desc())
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="No cached eval for this session")
+    data = json.loads(row.response_json)
+    data["cached"] = True
+    return EvalResponse(**data)
 
 
 @router.post("/{session_id}/eval", response_model=EvalResponse)

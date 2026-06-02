@@ -5,7 +5,6 @@ from sqlalchemy.orm import sessionmaker
 from sentence_transformers import SentenceTransformer
 
 from src.models import DataPoint
-from src.dataset_processing.text_cleaning import clean_text
 
 MODEL_NAME = "all-MiniLM-L6-v2"
 BATCH_SIZE = 64
@@ -28,7 +27,7 @@ def main():
         print(f"Loading model '{MODEL_NAME}'...")
         model = SentenceTransformer(MODEL_NAME)
 
-        texts = [clean_text(dp.data["title"], dp.data["text"]) for dp in data_points]
+        texts = [dp.text for dp in data_points]
 
         print(f"Generating embeddings in batches of {BATCH_SIZE}...")
         embeddings = model.encode(

@@ -67,7 +67,7 @@ export interface SessionState {
 
 export interface ClusterPoint {
   id: string;
-  data: Record<string, unknown>;
+  text: string;
   probability: number;
 }
 

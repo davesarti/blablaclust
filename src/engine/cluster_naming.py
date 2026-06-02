@@ -16,9 +16,7 @@ _NAMING_CAP = 30     # upper bound regardless of cluster size
 
 
 def _point_text(dp: DataPoint) -> str:
-    title = (dp.data or {}).get("title", "") or ""
-    text = (dp.data or {}).get("text", "") or ""
-    return f"{title} {text}".strip()
+    return dp.text or ""
 
 
 def name_clusters(

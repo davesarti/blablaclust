@@ -37,7 +37,7 @@ class DataPoint(Base):
 	dataset_id: Mapped[str] = mapped_column(
 		ForeignKey("datasets.id", ondelete="CASCADE"), index=True, nullable=False
 	)
-	data: Mapped[dict] = mapped_column(JSON)
+	text: Mapped[str] = mapped_column(Text)
 	embedding: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
 	dataset: Mapped[Dataset] = relationship(back_populates="data_points")

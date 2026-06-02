@@ -7,7 +7,6 @@ from sqlalchemy.orm import sessionmaker
 from sentence_transformers import SentenceTransformer
 
 from src.models import DataPoint, Dataset
-from src.dataset_processing.text_cleaning import clean_text
 
 DB_PATH = "sqlite:///./data/demo_database.db"
 MODEL_NAME = "all-MiniLM-L6-v2"
@@ -39,9 +38,7 @@ def verify_database(db):
     print(f"\nSample data point:")
     print(f"  id           : {sample.id}")
     print(f"  dataset_name : {sample.dataset.name if sample.dataset else sample.dataset_id}")
-    print(f"  label        : {sample.data['label']}")
-    print(f"  title        : {sample.data['title'][:60]}")
-    print(f"  text         : {sample.data['text'][:80]}...")
+    print(f"  text         : {sample.text[:80]}...")
     print(f"  embedding dim: {len(sample.embedding)}")
 
 
@@ -60,15 +57,15 @@ def verify_embeddings(db):
     # 2. Regenerate one embedding and compare with stored
     print("\nConsistency check (regenerate 1 embedding and compare)...")
     model = SentenceTransformer(MODEL_NAME)
-    text = clean_text(sample.data["title"], sample.data["text"])
-    fresh_vec = model.encode(text, convert_to_numpy=True)
+    fresh_vec = model.encode(sample.text, convert_to_numpy=True)
     cosine_sim = np.dot(vec, fresh_vec) / (np.linalg.norm(vec) * np.linalg.norm(fresh_vec))
     print(f"  Cosine similarity stored vs regenerated: {cosine_sim:.6f}  (expected ~1.0)")
 
-    # 3. Semantic sanity check — similar reviews should be closer than opposite ones
+    # 3. Semantic sanity check — sample two random subsets and compare intra vs cross similarity
     print("\nSemantic sanity check...")
-    positive = db.query(DataPoint).filter(DataPoint.data["label"].as_integer() == 2).limit(50).all()
-    negative = db.query(DataPoint).filter(DataPoint.data["label"].as_integer() == 1).limit(50).all()
+    all_points = db.query(DataPoint).filter(DataPoint.embedding != None).limit(100).all()
+    positive = all_points[:50]
+    negative = all_points[50:]
 
     pos_vecs = np.array([dp.embedding for dp in positive])
     neg_vecs = np.array([dp.embedding for dp in negative])

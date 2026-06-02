@@ -97,8 +97,7 @@ def _boundary_points(
 
     text_by_id: dict[str, str] = {}
     for dp in db.query(DataPoint).filter(DataPoint.id.in_(all_point_ids)).all():
-        d = dp.data or {}
-        text_by_id[dp.id] = d.get("text") or d.get("title") or ""
+        text_by_id[dp.id] = dp.text or ""
 
     result: dict[str, list[dict]] = {}
     for cid, pts in top_n.items():

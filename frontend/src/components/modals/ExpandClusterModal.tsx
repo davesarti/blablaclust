@@ -23,7 +23,7 @@ export default function ExpandClusterModal({ clusterId, onClose }: Props) {
   }, [clusterId])
 
   const filtered = points.filter(p => {
-    const text = String((p.data as Record<string,unknown>)?.text ?? p.id).toLowerCase()
+    const text = (p.text || p.id).toLowerCase()
     return !search || text.includes(search.toLowerCase())
   })
   const shown = showAll ? filtered : filtered.slice(0, 10)
@@ -55,8 +55,8 @@ export default function ExpandClusterModal({ clusterId, onClose }: Props) {
         ) : (
           <>
             <div className="flex flex-col gap-1">
-              {shown.map((p, idx) => {
-                const text = String((p.data as Record<string,unknown>)?.text ?? p.id)
+              {shown.map(p => {
+                const text = p.text || p.id
                 const globalIdx = filtered.indexOf(p)
                 return (
                   <div key={p.id} className="flex gap-3 px-3 py-2.5 rounded-sm border border-border text-[13px] text-ink leading-relaxed hover:bg-surface2 transition-colors"

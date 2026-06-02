@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useApp } from '../store/AppContext'
-import { evalSession, getUmap } from '../api/client'
+import { evalSession, getEvalCached, getUmap } from '../api/client'
 import type { EvalResult, UmapData } from '../types'
 
 const UMAP_COLORS = [
@@ -48,15 +48,25 @@ export default function AnalyticsPanel({ onOpenUmap, onOpenEval }: Props) {
 
   const plotRef = useRef<HTMLDivElement>(null)
   const prevTurnRef = useRef(-1)
+  const hasMountedRef = useRef(false)
 
   // Load on mount (resumed sessions) and after each new turn
   useEffect(() => {
     if (sess.turnNumber === prevTurnRef.current) return
+    const isNewTurn = hasMountedRef.current
     prevTurnRef.current = sess.turnNumber
+    hasMountedRef.current = true
     if (sess.turnNumber === 0) return
     loadUmap()
+    if (isNewTurn) setEv(null)  // stale after a new turn
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sess.sessionId, sess.turnNumber])
+
+  // Load cached eval on mount so stats show without re-running
+  useEffect(() => {
+    getEvalCached(sess.sessionId).then(setEv).catch(() => {/* no cached eval */})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sess.sessionId])
 
   async function loadUmap() {
     setUmapLoading(true)

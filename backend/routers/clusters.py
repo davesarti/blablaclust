@@ -280,7 +280,7 @@ def list_cluster_points(cluster_id: str, db: Session = Depends(get_db)):
         if point_ids
         else []
     )
-    data_by_id = {point.id: point.data for point in points}
+    text_by_id = {point.id: point.text for point in points}
 
     return ClusterPointsResponse(
         cluster_id=cluster_id,
@@ -289,7 +289,7 @@ def list_cluster_points(cluster_id: str, db: Session = Depends(get_db)):
         points=[
             ClusterPoint(
                 id=point_id,
-                data=data_by_id.get(point_id, {}),
+                text=text_by_id.get(point_id, ""),
                 probability=probability,
             )
             for point_id, probability in cluster_members

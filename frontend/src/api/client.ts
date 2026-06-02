@@ -23,7 +23,7 @@ export interface DatasetUploadResponse {
 }
 export interface DatasetPreview {
   dataset_id: string; dataset_name: string; description: string;
-  points: { id: string; data: Record<string, unknown>; has_embedding: boolean }[];
+  points: { id: string; text: string; has_embedding: boolean }[];
 }
 
 // Datasets
@@ -53,7 +53,8 @@ export const patchSessionState = (id: string, status: string) =>
   req<void>(`/sessions/${id}/state`, { method: 'PATCH', body: JSON.stringify({ status }) })
 export const deleteSession = (id: string) =>
   req<void>(`/sessions/${id}/delete`, { method: 'DELETE' })
-export const evalSession = (id: string) => req<EvalResult>(`/sessions/${id}/eval`, { method: 'POST' })
+export const evalSession      = (id: string) => req<EvalResult>(`/sessions/${id}/eval`, { method: 'POST' })
+export const getEvalCached    = (id: string) => req<EvalResult>(`/sessions/${id}/eval`)
 
 // Clusters
 export const getActiveClusters = (sessionId: string) =>

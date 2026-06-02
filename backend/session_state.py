@@ -104,8 +104,7 @@ def build_cluster_schemas(
     text_by_id: dict[str, str] = {}
     if all_rep_ids:
         for dp in db.query(DataPoint).filter(DataPoint.id.in_(all_rep_ids)).all():
-            d = dp.data or {}
-            text_by_id[dp.id] = d.get("text") or d.get("title") or dp.id
+            text_by_id[dp.id] = dp.text or dp.id
 
     schemas: list[ClusterSchema] = []
     for cluster in clusters:

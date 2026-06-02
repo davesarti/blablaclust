@@ -12,12 +12,12 @@ from typing import IO, Iterable, Tuple
 from sqlalchemy.orm import Session
 
 from src.models import DataPoint, Dataset
-from src.dataset_processing.text_cleaning import clean_fields, clean_text
+from src.dataset_processing.text_cleaning import clean_text
 from src.dataset_processing.dataset_description import generate_dataset_description
 
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 EMBEDDING_BATCH_SIZE = 64
-EXPECTED_HEADERS = {"label", "title", "text"}
+EXPECTED_HEADERS = {"text"}
 
 
 def _normalize_headers(headers: Iterable[str] | None) -> set[str]:
@@ -84,28 +84,15 @@ def ingest_csv_path(path: str, dataset_id: str, db: Session) -> Tuple[int, int]:
         reader = csv.DictReader(handle)
         _validate_headers(reader.fieldnames)
         for row in reader:
-            raw_title = row.get("title") or ""
             raw_text = row.get("text") or ""
-            title_clean, text_clean = clean_fields(raw_title, raw_text)
+            text_clean = clean_text("", raw_text)
             if not text_clean:
-                skipped += 1
-                continue
-            label_raw = row.get("label")
-            try:
-                label = int(label_raw) if label_raw is not None else None
-            except ValueError:
-                label = None
-            if label is None:
                 skipped += 1
                 continue
             dp = DataPoint(
                 id=str(uuid.uuid4()),
                 dataset_id=dataset_id,
-                data={
-                    "label": label,
-                    "title": title_clean,
-                    "text": text_clean,
-                },
+                text=text_clean,
             )
             db.add(dp)
             inserted += 1
@@ -139,7 +126,7 @@ def iter_generate_embeddings_for_dataset(
 
         model = SentenceTransformer(EMBEDDING_MODEL)
 
-    texts = [clean_text(dp.data["title"], dp.data["text"]) for dp in data_points]
+    texts = [dp.text for dp in data_points]
     done = 0
     for i in range(0, total, EMBEDDING_BATCH_SIZE):
         chunk_texts = texts[i : i + EMBEDDING_BATCH_SIZE]
@@ -174,7 +161,7 @@ def generate_embeddings_for_dataset(
 
         model = SentenceTransformer(EMBEDDING_MODEL)
 
-    texts = [clean_text(dp.data["title"], dp.data["text"]) for dp in data_points]
+    texts = [dp.text for dp in data_points]
     embeddings = model.encode(
         texts,
         batch_size=EMBEDDING_BATCH_SIZE,

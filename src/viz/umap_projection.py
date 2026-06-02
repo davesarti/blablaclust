@@ -385,7 +385,7 @@ def project_session(
             "id": p.id,
             "x": float(coords[i, 0]),
             "y": float(coords[i, 1]),
-            "text": (p.data or {}).get("text", "")[:160],
+            "text": (p.text or "")[:160],
         }
         for i, p in enumerate(points)
     ]
