@@ -8,6 +8,7 @@ import ExpandClusterModal from './modals/ExpandClusterModal'
 import StopSessionModal from './modals/StopSessionModal'
 import EvalModal from './modals/EvalModal'
 import UmapModal from './modals/UmapModal'
+import type { EvalResult } from '../types'
 
 const LOAD_COLORS = ['#4a7c59','#7a8a3a','#9a7a30','#8a5030','#8a3030']
 const STATUS_CLS: Record<string, string> = {
@@ -21,7 +22,7 @@ export default function WorkspacePage() {
   const sess = state.session!
   const [expandId, setExpandId] = useState<string | null>(null)
   const [showStop, setShowStop] = useState(false)
-  const [showEval, setShowEval] = useState(false)
+  const [evalResult, setEvalResult] = useState<EvalResult | null>(null)
   const [showUmap, setShowUmap] = useState(false)
   const [marking, setMarking] = useState(false)
 
@@ -134,7 +135,7 @@ export default function WorkspacePage() {
           {/* Analytics strip */}
           <AnalyticsPanel
             onOpenUmap={() => setShowUmap(true)}
-            onOpenEval={() => setShowEval(true)}
+            onOpenEval={(result) => setEvalResult(result)}
           />
         </div>
 
@@ -147,7 +148,7 @@ export default function WorkspacePage() {
       {/* Modals */}
       {expandId && <ExpandClusterModal clusterId={expandId} onClose={() => setExpandId(null)} />}
       {showStop && <StopSessionModal onClose={() => setShowStop(false)} onClosed={goWelcome} />}
-      {showEval && <EvalModal sessionId={sess.sessionId} onClose={() => setShowEval(false)} />}
+      {evalResult && <EvalModal result={evalResult} onClose={() => setEvalResult(null)} />}
       {showUmap && <UmapModal sessionId={sess.sessionId} onClose={() => setShowUmap(false)} />}
     </div>
   )

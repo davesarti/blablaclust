@@ -3,7 +3,6 @@ import { useApp, makeSession } from '../store/AppContext'
 import { getSessions, getActiveClusters, getTurns, deleteSession } from '../api/client'
 import type { Session } from '../types'
 import NewSessionModal from './modals/NewSessionModal'
-import EvalModal from './modals/EvalModal'
 import DatasetsModal from './modals/DatasetsModal'
 
 const STATUS_LABEL: Record<string, string> = { active: 'ACTIVE', converged: 'CONVERGED', closed: 'CLOSED' }
@@ -28,7 +27,6 @@ export default function WelcomePage() {
   const [resumingId, setResumingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
-  const [evalId, setEvalId] = useState<string | null>(null)
   const [showDatasets, setShowDatasets] = useState(false)
 
   async function loadSessions() {
@@ -113,10 +111,6 @@ export default function WelcomePage() {
                   </div>
                   <StatusBadge status={s.status} />
                   <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => setEvalId(s.id)}
-                      className="font-mono text-[13px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-faint hover:text-muted hover:border-borders transition-colors">
-                      eval
-                    </button>
                     <button onClick={() => handleResume(s)} disabled={resumingId === s.id}
                       className="font-mono text-[13px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border transition-colors disabled:opacity-50"
                       style={{ borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}>
@@ -152,7 +146,6 @@ export default function WelcomePage() {
       </div>
 
       <NewSessionModal onCreated={s => { loadSessions(); handleResume(s) }} />
-      {evalId && <EvalModal sessionId={evalId} onClose={() => setEvalId(null)} />}
       {showDatasets && <DatasetsModal onClose={() => setShowDatasets(false)} />}
     </>
   )

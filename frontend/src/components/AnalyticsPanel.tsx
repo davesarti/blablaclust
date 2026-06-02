@@ -32,7 +32,7 @@ function ScorePill({ label, value, invert }: ScorePillProps) {
 
 interface Props {
   onOpenUmap: () => void
-  onOpenEval: () => void
+  onOpenEval: (result: import('../types').EvalResult) => void
 }
 
 export default function AnalyticsPanel({ onOpenUmap, onOpenEval }: Props) {
@@ -192,10 +192,12 @@ export default function AnalyticsPanel({ onOpenUmap, onOpenEval }: Props) {
         {/* header */}
         <div className="flex items-center justify-between px-4 pt-3 pb-2 shrink-0">
           <span className="font-mono text-[11px] font-bold tracking-widest uppercase text-faint">Evaluation</span>
-          <button onClick={onOpenEval}
-            className="font-mono text-[11px] font-bold tracking-wider uppercase text-faint hover:text-muted transition-colors px-1">
-            expand ↗
-          </button>
+          {ev && (
+            <button onClick={() => onOpenEval(ev)}
+              className="font-mono text-[11px] font-bold tracking-wider uppercase text-faint hover:text-muted transition-colors px-1">
+              expand ↗
+            </button>
+          )}
         </div>
 
         {/* body */}

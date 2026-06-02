@@ -55,13 +55,16 @@ export default function ExpandClusterModal({ clusterId, onClose }: Props) {
         ) : (
           <>
             <div className="flex flex-col gap-1">
-              {shown.map(p => {
+              {shown.map((p, idx) => {
                 const text = String((p.data as Record<string,unknown>)?.text ?? p.id)
+                const globalIdx = filtered.indexOf(p)
                 return (
-                  <div key={p.id} className="px-3 py-2.5 rounded-sm border border-border text-[13px] text-ink leading-relaxed hover:bg-surface2 transition-colors"
+                  <div key={p.id} className="flex gap-3 px-3 py-2.5 rounded-sm border border-border text-[13px] text-ink leading-relaxed hover:bg-surface2 transition-colors"
                     style={{ background: 'var(--color-surface)' }}>
-                    {highlight(text.slice(0, 240))}
-                    {text.length > 240 && <span className="text-faint">…</span>}
+                    <span className="font-mono text-[11px] text-faint shrink-0 pt-0.5 w-6 text-right select-none">
+                      {globalIdx + 1}.
+                    </span>
+                    <span>{highlight(text)}</span>
                   </div>
                 )
               })}

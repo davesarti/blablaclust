@@ -55,8 +55,11 @@ function reducer(state: AppState, action: Action): AppState {
         ...state, session: {
           ...state.session,
           turnNumber: action.turnNumber,
-          tokenUsage: { input: action.tokenInput, output: action.tokenOutput },
-          costUsd: action.cost,
+          tokenUsage: {
+            input:  state.session.tokenUsage.input  + action.tokenInput,
+            output: state.session.tokenUsage.output + action.tokenOutput,
+          },
+          costUsd: state.session.costUsd + action.cost,
           cognitiveLoad: action.cogLoad,
         },
       }

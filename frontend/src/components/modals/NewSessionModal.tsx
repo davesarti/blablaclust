@@ -68,6 +68,9 @@ export default function NewSessionModal({ onCreated }: Props) {
               </option>
             ))}
           </select>
+          {selectedDataset?.description && (
+            <p className="text-[12px] text-faint leading-snug px-1">{selectedDataset.description}</p>
+          )}
         </label>
 
         <label className="flex flex-col gap-1.5">

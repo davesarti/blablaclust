@@ -36,7 +36,7 @@ function DatasetRow({ dataset, onPreview, onDelete, previewing, deleting }: Data
       <div className="flex-1 min-w-0">
         <div className="font-mono text-[15px] font-bold text-ink truncate">{dataset.dataset_name}</div>
         {dataset.description && (
-          <div className="text-[13px] text-faint mt-0.5 truncate">{dataset.description}</div>
+          <div className="text-[13px] text-faint mt-0.5 leading-snug">{dataset.description}</div>
         )}
       </div>
 
