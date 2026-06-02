@@ -148,8 +148,9 @@
       height: 100vh;
       height: 100dvh;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       flex-direction: column;
+      padding-top: 14dvh;
       position: relative;
     }
     #welcome.visible { display: flex; }
@@ -233,8 +234,9 @@
       text-align: left;
       position: relative;
       z-index: 1;
+      min-height: 0;
     }
-    #session-list.visible { display: block; }
+    #session-list.visible { display: flex; flex-direction: column; }
     .session-list-label {
       font-family: var(--mono);
       font-size: 10px;
@@ -243,7 +245,16 @@
       text-transform: uppercase;
       color: var(--text-faint);
       margin-bottom: 10px;
+      flex: 0 0 auto;
     }
+    #session-list-inner {
+      overflow-y: auto;
+      max-height: min(45dvh, 360px);
+      padding-right: 6px;
+    }
+    #session-list-inner::-webkit-scrollbar { width: 3px; }
+    #session-list-inner::-webkit-scrollbar-track { background: transparent; }
+    #session-list-inner::-webkit-scrollbar-thumb { background: var(--border-s); border-radius: 2px; }
     .session-row {
       display: flex;
       align-items: center;
@@ -1176,13 +1187,44 @@
 
     .review-list { list-style: none; }
     .review-list li {
-      padding: 9px 0;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 10px 8px 10px 4px;
       border-bottom: 1px solid var(--border);
       font-size: 12px;
       line-height: 1.65;
       color: var(--text-muted);
+      border-radius: 2px;
+      transition: background 0.12s;
     }
     .review-list li:last-child { border-bottom: none; }
+    .review-list li:hover { background: var(--accent-dim); }
+    .review-list .idx {
+      flex: 0 0 auto;
+      min-width: 24px;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--accent);
+      padding-top: 2px;
+      text-align: right;
+      user-select: none;
+    }
+    .review-list .txt { flex: 1 1 auto; word-break: break-word; }
+    .review-list mark {
+      background: rgba(74,124,89,.22);
+      color: var(--text);
+      font-weight: 600;
+      padding: 0 2px;
+      border-radius: 2px;
+    }
+    .review-list .empty {
+      justify-content: center;
+      color: var(--text-faint);
+      font-style: italic;
+    }
 
     /* ── RESPONSIVE ── */
     @media (max-width: 580px) {
@@ -2491,6 +2533,24 @@ function _pointText(p) {
     ?? JSON.stringify(p.data);
 }
 
+function _escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function _highlight(text, query) {
+  const escaped = _escapeHtml(text);
+  if (!query) return escaped;
+  const q = query.trim();
+  if (!q) return escaped;
+  const safe = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return escaped.replace(new RegExp(safe, 'gi'), m => `<mark>${m}</mark>`);
+}
+
 function _renderExpandList(filter) {
   const lower    = filter.trim().toLowerCase();
   const filtered = lower
@@ -2499,10 +2559,14 @@ function _renderExpandList(filter) {
 
   const shown   = (_expandShowAll || lower) ? filtered : filtered.slice(0, 5);
   const hasMore = !lower && !_expandShowAll && filtered.length > 5;
+  const pad     = String(filtered.length).length;
 
   document.getElementById('expand-list').innerHTML = shown.length
-    ? shown.map(p => `<li>${_pointText(p)}</li>`).join('')
-    : '<li>No results.</li>';
+    ? shown.map((p, i) => {
+        const idx = String(i + 1).padStart(pad, '0');
+        return `<li><span class="idx">${idx}</span><span class="txt">${_highlight(_pointText(p), filter)}</span></li>`;
+      }).join('')
+    : '<li class="empty">No results.</li>';
 
   const footer = document.getElementById('expand-footer');
   if (hasMore) {
@@ -2526,7 +2590,7 @@ async function expandCluster(id) {
   _expandShowAll = false;
   document.getElementById('lbl-expand').textContent = `${c.emoji} ${c.name}`;
   document.getElementById('expand-search').value    = '';
-  document.getElementById('expand-list').innerHTML  = '<li>Loading…</li>';
+  document.getElementById('expand-list').innerHTML  = '<li class="empty">Loading…</li>';
   document.getElementById('expand-footer').style.display = 'none';
   openModal('modal-expand');
 
@@ -2539,7 +2603,7 @@ async function expandCluster(id) {
     document.getElementById('lbl-expand').textContent = `${c.emoji} ${c.name} (${_expandPoints.length} reviews)`;
     _renderExpandList('');
   } catch (e) {
-    document.getElementById('expand-list').innerHTML = `<li>Error: ${e.message}</li>`;
+    document.getElementById('expand-list').innerHTML = `<li class="empty">Error: ${_escapeHtml(e.message)}</li>`;
   }
 }
 
