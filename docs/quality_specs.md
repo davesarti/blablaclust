@@ -98,6 +98,46 @@ Looks at the feedback history for self-contradictions, drift in judging
 criteria, vague targets, and ambiguity. Higher = harder. Feeds B1 as forgiveness
 context: a high B4 partially excuses low B2 / B3.
 
+## Generalization (procedure)
+
+Generalization is **not a new metric** — it is a procedure that re-evaluates
+**A1** (silhouette) and **B2** (cluster coherence) at two snapshots around an
+ingestion event. It reframes the brief's "generalization" question operationally:
+*once the oracle is happy, do new points entering the running system keep the
+structure intact?* — **consistency under growth, not accuracy against a hidden
+category**.
+
+- **t0** — eval A1 + B2 on the converged state.
+- **Ingest** a batch of new points: embed → nearest-centroid `assign_nearest`
+  against the **frozen** convergence centroids → write a fresh full snapshot at
+  `turn + 1` (`ingest_points` in
+  [`src/engine/generalization.py`](../src/engine/generalization.py)). Centroids
+  are not recomputed; pre-existing points are carried forward verbatim.
+- **t1** — eval A1 + B2 again, plus an A1 sub-aggregate over just the new batch
+  ("do the new points sit cleanly relative to the centroids?"). B2's bottom-2
+  stress sample naturally surfaces bad new members.
+- Report **paired Δ + bootstrap 95% CI** on A1 (over the common, pre-existing
+  points) and B2 (over the per-cluster scores). Generalization *holds* when A1
+  does not drop (paired Δ CI spans 0 or is positive) and B2 does not decline;
+  repeat the ingest/eval loop over multiple batches for a drift curve.
+
+Runner: [`scripts/run_generalization_stability_eval.py`](../scripts/run_generalization_stability_eval.py).
+
+**Labels are out of scope.** Clustering is unsupervised and the oracle's judgment
+is the only objective. The generalization eval reads **only `title,text`** from
+any CSV — never the `label` column. Labels in `data/20newsgroups_*.csv` (and the
+Amazon splits) are a byproduct of the dataset source, **not** a signal we may
+use; scoring against them would measure embedding-space topic recovery, not
+whether the conversational system generalizes.
+
+**Why no separate "assignment stability" metric.** Under the read-only-assignment
+policy (frozen centroids, ingestion is pure assignment) pre-existing points are
+never re-evaluated, so their assignment stability is 100% *by construction* —
+measuring it would test a property the architecture trivially satisfies. The
+signals such a metric would carry are already covered by A1's calibration
+companion (`f_uncertainty`, `1 − max(prob)`, low for ill-fitting new points) and
+B2's bottom-2 stress sample.
+
 ## Reproducibility & caveats
 
 - k-means seed fixed (`KMEANS_RANDOM_STATE = 42`); LLM calls logged with **prompt

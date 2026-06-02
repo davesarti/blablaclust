@@ -7,12 +7,18 @@ to reason about.
 
 import numpy as np
 import pytest
+from sqlalchemy import create_engine, func
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from src.engine.generalization import (
     assign_nearest,
     build_centroids,
     centroids_from_snapshot,
+    ingest_points,
 )
+from src.engine.initial_clustering import initial_clustering
+from src.models import Base, ChatSession, DataPoint, SoftAssignment
 
 
 # ---------------------------------------------------------------------------
@@ -149,3 +155,170 @@ def test_round_trip_training_then_holdout():
 
     held_out = np.array([[0.5, 0.5], [20.5, 20.5]])
     assert assign_nearest(held_out, ids, centroids) == ["A", "B"]
+
+
+# ---------------------------------------------------------------------------
+# ingest_points — online generalization into a live (converged) session
+# ---------------------------------------------------------------------------
+
+_INGEST_SESSION = "gen-ingest-test"
+
+# Three well-separated 2-D groups → k-means k=3 finds them cleanly.
+_GROUPS = {
+    "a1": [0.0, 0.0], "a2": [0.3, 0.2],
+    "b1": [10.0, 10.0], "b2": [10.2, 9.8],
+    "c1": [0.0, 10.0], "c2": [0.2, 10.1],
+}
+
+
+@pytest.fixture
+def converged_db():
+    """In-memory DB with a converged k=3 clustering of six points at turn 0."""
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(bind=engine)
+    db = sessionmaker(bind=engine, autoflush=False, autocommit=False)()
+    db.add(ChatSession(id=_INGEST_SESSION, dataset_name="ds",
+                       embedding_model="default", status="converged"))
+    points = []
+    for pid, emb in _GROUPS.items():
+        dp = DataPoint(id=pid, dataset_name="ds", data={"text": pid}, embedding=emb)
+        db.add(dp)
+        points.append(dp)
+    clusters, assignments, _ = initial_clustering(
+        points, k=3, session_id=_INGEST_SESSION, turn_number=0
+    )
+    for c in clusters:
+        db.add(c)
+    for a in assignments:
+        db.add(a)
+    db.commit()
+    yield db
+    db.close()
+
+
+def _snapshot(db, turn):
+    rows = db.query(SoftAssignment).filter(SoftAssignment.turn_number == turn).all()
+    snap = {}
+    for r in rows:
+        snap.setdefault(r.data_point_id, {})[r.cluster_id] = r.probability
+    return snap
+
+
+def _frozen_centroids(db):
+    snap0 = _snapshot(db, 0)
+    emb = {pid: _GROUPS[pid] for pid in snap0}
+    return centroids_from_snapshot(emb, snap0)
+
+
+def test_ingest_writes_new_snapshot_at_next_turn(converged_db):
+    cids, centroids = _frozen_centroids(converged_db)
+    new = [DataPoint(id="n_a", dataset_name="ds", data={"text": "n_a"}, embedding=[0.1, 0.1])]
+
+    new_turn, rows = ingest_points(_INGEST_SESSION, new, cids, centroids, converged_db)
+    converged_db.commit()
+
+    assert new_turn == 1
+    assert (
+        converged_db.query(func.max(SoftAssignment.turn_number)).scalar() == 1
+    )
+
+
+def test_ingest_carries_existing_points_forward_verbatim(converged_db):
+    """Pre-existing points are copied to the new turn unchanged (read-only)."""
+    snap0 = _snapshot(converged_db, 0)
+    cids, centroids = _frozen_centroids(converged_db)
+    new = [DataPoint(id="n_a", dataset_name="ds", data={"text": "n_a"}, embedding=[0.1, 0.1])]
+
+    ingest_points(_INGEST_SESSION, new, cids, centroids, converged_db)
+    converged_db.commit()
+
+    snap1 = _snapshot(converged_db, 1)
+    for pid, dist0 in snap0.items():
+        assert pid in snap1
+        assert snap1[pid] == pytest.approx(dist0)  # verbatim, same probabilities
+
+
+def test_ingest_does_not_mutate_the_converged_snapshot(converged_db):
+    """Turn 0 (the converged snapshot) is never touched."""
+    before = _snapshot(converged_db, 0)
+    cids, centroids = _frozen_centroids(converged_db)
+    new = [DataPoint(id="n_a", dataset_name="ds", data={"text": "n_a"}, embedding=[0.1, 0.1])]
+
+    ingest_points(_INGEST_SESSION, new, cids, centroids, converged_db)
+    converged_db.commit()
+
+    assert _snapshot(converged_db, 0) == before
+
+
+def test_ingest_assigns_new_point_to_nearest_centroid(converged_db):
+    """A new point near group A lands in the same cluster as a1/a2, matching
+    assign_nearest (the persisted soft argmax)."""
+    snap0 = _snapshot(converged_db, 0)
+    a_cluster = max(snap0["a1"], key=snap0["a1"].get)
+    cids, centroids = _frozen_centroids(converged_db)
+
+    new = [DataPoint(id="n_a", dataset_name="ds", data={"text": "n_a"}, embedding=[0.05, 0.05])]
+    expected = assign_nearest(np.array([[0.05, 0.05]]), cids, centroids)[0]
+
+    ingest_points(_INGEST_SESSION, new, cids, centroids, converged_db)
+    converged_db.commit()
+
+    dist = _snapshot(converged_db, 1)["n_a"]
+    hard = max(dist, key=dist.get)
+    assert hard == expected == a_cluster
+    assert sum(dist.values()) == pytest.approx(1.0)  # full soft distribution
+
+
+def test_ingest_calibrates_boundary_point_lower(converged_db):
+    """A point far from every centroid gets a LOWER max-probability than a point
+    sitting on a centroid — this is what lets B2's bottom-2 sample catch bad new
+    members."""
+    cids, centroids = _frozen_centroids(converged_db)
+    central = DataPoint(id="n_c", dataset_name="ds", data={"text": "c"}, embedding=[0.0, 0.0])
+    boundary = DataPoint(id="n_b", dataset_name="ds", data={"text": "b"}, embedding=[5.0, 5.0])
+
+    ingest_points(_INGEST_SESSION, [central, boundary], cids, centroids, converged_db)
+    converged_db.commit()
+
+    snap1 = _snapshot(converged_db, 1)
+    assert max(snap1["n_c"].values()) > max(snap1["n_b"].values())
+
+
+def test_ingest_freezes_centroids_across_batches(converged_db):
+    """Two successive ingestions reuse the SAME frozen centroids and advance the
+    turn each time; batch-1 points are carried into batch-2's snapshot."""
+    cids, centroids = _frozen_centroids(converged_db)
+
+    t1, _ = ingest_points(
+        _INGEST_SESSION,
+        [DataPoint(id="n1", dataset_name="ds", data={"text": "n1"}, embedding=[0.1, 0.1])],
+        cids, centroids, converged_db,
+    )
+    converged_db.commit()
+    t2, _ = ingest_points(
+        _INGEST_SESSION,
+        [DataPoint(id="n2", dataset_name="ds", data={"text": "n2"}, embedding=[10.1, 10.1])],
+        cids, centroids, converged_db,
+    )
+    converged_db.commit()
+
+    assert (t1, t2) == (1, 2)
+    snap2 = _snapshot(converged_db, 2)
+    assert "n1" in snap2 and "n2" in snap2          # batch-1 carried forward
+    assert len(snap2) == len(_GROUPS) + 2           # 6 original + 2 ingested
+
+
+def test_ingest_rejects_points_without_embedding(converged_db):
+    cids, centroids = _frozen_centroids(converged_db)
+    new = [DataPoint(id="n_x", dataset_name="ds", data={"text": "x"}, embedding=None)]
+    with pytest.raises(ValueError):
+        ingest_points(_INGEST_SESSION, new, cids, centroids, converged_db)
+
+
+def test_ingest_rejects_session_without_clustering(converged_db):
+    cids, centroids = _frozen_centroids(converged_db)
+    new = [DataPoint(id="n_y", dataset_name="ds", data={"text": "y"}, embedding=[0.1, 0.1])]
+    with pytest.raises(ValueError):
+        ingest_points("no-such-session", new, cids, centroids, converged_db)
