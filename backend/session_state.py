@@ -9,14 +9,21 @@ from src.schemas import (
 )
 
 
+_REPR_PCT = 0.10   # fraction of hard-assigned points kept as representatives
+_REPR_CAP = 30    # upper bound regardless of cluster size
+
+
 def hard_cluster_stats(
-    db: Session, session_id: str, top_n: int = 10
+    db: Session, session_id: str,
 ) -> dict[str, tuple[int, list[str]]]:
     """Hard-assignment size and representative points per cluster of a session.
 
     Each data point is assigned to its single highest-probability cluster at the
     latest turn that has soft assignments; a cluster's size is how many points
-    land in it, and its representatives are those members ranked by probability.
+    land in it. Representatives are 10% of the cluster (capped at 30), split
+    equally between the top-probability members (most confident, canonical
+    examples) and the bottom-probability members (boundary cases), giving the
+    eval judge and the UI a balanced view of the cluster's range.
     The argmax must run over *all* the session's clusters at once — scoping it to
     a subset would make every point trivially "belong" to whatever it is compared
     against. Returns zero-size entries when no soft assignments exist yet.
@@ -62,7 +69,18 @@ def hard_cluster_stats(
         members.setdefault(cid, []).append((point_id, prob))
     for cid, points in members.items():
         points.sort(key=lambda item: item[1], reverse=True)
-        stats[cid] = (len(points), [point_id for point_id, _ in points[:top_n]])
+        size = len(points)
+        n = min(max(1, int(size * _REPR_PCT)), _REPR_CAP)
+        n_top = (n + 1) // 2   # ceil: if n is odd, top gets the extra one
+        n_bot = n // 2
+        top_ids = [pid for pid, _ in points[:n_top]]
+        # bottom: walk from the end, skip any already in top (tiny clusters)
+        seen = set(top_ids)
+        bot_ids = [
+            pid for pid, _ in reversed(points[n_top:])
+            if pid not in seen
+        ][:n_bot]
+        stats[cid] = (size, top_ids + bot_ids)
     return stats
 
 

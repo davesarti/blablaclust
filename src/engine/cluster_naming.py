@@ -9,7 +9,8 @@ from src.harness import call_llm, render_prompt, loads_llm_json
 from src.logger import log
 from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoftAssignment
 
-REPRESENTATIVE_SAMPLE_SIZE = 25
+_NAMING_PCT = 0.15   # fraction of hard-assigned points to send to the naming LLM
+_NAMING_CAP = 30     # upper bound regardless of cluster size
 
 
 def _point_text(dp: DataPoint) -> str:
@@ -22,7 +23,6 @@ def name_clusters(
     clusters: list[DbCluster],
     assignments: list[DbSoftAssignment],
     data_points: list[DataPoint],
-    sample_size: int = REPRESENTATIVE_SAMPLE_SIZE,
     axis_hint: str | None = None,
 ) -> list[DbCluster]:
     """Fill in name and description for all clusters in a single LLM call.
@@ -30,9 +30,11 @@ def name_clusters(
     All clusters are described together in one prompt, which produces more
     consistent names and reduces latency compared to one call per cluster.
 
-    For each cluster, the `sample_size` data points with the highest assignment
-    probability are selected as representative examples. Clusters with no
-    usable texts are silently skipped (placeholder name kept).
+    For each cluster, 15% of its hard-assigned points (capped at 30), ranked
+    by soft-assignment probability, are used as representative examples. This
+    gives the naming LLM a broad enough view to avoid names that over-fit the
+    single densest sub-theme. Clusters with no usable texts are silently
+    skipped (placeholder name kept).
 
     If the LLM call fails or returns unparseable output, all clusters keep
     their placeholder names. If the response omits individual cluster IDs,
@@ -52,6 +54,19 @@ def name_clusters(
     for a in assignments:
         assignments_by_cluster.setdefault(a.cluster_id, []).append(a)
 
+    # Compute hard cluster sizes (argmax across all clusters in this snapshot)
+    # so the percentage-based sample is relative to actual membership, not the
+    # full dataset size that appears in each cluster's assignment list.
+    best_for_point: dict[str, tuple[str, float]] = {}
+    for cid, cass in assignments_by_cluster.items():
+        for a in cass:
+            cur = best_for_point.get(a.data_point_id)
+            if cur is None or a.probability > cur[1]:
+                best_for_point[a.data_point_id] = (cid, a.probability)
+    hard_sizes: dict[str, int] = {}
+    for _, (cid, _) in best_for_point.items():
+        hard_sizes[cid] = hard_sizes.get(cid, 0) + 1
+
     # Build one text block per cluster and remember which clusters have data.
     cluster_blocks: list[str] = []
     nameable_ids: list[str] = []
@@ -59,9 +74,11 @@ def name_clusters(
     for cluster in clusters:
         cluster_assignments = assignments_by_cluster.get(cluster.id, [])
         cluster_assignments.sort(key=lambda a: a.probability, reverse=True)
+        cluster_size = hard_sizes.get(cluster.id, 0) or len(cluster_assignments)
+        n = min(max(1, int(cluster_size * _NAMING_PCT)), _NAMING_CAP)
         sample_texts = [
             text_by_id.get(a.data_point_id, "")
-            for a in cluster_assignments[:sample_size]
+            for a in cluster_assignments[:n]
         ]
         sample_texts = [t for t in sample_texts if t]
         if not sample_texts:
