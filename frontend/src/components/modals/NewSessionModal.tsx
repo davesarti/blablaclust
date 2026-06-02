@@ -46,11 +46,11 @@ export default function NewSessionModal({ onCreated }: Props) {
     <Modal title="New session" onClose={() => dispatch({ type: 'CLOSE_MODAL' })}>
       <div className="p-5 flex flex-col gap-4">
         {error && (
-          <div className="px-3 py-2.5 rounded-sm border border-red-200 bg-red-50 text-red-700 text-[13px]">{error}</div>
+          <div className="px-3 py-2.5 rounded-sm border border-red-200 bg-red-50 text-red-700 text-[15px]">{error}</div>
         )}
 
         <label className="flex flex-col gap-1.5">
-          <span className="font-mono text-[10px] font-bold tracking-widest uppercase text-faint">Session name</span>
+          <span className="font-mono text-[15px] font-bold tracking-widest uppercase text-faint">Session name</span>
           <input value={name} onChange={e => setName(e.target.value)}
             placeholder="Optional name…"
             className="px-3 py-2 rounded-sm border border-border text-[14px] text-ink outline-none focus:border-borders transition-colors"
@@ -58,7 +58,7 @@ export default function NewSessionModal({ onCreated }: Props) {
         </label>
 
         <label className="flex flex-col gap-1.5">
-          <span className="font-mono text-[10px] font-bold tracking-widest uppercase text-faint">Dataset</span>
+          <span className="font-mono text-[15px] font-bold tracking-widest uppercase text-faint">Dataset</span>
           <select value={datasetId} onChange={e => setDatasetId(e.target.value)}
             className="px-3 py-2 rounded-sm border border-border text-[14px] text-ink outline-none focus:border-borders transition-colors cursor-pointer"
             style={{ background: 'var(--color-surface)' }}>
@@ -69,12 +69,12 @@ export default function NewSessionModal({ onCreated }: Props) {
             ))}
           </select>
           {selectedDataset?.description && (
-            <p className="text-[12px] text-faint leading-snug px-1">{selectedDataset.description}</p>
+            <p className="text-[14px] text-faint leading-snug px-1">{selectedDataset.description}</p>
           )}
         </label>
 
         <label className="flex flex-col gap-1.5">
-          <span className="font-mono text-[10px] font-bold tracking-widest uppercase text-faint">Initial clusters (k)</span>
+          <span className="font-mono text-[15px] font-bold tracking-widest uppercase text-faint">Initial clusters (k)</span>
           <input type="number" value={k} min={2} max={20} onChange={e => setK(+e.target.value)}
             className="px-3 py-2 rounded-sm border border-border text-[14px] text-ink outline-none focus:border-borders transition-colors"
             style={{ background: 'var(--color-surface)' }} />
@@ -82,11 +82,11 @@ export default function NewSessionModal({ onCreated }: Props) {
 
         <div className="flex gap-2 pt-1">
           <button onClick={() => dispatch({ type: 'CLOSE_MODAL' })}
-            className="flex-1 py-2 rounded-sm border border-border text-[13px] font-medium text-muted hover:bg-surface2 transition-colors">
+            className="flex-1 py-2 rounded-sm border border-border text-[15px] font-medium text-muted hover:bg-surface2 transition-colors">
             Cancel
           </button>
           <button onClick={handleCreate} disabled={loading || !datasetId}
-            className="flex-1 py-2 rounded-sm text-[13px] font-medium text-white transition-all hover:opacity-90 disabled:opacity-40"
+            className="flex-1 py-2 rounded-sm text-[15px] font-medium text-white transition-all hover:opacity-90 disabled:opacity-40"
             style={{ background: 'var(--color-accent)' }}>
             {loading ? 'Starting…' : 'Start session'}
           </button>

@@ -22,10 +22,10 @@ function ScorePill({ label, value, invert }: ScorePillProps) {
   if (value == null) return null
   return (
     <div className="flex flex-col items-center gap-0.5">
-      <span className="font-mono text-[11px] font-bold" style={{ color: tier(value, invert) }}>
+      <span className="font-mono text-[13px] font-bold" style={{ color: tier(value, invert) }}>
         {value.toFixed(2)}
       </span>
-      <span className="font-mono text-[10px] text-faint tracking-wider uppercase">{label}</span>
+      <span className="font-mono text-[12px] text-faint tracking-wider uppercase">{label}</span>
     </div>
   )
 }
@@ -141,9 +141,9 @@ export default function AnalyticsPanel({ onOpenUmap, onOpenEval }: Props) {
         {/* header */}
         <div className="flex items-center justify-between px-4 pt-3 pb-2 shrink-0">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[11px] font-bold tracking-widest uppercase text-faint">UMAP</span>
+            <span className="font-mono text-[13px] font-bold tracking-widest uppercase text-faint">UMAP</span>
             {umap && (
-              <span className="font-mono text-[10px] text-faint">
+              <span className="font-mono text-[13px] text-faint">
                 T{umap.turns[umap.turns.length - 1]}
               </span>
             )}
@@ -152,12 +152,12 @@ export default function AnalyticsPanel({ onOpenUmap, onOpenEval }: Props) {
             {(umap || umapError) && (
               <button onClick={loadUmap} disabled={umapLoading}
                 title="Refresh"
-                className="font-mono text-[11px] text-faint hover:text-muted transition-colors disabled:opacity-40 px-1">
+                className="font-mono text-[13px] text-faint hover:text-muted transition-colors disabled:opacity-40 px-1">
                 ↺
               </button>
             )}
             <button onClick={onOpenUmap}
-              className="font-mono text-[11px] font-bold tracking-wider uppercase text-faint hover:text-muted transition-colors px-1">
+              className="font-mono text-[13px] font-bold tracking-wider uppercase text-faint hover:text-muted transition-colors px-1">
               expand ↗
             </button>
           </div>
@@ -169,12 +169,12 @@ export default function AnalyticsPanel({ onOpenUmap, onOpenEval }: Props) {
           {!umap && !umapLoading && !umapError && (
             <div className="absolute inset-0 flex items-center justify-center">
               {sess.turnNumber === 0 ? (
-                <span className="font-mono text-[11px] text-faint text-center px-4">
+                <span className="font-mono text-[13px] text-faint text-center px-4">
                   Run a turn to see the projection
                 </span>
               ) : (
                 <button onClick={loadUmap}
-                  className="font-mono text-[11px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-faint hover:text-muted hover:border-borders transition-colors"
+                  className="font-mono text-[13px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-faint hover:text-muted hover:border-borders transition-colors"
                   style={{ background: 'var(--color-surface)' }}>
                   Load projection
                 </button>
@@ -185,12 +185,12 @@ export default function AnalyticsPanel({ onOpenUmap, onOpenEval }: Props) {
             <div className="absolute inset-0 flex items-center justify-center gap-2">
               <span className="inline-block w-3 h-3 border-2 rounded-full animate-spin-slow"
                 style={{ borderColor: 'var(--color-border)', borderTopColor: 'var(--color-accent)' }} />
-              <span className="font-mono text-[10px] text-faint">computing…</span>
+              <span className="font-mono text-[13px] text-faint">computing…</span>
             </div>
           )}
           {umapError && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="font-mono text-[10px] text-faint">failed to load</span>
+              <span className="font-mono text-[13px] text-faint">failed to load</span>
             </div>
           )}
           <div ref={plotRef} className="w-full h-full" style={{ opacity: umap && !umapLoading ? 1 : 0 }} />
@@ -201,10 +201,10 @@ export default function AnalyticsPanel({ onOpenUmap, onOpenEval }: Props) {
       <div className="flex flex-col flex-1 min-w-0">
         {/* header */}
         <div className="flex items-center justify-between px-4 pt-3 pb-2 shrink-0">
-          <span className="font-mono text-[11px] font-bold tracking-widest uppercase text-faint">Evaluation</span>
+          <span className="font-mono text-[13px] font-bold tracking-widest uppercase text-faint">Evaluation</span>
           {ev && (
             <button onClick={() => onOpenEval(ev)}
-              className="font-mono text-[11px] font-bold tracking-wider uppercase text-faint hover:text-muted transition-colors px-1">
+              className="font-mono text-[13px] font-bold tracking-wider uppercase text-faint hover:text-muted transition-colors px-1">
               expand ↗
             </button>
           )}
@@ -214,11 +214,11 @@ export default function AnalyticsPanel({ onOpenUmap, onOpenEval }: Props) {
         <div className="flex-1 flex flex-col justify-between px-4 pb-4 min-h-0">
           {!ev && !evLoading && (
             <div className="flex-1 flex flex-col items-start justify-center gap-3">
-              <p className="font-mono text-[11px] text-faint leading-relaxed">
+              <p className="font-mono text-[13px] text-faint leading-relaxed">
                 Run LLM judges to score<br />coherence, compliance &amp; contradiction.
               </p>
               <button onClick={runEval}
-                className="font-mono text-[11px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-faint hover:text-muted hover:border-borders transition-colors"
+                className="font-mono text-[13px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-faint hover:text-muted hover:border-borders transition-colors"
                 style={{ background: 'var(--color-surface)' }}>
                 Run evaluation
               </button>
@@ -229,7 +229,7 @@ export default function AnalyticsPanel({ onOpenUmap, onOpenEval }: Props) {
             <div className="flex-1 flex items-center gap-2">
               <span className="inline-block w-3 h-3 border-2 rounded-full animate-spin-slow"
                 style={{ borderColor: 'var(--color-border)', borderTopColor: 'var(--color-accent)' }} />
-              <span className="font-mono text-[11px] text-faint">running judges…</span>
+              <span className="font-mono text-[13px] text-faint">running judges…</span>
             </div>
           )}
 
@@ -241,19 +241,16 @@ export default function AnalyticsPanel({ onOpenUmap, onOpenEval }: Props) {
                   <span className="font-serif leading-none" style={{ fontSize: 38, color: tier(ev.B1.overall_score) }}>
                     {ev.B1.overall_score.toFixed(2)}
                   </span>
-                  <span className="font-mono text-[10px] text-faint tracking-widest uppercase">overall</span>
+                  <span className="font-mono text-[13px] text-faint tracking-widest uppercase">overall</span>
                   {silh != null && (
                     <>
-                      <span className="text-faint text-[11px] ml-1">·</span>
-                      <span className="font-mono text-[11px]" style={{ color: tier(silh) }}>
+                      <span className="text-faint text-[13px] ml-1">·</span>
+                      <span className="font-mono text-[13px]" style={{ color: tier(silh) }}>
                         silh {silh.toFixed(3)}
                       </span>
                     </>
                   )}
-                  <button onClick={runEval}
-                    className="ml-auto font-mono text-[10px] text-faint hover:text-muted transition-colors">
-                    ↺
-                  </button>
+
                 </div>
               )}
               {/* Score pills */}
@@ -263,22 +260,22 @@ export default function AnalyticsPanel({ onOpenUmap, onOpenEval }: Props) {
                 <ScorePill label="cont" value={ev.B4?.contradiction_score} invert />
                 {ev.A2 && (
                   <div className="flex flex-col items-center gap-0.5 ml-2">
-                    <span className="font-mono text-[11px] font-bold text-ink">{ev.A2.turns}</span>
-                    <span className="font-mono text-[10px] text-faint tracking-wider uppercase">turns</span>
+                    <span className="font-mono text-[13px] font-bold text-ink">{ev.A2.turns}</span>
+                    <span className="font-mono text-[13px] text-faint tracking-wider uppercase">turns</span>
                   </div>
                 )}
                 {ev.A3?.mean_cognitive_load !== undefined && (
                   <div className="flex flex-col items-center gap-0.5">
-                    <span className="font-mono text-[11px] font-bold text-ink">
+                    <span className="font-mono text-[13px] font-bold text-ink">
                       {ev.A3.mean_cognitive_load.toFixed(1)}
                     </span>
-                    <span className="font-mono text-[10px] text-faint tracking-wider uppercase">cog</span>
+                    <span className="font-mono text-[13px] text-faint tracking-wider uppercase">cog</span>
                   </div>
                 )}
               </div>
               {/* Notes preview */}
               {ev.B1?.notes && (
-                <p className="font-mono text-[11px] text-faint leading-relaxed line-clamp-2"
+                <p className="font-mono text-[13px] text-faint leading-relaxed line-clamp-2"
                   style={{ borderLeft: '2px solid var(--color-border)', paddingLeft: 8 }}>
                   {ev.B1.notes}
                 </p>

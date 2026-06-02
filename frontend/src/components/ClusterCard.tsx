@@ -22,7 +22,7 @@ export default function ClusterCard({ cluster, index, selected, totalSize, onSel
   return (
     <div
       onClick={onSelect}
-      className={`group relative flex flex-col gap-4 p-6 rounded-sm border cursor-pointer transition-all duration-100 select-none ${
+      className={`group relative flex flex-col gap-3 p-4 rounded-sm border cursor-pointer transition-all duration-100 select-none ${
         selected
           ? 'border-accent shadow-sm'
           : 'border-border hover:border-borders hover:bg-surface2/50'
@@ -32,29 +32,29 @@ export default function ClusterCard({ cluster, index, selected, totalSize, onSel
       {/* Header row */}
       <div className="flex items-start gap-4">
         {/* Number badge */}
-        <div className="shrink-0 w-11 h-11 rounded-sm flex items-center justify-center font-mono text-[18px] font-bold text-white mt-0.5"
+        <div className="shrink-0 w-9 h-9 rounded-sm flex items-center justify-center font-mono text-[15px] font-bold text-white mt-0.5"
           style={{ background: color }}>
           {index + 1}
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-medium text-[20px] leading-tight text-ink truncate">{cluster.name}</h3>
-          <div className="flex items-center gap-2.5 mt-2">
-            <span className="font-mono text-[15px] text-faint">{cluster.size} pts</span>
-            <span className="text-faint text-[15px]">·</span>
-            <span className="font-mono text-[15px] text-faint">{pct}%</span>
+          <h3 className="font-medium text-[16px] leading-tight text-ink truncate">{cluster.name}</h3>
+          <div className="flex items-center gap-2.5 mt-1.5">
+            <span className="font-mono text-[13px] text-faint">{cluster.size} pts</span>
+            <span className="text-faint text-[13px]">·</span>
+            <span className="font-mono text-[13px] text-faint">{pct}%</span>
           </div>
         </div>
         {/* Expand button */}
         <button
           onClick={e => { e.stopPropagation(); onExpand() }}
-          className="shrink-0 font-mono text-[14px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-faint opacity-0 group-hover:opacity-100 transition-all hover:border-borders hover:text-muted">
+          className="shrink-0 font-mono text-[12px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-sm border border-border text-faint opacity-0 group-hover:opacity-100 transition-all hover:border-borders hover:text-muted">
           view →
         </button>
       </div>
 
       {/* Description */}
       {cluster.description && (
-        <p className="text-[17px] text-muted leading-relaxed line-clamp-2">{cluster.description}</p>
+        <p className="text-[14px] text-muted leading-relaxed line-clamp-2">{cluster.description}</p>
       )}
 
       {/* Size bar */}
@@ -62,10 +62,6 @@ export default function ClusterCard({ cluster, index, selected, totalSize, onSel
         <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: color }} />
       </div>
 
-      {/* Selected indicator */}
-      {selected && (
-        <div className="absolute top-3.5 right-3.5 w-3 h-3 rounded-full" style={{ background: color }} />
-      )}
     </div>
   )
 }

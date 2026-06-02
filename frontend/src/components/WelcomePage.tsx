@@ -14,7 +14,7 @@ const STATUS_CLS: Record<string, string> = {
 
 function StatusBadge({ status }: { status: string }) {
   return (
-    <span className={`font-mono text-[10px] font-bold tracking-widest uppercase px-2 py-0.5 rounded-sm ${STATUS_CLS[status] ?? ''}`}>
+    <span className={`font-mono text-[12px] font-bold tracking-widest uppercase px-2 py-0.5 rounded-sm ${STATUS_CLS[status] ?? ''}`}>
       {STATUS_LABEL[status] ?? status}
     </span>
   )

@@ -96,15 +96,15 @@ export default function UmapModal({ sessionId, onClose }: Props) {
     }
 
     const silh = data.silhouette_by_turn[turnStr]
-    const title = `Turn ${turn}${silh != null ? `  ·  silhouette ${silh.toFixed(3)}` : ''}${geomTurn ? `  ·  ${geomTurn.axis_label}` : ''}`
+    const title = [silh != null ? `silhouette ${silh.toFixed(3)}` : '', geomTurn ? geomTurn.axis_label : ''].filter(Boolean).join('  ·  ')
 
     await Plotly.react(plotRef.current, traces, {
       title: { text: title, font: { size: 11, color: '#787868', family: 'ui-monospace' } },
       paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-      margin: { t: 32, r: 12, b: 24, l: 32 },
-      xaxis: { showgrid: false, zeroline: false, showticklabels: false },
+      margin: { t: 32, r: 16, b: 24, l: 0 },
+      xaxis: { showgrid: false, zeroline: false, showticklabels: false, domain: [0, 0.60] },
       yaxis: { showgrid: false, zeroline: false, showticklabels: false, scaleanchor: 'x' },
-      legend: { x: 1, xanchor: 'right', y: 1, bgcolor: 'rgba(0,0,0,0)', font: { size: 11 } },
+      legend: { x: 0.98, xanchor: 'right', y: 0.98, yanchor: 'top', bgcolor: 'rgba(0,0,0,0)', font: { size: 15, family: 'ui-monospace' } },
       hovermode: 'closest',
     }, { responsive: true, displayModeBar: false })
   }, [data])
@@ -128,40 +128,110 @@ export default function UmapModal({ sessionId, onClose }: Props) {
   }
 
   return (
-    <Modal title="UMAP clustering evolution" onClose={onClose} width="max-w-4xl">
-      <div className="p-4 flex flex-col gap-3">
+    <Modal title="UMAP clustering evolution" onClose={onClose} width="max-w-6xl">
+      <div className="px-6 py-4 flex flex-col gap-3">
         {loading && <div className="py-12 text-center text-faint text-sm">Computing projection…</div>}
-        {error && <div className="px-3 py-2.5 rounded-sm border border-red-200 bg-red-50 text-red-700 text-[13px]">{error}</div>}
+        {error && <div className="px-3 py-2.5 rounded-sm border border-red-200 bg-red-50 text-red-700 text-[15px]">{error}</div>}
 
         {data && !loading && (
           <>
-            {/* Controls */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <button onClick={() => setPlaying(p => !p)}
-                className="font-mono text-[10px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-muted hover:bg-surface2 transition-colors">
-                {playing ? '⏸ pause' : '▶ play'}
-              </button>
-              <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-                <span className="font-mono text-[10px] text-faint shrink-0">T{data.turns[0]}</span>
-                <input type="range" min={0} max={data.turns.length - 1} value={turnIdx}
-                  onChange={e => { setPlaying(false); setTurnIdx(+e.target.value) }}
-                  className="flex-1 accent-accent" />
-                <span className="font-mono text-[10px] text-faint shrink-0">T{data.turns[data.turns.length - 1]}</span>
-              </div>
-              <span className="font-mono text-[11px] text-muted font-bold">Turn {data.turns[turnIdx]}</span>
-              {data.geometry_aware && (
-                <label className="flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-wider uppercase text-faint cursor-pointer">
-                  <input type="checkbox" checked={geomAware} onChange={e => toggleGeom(e.target.checked)} className="accent-accent" />
-                  geom-aware
-                </label>
-              )}
-            </div>
+            {/* History bar */}
+            {(() => {
+              const nTurns = data.turns.length
+              const silhEntries = data.turns.map(t => data.silhouette_by_turn[String(t)] ?? null)
+              const hasSilh = silhEntries.some(v => v != null)
+              const maxSilh = Math.max(...silhEntries.map(v => v ?? 0), 0.001)
+              const progressPct = nTurns > 1 ? (turnIdx / (nTurns - 1)) * 100 : 0
+              const dotBase = nTurns > 40 ? 4 : nTurns > 20 ? 6 : 8
+              return (
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-0.5">
+                    {/* Silhouette sparkline */}
+                    {hasSilh && (
+                      <div className="grid items-end" style={{ gridTemplateColumns: `repeat(${nTurns}, 1fr)`, height: 28 }}>
+                        {data.turns.map((t, i) => {
+                          const s = silhEntries[i] ?? 0
+                          const h = Math.max(2, Math.round((Math.max(0, s) / maxSilh) * 24))
+                          return (
+                            <div key={t} className="flex justify-center items-end" style={{ height: '100%' }}>
+                              <div style={{
+                                width: nTurns > 30 ? 2 : 3,
+                                height: h,
+                                background: i === turnIdx ? 'var(--color-accent)' : i < turnIdx ? 'rgba(74,124,89,0.4)' : 'var(--color-border)',
+                                borderRadius: 1,
+                                transition: 'background 0.15s',
+                              }} />
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Track with dot markers */}
+                    <div className="relative" style={{ height: dotBase + 8 }}>
+                      {/* Background line */}
+                      <div className="absolute left-0 right-0 bg-border" style={{ top: Math.floor((dotBase + 8) / 2), height: 1 }} />
+                      {/* Progress fill */}
+                      <div className="absolute bg-accent transition-all duration-150" style={{ top: Math.floor((dotBase + 8) / 2), left: 0, height: 1, width: `${progressPct}%` }} />
+                      {/* Dots */}
+                      <div className="grid absolute inset-0" style={{ gridTemplateColumns: `repeat(${nTurns}, 1fr)` }}>
+                        {data.turns.map((t, i) => {
+                          const s = silhEntries[i]
+                          const tip = `Turn ${t}${s != null ? ` · silhouette ${s.toFixed(3)}` : ''}`
+                          const isCur = i === turnIdx
+                          const isPast = i < turnIdx
+                          return (
+                            <button
+                              key={t}
+                              onClick={() => { setPlaying(false); setTurnIdx(i) }}
+                              title={tip}
+                              className="flex items-center justify-center"
+                            >
+                              <div style={{
+                                width: isCur ? dotBase + 2 : dotBase - 2,
+                                height: isCur ? dotBase + 2 : dotBase - 2,
+                                borderRadius: '50%',
+                                background: isCur ? 'var(--color-accent)' : isPast ? 'rgba(74,124,89,0.5)' : 'var(--color-surface3)',
+                                border: isCur ? '2px solid var(--color-accent)' : `1px solid ${isPast ? 'rgba(74,124,89,0.6)' : 'var(--color-borders)'}`,
+                                boxShadow: isCur ? '0 0 0 3px rgba(74,124,89,0.18)' : 'none',
+                                transition: 'all 0.15s',
+                              }} />
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Turn labels */}
+                    <div className="flex justify-between font-mono text-[11px] text-faint mt-0.5">
+                      <span>T{data.turns[0]}</span>
+                      <span className="text-ink font-bold">Turn {data.turns[turnIdx]}</span>
+                      <span>T{data.turns[nTurns - 1]}</span>
+                    </div>
+                  </div>
+
+                  {/* Action row */}
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setPlaying(p => !p)}
+                      className="font-mono text-[12px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-muted hover:bg-surface2 transition-colors">
+                      {playing ? '⏸ pause' : '▶ play'}
+                    </button>
+                    {data.geometry_aware && (
+                      <label className="flex items-center gap-1.5 font-mono text-[12px] font-bold tracking-wider uppercase text-faint cursor-pointer">
+                        <input type="checkbox" checked={geomAware} onChange={e => toggleGeom(e.target.checked)} className="accent-accent" />
+                        geom-aware
+                      </label>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Plot */}
-            <div ref={plotRef} className="w-full" style={{ height: 440 }} />
+            <div ref={plotRef} className="w-full" style={{ height: 520 }} />
 
             {/* Reducer info */}
-            <p className="font-mono text-[10px] text-faint text-right">
+            <p className="font-mono text-[12px] text-faint text-right mt-3">
               {data.reducer} · {data.n_points} pts
             </p>
           </>

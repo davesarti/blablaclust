@@ -51,11 +51,11 @@ export default function StopSessionModal({ onClose, onClosed }: Props) {
 
         <div className="flex flex-col gap-2">
           <button onClick={exportJSON}
-            className="w-full py-2.5 rounded-sm border border-border text-[13px] font-medium text-muted hover:bg-surface2 transition-colors text-left px-4">
+            className="w-full py-2.5 rounded-sm border border-border text-[15px] font-medium text-muted hover:bg-surface2 transition-colors text-left px-4">
             ↓ Export JSON
           </button>
           <button onClick={exportCSV}
-            className="w-full py-2.5 rounded-sm border border-border text-[13px] font-medium text-muted hover:bg-surface2 transition-colors text-left px-4">
+            className="w-full py-2.5 rounded-sm border border-border text-[15px] font-medium text-muted hover:bg-surface2 transition-colors text-left px-4">
             ↓ Export CSV
           </button>
         </div>
@@ -63,7 +63,7 @@ export default function StopSessionModal({ onClose, onClosed }: Props) {
         <div className="h-px bg-border" />
 
         <button onClick={closeSession} disabled={loading}
-          className="w-full py-2.5 rounded-sm border border-red-200 text-[13px] font-medium text-red-700 bg-red-50 hover:bg-red-100 transition-colors disabled:opacity-50">
+          className="w-full py-2.5 rounded-sm border border-red-200 text-[15px] font-medium text-red-700 bg-red-50 hover:bg-red-100 transition-colors disabled:opacity-50">
           {loading ? 'Closing…' : 'Close without exporting'}
         </button>
       </div>

@@ -16,7 +16,7 @@ export default function Modal({ title, onClose, width = 'max-w-lg', children }: 
         style={{ background: 'var(--color-bg)' }}>
         {/* Modal header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border shrink-0">
-          <h2 className="font-mono text-[11px] font-bold tracking-widest uppercase text-muted">{title}</h2>
+          <h2 className="font-mono text-[14px] font-bold tracking-widest uppercase text-muted">{title}</h2>
           <button onClick={onClose}
             className="w-6 h-6 flex items-center justify-center rounded-sm text-faint hover:text-muted hover:bg-surface2 transition-colors font-mono text-base">
             ×

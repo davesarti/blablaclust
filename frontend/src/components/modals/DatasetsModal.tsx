@@ -21,10 +21,10 @@ function DatasetRow({ dataset, onPreview, onDelete, previewing, deleting }: Data
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2">
           <span className="font-mono text-[15px] font-bold text-ink truncate">{dataset.dataset_name}</span>
-          <span className="font-mono text-[12px] text-faint shrink-0">{dataset.n_points.toLocaleString()} pts</span>
+          <span className="font-mono text-[14px] text-faint shrink-0">{dataset.n_points.toLocaleString()} pts</span>
         </div>
         {dataset.description && (
-          <div className="text-[13px] text-faint mt-0.5 leading-snug">{dataset.description}</div>
+          <div className="text-[15px] text-faint mt-0.5 leading-snug">{dataset.description}</div>
         )}
       </div>
 
@@ -32,7 +32,7 @@ function DatasetRow({ dataset, onPreview, onDelete, previewing, deleting }: Data
         <button
           onClick={() => onPreview(dataset.dataset_id)}
           disabled={previewing}
-          className="font-mono text-[12px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-faint hover:text-muted hover:border-borders transition-colors disabled:opacity-40">
+          className="font-mono text-[14px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-faint hover:text-muted hover:border-borders transition-colors disabled:opacity-40">
           {previewing ? '…' : 'preview'}
         </button>
 
@@ -41,19 +41,19 @@ function DatasetRow({ dataset, onPreview, onDelete, previewing, deleting }: Data
             <button
               onClick={() => { setConfirmDel(false); onDelete(dataset.dataset_id, dataset.dataset_name) }}
               disabled={deleting}
-              className="font-mono text-[12px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition-colors disabled:opacity-40">
+              className="font-mono text-[14px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition-colors disabled:opacity-40">
               {deleting ? '…' : 'confirm'}
             </button>
             <button
               onClick={() => setConfirmDel(false)}
-              className="font-mono text-[12px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-faint hover:text-muted transition-colors">
+              className="font-mono text-[14px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-faint hover:text-muted transition-colors">
               cancel
             </button>
           </>
         ) : (
           <button
             onClick={() => setConfirmDel(true)}
-            className="font-mono text-[12px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-faint hover:text-red-700 hover:border-red-200 transition-colors">
+            className="font-mono text-[14px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-faint hover:text-red-700 hover:border-red-200 transition-colors">
             del
           </button>
         )}
@@ -69,15 +69,15 @@ function PreviewPanel({ preview, onClose }: { preview: DatasetPreview; onClose: 
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <div>
-          <span className="font-mono text-[13px] font-bold tracking-widest uppercase text-faint">
+          <span className="font-mono text-[15px] font-bold tracking-widest uppercase text-faint">
             {preview.dataset_name}
           </span>
-          <span className="font-mono text-[13px] text-faint ml-3">
+          <span className="font-mono text-[15px] text-faint ml-3">
             {preview.points.length} sample rows
           </span>
         </div>
         <button onClick={onClose}
-          className="font-mono text-[12px] text-faint hover:text-muted transition-colors">
+          className="font-mono text-[14px] text-faint hover:text-muted transition-colors">
           ✕ close preview
         </button>
       </div>
@@ -88,14 +88,14 @@ function PreviewPanel({ preview, onClose }: { preview: DatasetPreview; onClose: 
 
       <div className="rounded-sm border border-border" style={{ background: 'var(--color-surface)' }}>
         <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border" style={{ background: 'var(--color-surface2)' }}>
-          <span className="shrink-0 w-7 font-mono text-[11px] font-bold tracking-widest uppercase text-faint">#</span>
-          <span className="flex-1 font-mono text-[11px] font-bold tracking-widest uppercase text-faint">text</span>
+          <span className="shrink-0 w-7 font-mono text-[15px] font-bold tracking-widest uppercase text-faint">#</span>
+          <span className="flex-1 font-mono text-[15px] font-bold tracking-widest uppercase text-faint">text</span>
         </div>
         {preview.points.map((p, i) => (
           <div key={p.id} className="flex items-start gap-3 px-4 py-2.5"
             style={{ borderBottom: i < preview.points.length - 1 ? '1px solid var(--color-border)' : undefined }}>
-            <span className="shrink-0 w-7 font-mono text-[11px] text-faint mt-0.5">{i + 1}</span>
-            <span className="flex-1 text-[13px] text-ink leading-relaxed">
+            <span className="shrink-0 w-7 font-mono text-[15px] text-faint mt-0.5">{i + 1}</span>
+            <span className="flex-1 text-[15px] text-ink leading-relaxed">
               {p.text}
             </span>
           </div>
@@ -145,8 +145,8 @@ function UploadPanel({ onUploaded }: { onUploaded: () => void }) {
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <span className="text-[18px]" style={{ color: 'var(--color-accent)' }}>✓</span>
-          <span className="font-mono text-[13px] font-bold text-ink">{result.dataset_name}</span>
-          <span className="font-mono text-[12px] text-faint">uploaded successfully</span>
+          <span className="font-mono text-[15px] font-bold text-ink">{result.dataset_name}</span>
+          <span className="font-mono text-[14px] text-faint">uploaded successfully</span>
         </div>
         <div className="flex gap-6">
           {[
@@ -156,13 +156,13 @@ function UploadPanel({ onUploaded }: { onUploaded: () => void }) {
           ].map(({ label, value }) => (
             <div key={label} className="flex flex-col items-center gap-0.5">
               <span className="font-mono text-[20px] font-bold text-ink">{value.toLocaleString()}</span>
-              <span className="font-mono text-[11px] text-faint uppercase tracking-wider">{label}</span>
+              <span className="font-mono text-[15px] text-faint uppercase tracking-wider">{label}</span>
             </div>
           ))}
         </div>
         <button
           onClick={() => { setFile(null); setName(''); setResult(null); setState('idle') }}
-          className="self-start font-mono text-[12px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-faint hover:text-muted hover:border-borders transition-colors">
+          className="self-start font-mono text-[14px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-faint hover:text-muted hover:border-borders transition-colors">
           upload another
         </button>
       </div>
@@ -186,19 +186,19 @@ function UploadPanel({ onUploaded }: { onUploaded: () => void }) {
         {file ? (
           <>
             <span className="font-mono text-[15px] font-bold text-ink">{file.name}</span>
-            <span className="font-mono text-[12px] text-faint">{(file.size / 1024).toFixed(1)} KB — click to change</span>
+            <span className="font-mono text-[14px] text-faint">{(file.size / 1024).toFixed(1)} KB — click to change</span>
           </>
         ) : (
           <>
-            <span className="font-mono text-[13px] text-faint">Drop a CSV file here</span>
-            <span className="font-mono text-[11px] text-faint opacity-60">or click to browse · expects: text column</span>
+            <span className="font-mono text-[15px] text-faint">Drop a CSV file here</span>
+            <span className="font-mono text-[15px] text-faint opacity-60">or click to browse · expects: text column</span>
           </>
         )}
       </div>
 
       <div className="flex gap-3">
         <label className="flex flex-col gap-1.5 flex-1">
-          <span className="font-mono text-[11px] font-bold tracking-widest uppercase text-faint">Dataset name</span>
+          <span className="font-mono text-[15px] font-bold tracking-widest uppercase text-faint">Dataset name</span>
           <input
             value={name}
             onChange={e => setName(e.target.value)}
@@ -211,7 +211,7 @@ function UploadPanel({ onUploaded }: { onUploaded: () => void }) {
       </div>
 
       {error && (
-        <div className="px-4 py-3 rounded-sm border border-red-200 bg-red-50 text-[13px] text-red-700">{error}</div>
+        <div className="px-4 py-3 rounded-sm border border-red-200 bg-red-50 text-[15px] text-red-700">{error}</div>
       )}
 
       <button
@@ -283,7 +283,7 @@ export default function DatasetsModal({ onClose }: Props) {
         <div className="flex gap-1 px-6 pt-5 pb-0 shrink-0">
           {(['list', 'upload'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className="font-mono text-[12px] font-bold tracking-widest uppercase px-4 py-2 rounded-t-sm transition-colors"
+              className="font-mono text-[14px] font-bold tracking-widest uppercase px-4 py-2 rounded-t-sm transition-colors"
               style={{
                 color: tab === t ? 'var(--color-ink)' : 'var(--color-faint)',
                 background: tab === t ? 'var(--color-surface)' : 'transparent',
@@ -298,12 +298,12 @@ export default function DatasetsModal({ onClose }: Props) {
           {tab === 'list' && (
             <div className="flex flex-col">
               {loading ? (
-                <div className="py-16 text-center font-mono text-[13px] text-faint">loading…</div>
+                <div className="py-16 text-center font-mono text-[15px] text-faint">loading…</div>
               ) : datasets.length === 0 ? (
                 <div className="py-16 text-center">
-                  <p className="font-mono text-[13px] text-faint mb-4">No datasets yet.</p>
+                  <p className="font-mono text-[15px] text-faint mb-4">No datasets yet.</p>
                   <button onClick={() => setTab('upload')}
-                    className="font-mono text-[12px] font-bold tracking-wider uppercase px-4 py-2 rounded-sm border border-border text-faint hover:text-muted hover:border-borders transition-colors">
+                    className="font-mono text-[14px] font-bold tracking-wider uppercase px-4 py-2 rounded-sm border border-border text-faint hover:text-muted hover:border-borders transition-colors">
                     Upload your first dataset →
                   </button>
                 </div>
@@ -313,7 +313,7 @@ export default function DatasetsModal({ onClose }: Props) {
                     {/* Table header */}
                     <div className="flex items-center gap-4 px-5 py-2.5 border-b border-border"
                       style={{ background: 'var(--color-surface2)' }}>
-                      <span className="flex-1 font-mono text-[11px] font-bold tracking-widest uppercase text-faint">Name</span>
+                      <span className="flex-1 font-mono text-[15px] font-bold tracking-widest uppercase text-faint">Name</span>
                       <span className="shrink-0 w-48" />
                     </div>
                     {datasets.map(d => (
@@ -330,7 +330,7 @@ export default function DatasetsModal({ onClose }: Props) {
 
                   {/* Preview error */}
                   {previewError && (
-                    <div className="mx-6 mt-4 px-4 py-3 rounded-sm border border-red-200 bg-red-50 text-[13px] text-red-700 font-mono">
+                    <div className="mx-6 mt-4 px-4 py-3 rounded-sm border border-red-200 bg-red-50 text-[15px] text-red-700 font-mono">
                       preview error: {previewError}
                     </div>
                   )}
@@ -343,7 +343,7 @@ export default function DatasetsModal({ onClose }: Props) {
                     </div>
                   )}
                   {previewLoading && (
-                    <div className="mx-6 mt-5 py-6 text-center font-mono text-[13px] text-faint">
+                    <div className="mx-6 mt-5 py-6 text-center font-mono text-[15px] text-faint">
                       loading preview…
                     </div>
                   )}

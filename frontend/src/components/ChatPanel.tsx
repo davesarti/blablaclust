@@ -12,7 +12,7 @@ function Message({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === 'user'
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} ${isUser ? 'animate-slide-right' : 'animate-slide-left'}`}>
-      <div className={`max-w-[88%] px-5 py-3.5 rounded-sm text-[17px] leading-relaxed ${
+      <div className={`max-w-[88%] px-5 py-3.5 rounded-sm text-[15px] leading-relaxed ${
         isUser
           ? 'text-white'
           : 'border border-border text-ink'
@@ -34,7 +34,7 @@ function TypingIndicator({ visible }: { visible: boolean }) {
   if (!visible) return null
   return (
     <div className="flex justify-start animate-slide-left">
-      <div className="flex items-center gap-3 px-5 py-3.5 rounded-sm border border-border text-[17px] text-faint"
+      <div className="flex items-center gap-3 px-5 py-3.5 rounded-sm border border-border text-[15px] text-faint"
         style={{ background: 'var(--color-surface)' }}>
         <span className="w-2.5 h-2.5 rounded-full animate-live-dot" style={{ background: 'var(--color-accent)' }} />
         {TYPING_MSGS[msgIdx]}
@@ -114,9 +114,9 @@ export default function ChatPanel() {
       {/* Header */}
       <div className="flex items-center gap-3 px-6 py-4 border-b border-border shrink-0">
         <span className="w-2.5 h-2.5 rounded-full animate-live-dot" style={{ background: 'var(--color-accent)' }} />
-        <span className="font-mono text-[14px] font-bold tracking-widest uppercase text-faint">Chat</span>
+        <span className="font-mono text-[13px] font-bold tracking-widest uppercase text-faint">Chat</span>
         {sess.chat.length > 0 && (
-          <span className="ml-auto font-mono text-[13px] text-faint">{sess.chat.length} msgs</span>
+          <span className="ml-auto font-mono text-[12px] text-faint">{sess.chat.length} msgs</span>
         )}
       </div>
 
@@ -124,7 +124,7 @@ export default function ChatPanel() {
       <div className="flex-1 overflow-y-auto scrollbar-thin px-6 py-6 flex flex-col gap-4">
         {sess.chat.length === 0 && (
           <div className="flex-1 flex items-center justify-center">
-            <p className="text-[17px] text-faint text-center max-w-[260px] leading-relaxed">
+            <p className="text-[15px] text-faint text-center max-w-[260px] leading-relaxed">
               Describe how you'd like to cluster the data, or select clusters first.
             </p>
           </div>
@@ -138,7 +138,7 @@ export default function ChatPanel() {
       {selectedClusters.length > 0 && (
         <div className="px-6 pb-3 flex flex-wrap gap-2 border-t border-border pt-3">
           {selectedClusters.map((c, i) => (
-            <span key={c.id} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-sm border border-border text-[14px] font-mono text-muted"
+            <span key={c.id} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-sm border border-border text-[13px] font-mono text-muted"
               style={{ background: 'var(--color-surface2)' }}>
               #{i + 1} {c.name.slice(0, 22)}
               <button onClick={() => dispatch({ type: 'TOGGLE_CLUSTER_SELECT', clusterId: c.id })}
@@ -159,7 +159,7 @@ export default function ChatPanel() {
             disabled={sess.isBusy || sess.session.status !== 'active'}
             placeholder={sess.session.status !== 'active' ? 'Session closed' : 'Describe a change… (Enter to send)'}
             rows={3}
-            className="flex-1 resize-none rounded-sm border border-border px-4 py-3 text-[17px] leading-relaxed outline-none text-ink placeholder:text-faint disabled:opacity-50 focus:border-borders transition-colors scrollbar-thin"
+            className="flex-1 resize-none rounded-sm border border-border px-4 py-3 text-[15px] leading-relaxed outline-none text-ink placeholder:text-faint disabled:opacity-50 focus:border-borders transition-colors scrollbar-thin"
             style={{ background: 'var(--color-bg)' }}
           />
           <button
