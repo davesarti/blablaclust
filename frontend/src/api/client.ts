@@ -17,8 +17,32 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+export interface DatasetUploadResponse {
+  dataset_id: string; dataset_name: string;
+  inserted: number; skipped: number; embeddings_generated: number;
+}
+export interface DatasetPreview {
+  dataset_id: string; dataset_name: string; description: string;
+  points: { id: string; data: Record<string, unknown>; has_embedding: boolean }[];
+}
+
 // Datasets
 export const getDatasets = () => req<Dataset[]>('/datasets')
+export const previewDataset = (id: string) => req<DatasetPreview>(`/datasets/${id}/preview`)
+export const deleteDataset  = (id: string) => req<{ dataset_id: string; dataset_name: string }>(`/datasets/${id}`, { method: 'DELETE' })
+export const uploadDataset  = (file: File, datasetName: string, generateEmbeddings = true): Promise<DatasetUploadResponse> => {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('dataset_name', datasetName)
+  form.append('generate_embeddings', String(generateEmbeddings))
+  return fetch('/datasets/upload', { method: 'POST', body: form }).then(async res => {
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({ detail: res.statusText }))
+      throw new Error(d.detail ?? res.statusText)
+    }
+    return res.json()
+  })
+}
 
 // Sessions
 export const getSessions   = () => req<Session[]>('/sessions')

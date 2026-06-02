@@ -4,6 +4,7 @@ import { getSessions, getActiveClusters, getTurns, deleteSession } from '../api/
 import type { Session } from '../types'
 import NewSessionModal from './modals/NewSessionModal'
 import EvalModal from './modals/EvalModal'
+import DatasetsModal from './modals/DatasetsModal'
 
 const STATUS_LABEL: Record<string, string> = { active: 'ACTIVE', converged: 'CONVERGED', closed: 'CLOSED' }
 const STATUS_CLS: Record<string, string> = {
@@ -28,6 +29,7 @@ export default function WelcomePage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [evalId, setEvalId] = useState<string | null>(null)
+  const [showDatasets, setShowDatasets] = useState(false)
 
   async function loadSessions() {
     try {
@@ -81,12 +83,20 @@ export default function WelcomePage() {
             Conversational clustering — refine how your data is grouped through natural language.
           </p>
 
-          <button
-            onClick={() => dispatch({ type: 'OPEN_MODAL', modal: 'new-session' })}
-            className="inline-flex items-center gap-2 px-7 py-3.5 rounded-sm font-medium text-[17px] text-white transition-all duration-150 hover:opacity-90 active:scale-95"
-            style={{ background: 'var(--color-accent)' }}>
-            + New session
-          </button>
+          <div className="flex items-center gap-3 justify-center">
+            <button
+              onClick={() => dispatch({ type: 'OPEN_MODAL', modal: 'new-session' })}
+              className="inline-flex items-center gap-2 px-7 py-3.5 rounded-sm font-medium text-[17px] text-white transition-all duration-150 hover:opacity-90 active:scale-95"
+              style={{ background: 'var(--color-accent)' }}>
+              + New session
+            </button>
+            <button
+              onClick={() => setShowDatasets(true)}
+              className="inline-flex items-center gap-2 px-5 py-3.5 rounded-sm font-medium text-[17px] border border-border text-muted hover:bg-surface2 hover:border-borders transition-all duration-150 active:scale-95"
+              style={{ background: 'var(--color-surface)' }}>
+              Datasets
+            </button>
+          </div>
         </div>
 
         {/* Session list */}
@@ -143,6 +153,7 @@ export default function WelcomePage() {
 
       <NewSessionModal onCreated={s => { loadSessions(); handleResume(s) }} />
       {evalId && <EvalModal sessionId={evalId} onClose={() => setEvalId(null)} />}
+      {showDatasets && <DatasetsModal onClose={() => setShowDatasets(false)} />}
     </>
   )
 }

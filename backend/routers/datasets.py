@@ -72,6 +72,28 @@ def upload_dataset(
     return DatasetUploadResponse(dataset_name=dataset_name, **result)
 
 
+@router.get("/{dataset_id}/preview")
+def preview_dataset(dataset_id: str, limit: int = 20, db: Session = Depends(get_db)):
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).one_or_none()
+    if dataset is None:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
+    points = (
+        db.query(DataPoint)
+        .filter(DataPoint.dataset_id == dataset_id)
+        .limit(limit)
+        .all()
+    )
+    return {
+        "dataset_id": dataset_id,
+        "dataset_name": dataset.name,
+        "description": dataset.description or "",
+        "points": [
+            {"id": p.id, "data": p.data, "has_embedding": p.embedding is not None}
+            for p in points
+        ],
+    }
+
+
 @router.delete("/{dataset_id}")
 def delete_dataset(dataset_id: str, db: Session = Depends(get_db)):
     dataset = db.query(Dataset).filter(Dataset.id == dataset_id).one_or_none()
