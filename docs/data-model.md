@@ -10,21 +10,39 @@ test and fix the doc.
 ## Overview
 
 ```
-ChatSession ──< Cluster ──< SoftAssignment >── DataPoint
+ChatSession ──< Cluster ──< SoftAssignment >── DataPoint ──< Dataset
      │                          (turn N)
      └──< Turn
 ```
 
-A **session** is one oracle's clustering conversation over a dataset. Within a
-session, **clusters** are created and dissolved over time, and a **soft
-assignment** records the probability that a given **data point** belongs to a
-given cluster *at a specific turn*. **Turns** are the conversation log.
+A **session** is one oracle's clustering conversation over a dataset — it is
+the central entity. Within a session, **clusters** are created and dissolved
+over time, and a **soft assignment** records the probability that a given
+**data point** belongs to a given cluster *at a specific turn*. **Turns** are
+the conversation log.
 
-Data points are **dataset-scoped, not session-scoped**: they exist independently
-of any session (they're seeded and embedded once) and are referenced by soft
-assignments across sessions.
+A **dataset** is a named, described collection of data points. Data points are
+**dataset-scoped, not session-scoped**: they exist independently of any session
+(they're seeded and embedded once) and are referenced by soft assignments across
+sessions. Sessions reference a dataset via `dataset_id`; deleting a dataset
+cascades to its data points and sessions at the DB level.
 
 ## Tables
+
+### `datasets` — `Dataset`
+
+A named, described collection of data points.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `String(36)` | PK (UUID). |
+| `name` | `String(255)` | Unique. Human-readable dataset name. |
+| `description` | `Text` | LLM-generated or manually supplied; empty string by default. |
+
+Relationship: `data_points` (one-to-many, `delete-orphan`). Deleting a dataset
+also cascades to its sessions at the DB level (`ondelete="CASCADE"` on the FK in
+`sessions`), but that relationship is not surfaced as an ORM collection on
+`Dataset`.
 
 ### `data_points` — `DataPoint`
 
@@ -33,11 +51,11 @@ A single record from the source dataset, plus its embedding.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `String(36)` | PK (UUID). |
-| `dataset_name` | `String(255)` | Indexed. Which dataset this row belongs to. |
+| `dataset_id` | `String(36)` | Indexed. FK → `datasets.id` (`ondelete="CASCADE"`). |
 | `data` | `JSON` | The raw record, e.g. `{"text": "..."}`. |
 | `embedding` | `JSON`, nullable | Vector as a JSON list; `NULL` until embeddings are generated. |
 
-Relationship: `soft_assignments` (one-to-many, `delete-orphan`).
+Relationships: `dataset` (many-to-one), `soft_assignments` (one-to-many, `delete-orphan`).
 
 ### `sessions` — `ChatSession`
 
@@ -46,12 +64,15 @@ One clustering conversation.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `String(36)` | PK (UUID). |
-| `dataset_name` | `String(255)` | Indexed. Dataset being clustered. |
+| `name` | `String(255)`, nullable | Optional human-readable label. |
+| `dataset_id` | `String(36)` | Indexed. FK → `datasets.id` (`ondelete="CASCADE"`). |
 | `embedding_model` | `String(255)` | Model used to embed the points. |
 | `status` | `String(32)` | Default `active`. **Constraint** `ck_sessions_status`: one of `active`, `converged`, `closed`. |
+| `oracle_kind` | `String(16)` | Default `human`. **Constraint** `ck_sessions_oracle_kind`: one of `human`, `persona`. |
+| `persona_snapshot` | `JSON`, nullable | Persona config frozen at session creation; `NULL` for human sessions. |
 
-Relationships: `clusters` and `turns` (one-to-many, both `delete-orphan` — see
-[Cascade](#cascade-deletes)).
+Relationships: `dataset` (many-to-one), `clusters` and `turns` (one-to-many,
+both `delete-orphan` — see [Cascade](#cascade-deletes)).
 
 ### `clusters` — `Cluster`
 
@@ -138,9 +159,13 @@ to zero.
 `soft_assignments`, all via `cascade="all, delete-orphan"`. Deleting a session
 therefore removes its clusters, turns, and (transitively) their soft assignments.
 
-`DataPoint` rows are **not** owned by a session — they're dataset-scoped and
-survive session deletion. Deleting a data point cascades to its own soft
-assignments only.
+`Dataset` owns its `data_points` via ORM `cascade="all, delete-orphan"`. It also
+cascades to sessions at the **DB level** (`ondelete="CASCADE"` on both
+`data_points.dataset_id` and `sessions.dataset_id`), so deleting a dataset wipes
+its points and all sessions (plus their clusters/turns/assignments transitively).
+
+`DataPoint` rows survive session deletion — they're dataset-scoped. Deleting a
+data point cascades to its own soft assignments only.
 
 > SQLite does not enforce foreign keys unless `PRAGMA foreign_keys=ON` is set; the
 > smoke test enables it on connect so FK behaviour matches production.
