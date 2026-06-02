@@ -28,7 +28,15 @@ def list_datasets(db: Session = Depends(get_db)):
         .group_by(DataPoint.dataset_id)
         .all()
     )
-    datasets = db.query(Dataset).order_by(Dataset.name).all()
+    # Exclude frozen/held-out splits — they exist for evaluation only and must
+    # not be selectable as a clustering dataset in the UI or via the API.
+    # Convention: any dataset whose name ends with "_frozen" is a held-out split.
+    datasets = (
+        db.query(Dataset)
+        .filter(~Dataset.name.like("%_frozen"))
+        .order_by(Dataset.name)
+        .all()
+    )
     return [
         {
             "dataset_id": d.id,
