@@ -90,4 +90,8 @@ def serve_ui():
 
 if __name__ == "__main__":
     _auto_seed()   # no-op after the first run
+    from src.engine.f_semantic_reembed import _get_st_model
+    print("[startup] pre-loading sentence-transformer model…", flush=True)
+    _get_st_model()
+    print("[startup] model ready.", flush=True)
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=False)

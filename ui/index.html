@@ -129,6 +129,10 @@
       color: var(--text);
       background: var(--surface-2);
     }
+    #header .btn-back:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
     .status-badge {
       font-family: var(--mono);
       font-size: 10px;
@@ -148,8 +152,9 @@
       height: 100vh;
       height: 100dvh;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       flex-direction: column;
+      padding-top: 14dvh;
       position: relative;
     }
     #welcome.visible { display: flex; }
@@ -233,8 +238,9 @@
       text-align: left;
       position: relative;
       z-index: 1;
+      min-height: 0;
     }
-    #session-list.visible { display: block; }
+    #session-list.visible { display: flex; flex-direction: column; }
     .session-list-label {
       font-family: var(--mono);
       font-size: 10px;
@@ -243,7 +249,16 @@
       text-transform: uppercase;
       color: var(--text-faint);
       margin-bottom: 10px;
+      flex: 0 0 auto;
     }
+    #session-list-inner {
+      overflow-y: auto;
+      max-height: min(45dvh, 360px);
+      padding-right: 6px;
+    }
+    #session-list-inner::-webkit-scrollbar { width: 3px; }
+    #session-list-inner::-webkit-scrollbar-track { background: transparent; }
+    #session-list-inner::-webkit-scrollbar-thumb { background: var(--border-s); border-radius: 2px; }
     .session-row {
       display: flex;
       align-items: center;
@@ -645,6 +660,18 @@
       align-items: center;
       gap: 8px;
       margin-bottom: 6px;
+    }
+    .cluster-number {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--ca, var(--text-muted));
+      background: color-mix(in srgb, var(--ca, var(--border-s)) 12%, transparent);
+      border: 1px solid color-mix(in srgb, var(--ca, var(--border)) 30%, transparent);
+      border-radius: 4px;
+      padding: 1px 5px;
+      flex-shrink: 0;
+      line-height: 1.6;
     }
     .card-header .emoji { font-size: 15px; line-height: 1; flex-shrink: 0; }
     .card-header h3 {
@@ -1176,13 +1203,44 @@
 
     .review-list { list-style: none; }
     .review-list li {
-      padding: 9px 0;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 10px 8px 10px 4px;
       border-bottom: 1px solid var(--border);
       font-size: 12px;
       line-height: 1.65;
       color: var(--text-muted);
+      border-radius: 2px;
+      transition: background 0.12s;
     }
     .review-list li:last-child { border-bottom: none; }
+    .review-list li:hover { background: var(--accent-dim); }
+    .review-list .idx {
+      flex: 0 0 auto;
+      min-width: 24px;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--accent);
+      padding-top: 2px;
+      text-align: right;
+      user-select: none;
+    }
+    .review-list .txt { flex: 1 1 auto; word-break: break-word; }
+    .review-list mark {
+      background: rgba(74,124,89,.22);
+      color: var(--text);
+      font-weight: 600;
+      padding: 0 2px;
+      border-radius: 2px;
+    }
+    .review-list .empty {
+      justify-content: center;
+      color: var(--text-faint);
+      font-style: italic;
+    }
 
     /* ── RESPONSIVE ── */
     @media (max-width: 580px) {
@@ -1523,6 +1581,15 @@
       <input type="range" id="umap-slider" min="0" max="0" value="0" step="1"
              oninput="umapStopPlay(); renderUmapTurn(+this.value)" aria-label="Turn" />
       <span class="umap-meta" id="umap-info"></span>
+      <!-- Phase 2: geometry-aware view (re-fits UMAP on the hybrid space at
+           semantic_reembed turns so the layout follows the re-oriented geometry
+           instead of cutting across the original topic plot). No-op on turns
+           without a semantic_reembed op. -->
+      <label class="umap-meta" style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+        <input type="checkbox" id="umap-geom-aware" onchange="umapToggleGeometryAware()"
+               aria-label="Geometry-aware re-embed view">
+        geom-aware
+      </label>
     </div>
     <div id="umap-plot"><div class="umap-status">—</div></div>
     <div class="modal-actions">
@@ -1579,6 +1646,7 @@ const state = {
   chat: [],
   selectedClusterIds: new Set(),
   drawerExpanded: false,
+  isBusy: false,
 };
 
 // expand modal cache
@@ -1603,7 +1671,7 @@ function renderClusters() {
   const grid     = document.getElementById('cluster-grid');
   const visible  = state.clusters.filter(c => c.count > 0);
   const maxCount = Math.max(...visible.map(c => c.count), 1);
-  grid.innerHTML = visible.map(c => `
+  grid.innerHTML = visible.map((c, idx) => `
     <div class="cluster-card ${state.selectedClusterIds.has(c.id) ? 'selected' : ''}"
          onclick="selectCluster('${c.id}')"
          tabindex="0"
@@ -1611,6 +1679,7 @@ function renderClusters() {
          aria-pressed="${state.selectedClusterIds.has(c.id)}"
          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectCluster('${c.id}')}">
       <div class="card-header">
+        <span class="cluster-number">${idx + 1}</span>
         <span class="emoji">${c.emoji}</span>
         <h3>${c.name}</h3>
         <span class="count-pill">${c.count}</span>
@@ -1635,9 +1704,9 @@ function updateInputPlaceholder() {
   const n = names.length;
   if (n === 0) { el.placeholder = 'Share your feedback on the clusters…'; return; }
   const parts = [];
-  if (n >= 2) parts.push(`merge "${names[0]}" and "${names[1]}"`);
-  parts.push(`split "${names[n - 1]}" into 3`);
-  parts.push(`rename "${names[0]}" to "…"`);
+  if (n >= 2) parts.push(`merge cluster 1 and 2`);
+  parts.push(`split cluster ${n} into 3`);
+  parts.push(`rename cluster 1 to "…"`);
   parts.push(`make ${n + 1} clusters`);
   parts.push(`cluster by sentiment`);
   el.placeholder = `e.g. ${parts.join('  ·  ')}`;
@@ -1814,21 +1883,27 @@ async function loadRecentSessions() {
 
 // Populate the welcome-screen meta line from the datasets actually loaded in
 // the DB, instead of a hardcoded "1,500 reviews / Amazon Electronics" label.
-// UI-only: /datasets exposes dataset names (no per-row count), so we show the
-// real name(s) and fall back gracefully if the call fails.
 async function loadWelcomeStats() {
   const meta = document.getElementById('welcome-meta');
   if (!meta) return;
   try {
     const res = await fetch('/datasets');
     if (!res.ok) return;
-    const datasets = await res.json();
-    const names = (datasets || []).map(d => d.dataset_name).filter(Boolean);
+    const datasets = (await res.json()) || [];
+    const totalPoints = datasets.reduce((s, d) => s + (Number(d.n_points) || 0), 0);
+    const fmt = (n) => n.toLocaleString();
 
     let label;
-    if (names.length === 0)      label = 'No datasets loaded';
-    else if (names.length === 1) label = names[0];
-    else                         label = `${names.length} datasets available`;
+    if (datasets.length === 0) {
+      label = 'No datasets loaded';
+    } else if (datasets.length === 1) {
+      const d = datasets[0];
+      label = Number.isFinite(d.n_points)
+        ? `${d.dataset_name} · ${fmt(d.n_points)} records`
+        : d.dataset_name;
+    } else {
+      label = `${datasets.length} datasets · ${fmt(totalPoints)} records`;
+    }
 
     const mk = (txt) => {
       const s = document.createElement('span');
@@ -2099,6 +2174,9 @@ async function sendMessage() {
   startLoadingMessage(typingEl);
   document.getElementById('typing-indicator').classList.add('visible');
 
+  state.isBusy = true;
+  _updateBackBtn();
+
   try {
     const payload = {
       session_id:         state.sessionId,
@@ -2130,6 +2208,8 @@ async function sendMessage() {
     document.getElementById('typing-indicator').classList.remove('visible');
     btn.disabled    = false;
     btn.textContent = 'Send';
+    state.isBusy = false;
+    _updateBackBtn();
   }
 }
 
@@ -2164,6 +2244,9 @@ function closeModal(id) { document.getElementById(id).classList.remove('visible'
 
 // ── UMAP clustering map (P2 — clustering evolution over turns) ───────────────
 let _umapData = null;
+// Phase 2: when true, the fetch asks the backend for the geometry-aware payload
+// (second UMAP per semantic_reembed turn). The checkbox in the modal toggles it.
+let _umapGeometryAware = false;
 const _UMAP_PALETTE = ['#4a7c59','#c06b3e','#3e6fa3','#a3543e','#6b8e23','#8a5a9e',
                        '#2e8b8b','#b07a2e','#9e3e5a','#5a6e8a','#7a9e3e','#3e8a5a'];
 const _umapColorMap = {};
@@ -2179,12 +2262,16 @@ async function openUmap() {
   if (!state.sessionId) { alert('Open a session first.'); return; }
   openModal('modal-umap');
   umapStopPlay();
+  if (window.Plotly) Plotly.purge('umap-plot');  // release any prior plot before re-render
   document.getElementById('umap-plot').innerHTML =
     '<div class="umap-status">Computing UMAP projection… (the first run can take a few seconds)</div>';
   document.getElementById('umap-info').textContent = '';
   document.getElementById('umap-turn-label').textContent = 'Turn —';
   try {
-    const res = await fetch(`/sessions/${state.sessionId}/umap`);
+    // no-store: a merge/split adds a new snapshot turn server-side, so the
+    // projection must never be served from the browser HTTP cache.
+    const qs = _umapGeometryAware ? '?geometry_aware=true' : '';
+    const res = await fetch(`/sessions/${state.sessionId}/umap${qs}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     _umapData = await res.json();
     for (const k in _umapColorMap) delete _umapColorMap[k];  // stable colours per load
@@ -2203,16 +2290,41 @@ async function openUmap() {
   }
 }
 
+// Wrap a data point's text to <=maxLines lines of ~width chars for a readable
+// hover tooltip (collapses whitespace, adds an ellipsis when truncated).
+function _umapWrap(s, width, maxLines) {
+  s = (s || '').replace(/\s+/g, ' ').trim();
+  if (!s) return '<i>(no text)</i>';
+  const words = s.split(' ');
+  const lines = []; let cur = '';
+  for (const w of words) {
+    if (cur && (cur + ' ' + w).length > width) { lines.push(cur); cur = w; }
+    else cur = cur ? cur + ' ' + w : w;
+    if (lines.length >= maxLines) break;
+  }
+  if (lines.length < maxLines && cur) lines.push(cur);
+  let out = lines.join('<br>');
+  if (lines.join(' ').length < s.length) out += '…';
+  return out;
+}
+
 function renderUmapTurn(ti) {
   if (!_umapData || !_umapData.turns.length) return;
   const turn   = _umapData.turns[ti];
   const labels = _umapData.assignments[String(turn)] || [];
-  const pts    = _umapData.points;
+  // Phase 2: on semantic_reembed turns, the geometry_aware payload (when present)
+  // gives a SECOND UMAP fit on the hybrid (D+1) space — same point order as
+  // _umapData.points, so we can just swap the x/y. On non-reembed turns the
+  // geometry-aware data is absent and we fall back to the baseline layout.
+  const gaEntry = (_umapGeometryAware && _umapData.geometry_aware)
+                   ? _umapData.geometry_aware[String(turn)] : null;
+  const pts    = gaEntry ? gaEntry.points : _umapData.points;
   const groups = {};
   for (let i = 0; i < pts.length; i++) {
     const cid = labels[i] || 'unassigned';
     (groups[cid] = groups[cid] || []).push(i);
   }
+  const conf = (_umapData.confidence && _umapData.confidence[String(turn)]) || [];
   const traces = Object.entries(groups).map(([cid, idxs]) => {
     const meta  = _umapData.clusters[cid] || {};
     const cname = meta.name || cid;
@@ -2221,12 +2333,23 @@ function renderUmapTurn(ti) {
     return {
       x: idxs.map(i => pts[i].x),
       y: idxs.map(i => pts[i].y),
-      text: idxs.map(i => pts[i].text),
+      // [wrapped text, confidence] per point → clean, readable hover tooltip.
+      // The geometry-aware payload omits text to keep it small, so always read
+      // from the baseline _umapData.points (same point order, same index).
+      customdata: idxs.map(i => [
+        _umapWrap(_umapData.points[i].text, 44, 3),
+        conf[i] != null ? Math.round(conf[i] * 100) + '%' : 'n/a',
+      ]),
+      meta: cname,
       name: (isNew ? '✦ ' : '') + cname + ' (' + idxs.length + ')',
-      mode: 'markers', type: 'scattergl',
+      // SVG scatter (not scattergl): 1200 pts render fine and we avoid WebGL
+      // context exhaustion — repeated opens/renders were leaving the plot blank.
+      mode: 'markers', type: 'scatter',
       marker: { size: isNew ? 7 : 5, color: _umapColor(cid), opacity: isNew ? 0.95 : 0.7,
                 line: { width: isNew ? 1.1 : 0, color: '#222' } },
-      hovertemplate: '%{text}<extra>' + cname + '</extra>',
+      hovertemplate:
+        '<b>%{meta}</b><br>%{customdata[0]}' +
+        '<br><span style="color:#9a958c">confidence %{customdata[1]}</span><extra></extra>',
     };
   });
   // Merge/split deltas vs the previous snapshot turn.
@@ -2243,10 +2366,18 @@ function renderUmapTurn(ti) {
     legend: { font: { size: 10 } },
     paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
     font: { family: 'monospace', size: 11 },
+    hovermode: 'closest',
+    hoverlabel: { align: 'left', bgcolor: '#fbf9f4', bordercolor: '#d8d2c4',
+                  font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#2a2a28' } },
   };
   // ── Semantic re-embed overlays ────────────────────────────────────────────
+  // The ghost-centroids and axis-arrow overlays are computed in the BASELINE
+  // 2-D layout (see backend `axis_arrows` / `centroids_by_turn`). In geometry-
+  // aware mode the coordinates change, so we suppress the overlays — they would
+  // sit in the wrong place. The cluster colouring is the same partition either
+  // way, so the re-embed event is still visually obvious.
   const isReembed = (_umapData.reembed_turns || []).includes(turn);
-  if (isReembed && ti > 0) {
+  if (isReembed && ti > 0 && !gaEntry) {
     // Ghost circles: centroids of dissolved clusters from the previous turn.
     const prevTurn = _umapData.turns[ti - 1];
     const prevCents = ((_umapData.centroids_by_turn || {})[String(prevTurn)]) || {};
@@ -2258,7 +2389,7 @@ function renderUmapTurn(ti) {
         text: prevEntries.map(([cid]) => (_umapData.clusters[cid] || {}).name || cid),
         name: 'Previous clusters',
         mode: 'markers',
-        type: 'scattergl',
+        type: 'scatter',
         marker: { symbol: 'circle-open', size: 52, color: '#888',
                   line: { width: 2.5, color: '#888' } },
         hovertemplate: '<b>%{text}</b><br>(dissolved this turn)<extra></extra>',
@@ -2302,9 +2433,13 @@ function renderUmapTurn(ti) {
   if (leftover) leftover.remove();
   Plotly.react(gd, traces, layout, { displayModeBar: false, responsive: true });
   document.getElementById('umap-turn-label').textContent = 'Turn ' + turn;
+  // Real cluster count = point groups only (exclude overlay traces: ghost
+  // centroids + axis arrow pushed for re-embed turns, and any 'unassigned').
+  const clusterCount = Object.keys(groups).filter(c => c !== 'unassigned').length;
   document.getElementById('umap-info').textContent =
-    traces.length + ' clusters · ' + String(_umapData.reducer).toUpperCase() +
+    clusterCount + ' clusters · ' + String(_umapData.reducer).toUpperCase() +
     (sil != null ? ' · silhouette ' + sil.toFixed(3) : '') +
+    (gaEntry ? ' · geom-aware: ' + (gaEntry.axis_label || 'axis') : '') +
     (newCount ? ' · ✦' + newCount + ' new' : '') +
     (dissolvedCount ? ' · −' + dissolvedCount + ' gone' : '');
 }
@@ -2327,6 +2462,16 @@ function umapStopPlay() {
   if (_umapPlayTimer) { clearInterval(_umapPlayTimer); _umapPlayTimer = null; }
   const btn = document.getElementById('umap-play');
   if (btn) btn.textContent = '▶';
+}
+
+// Phase 2: flip the geometry-aware flag and re-fetch so the modal re-renders
+// with (or without) the secondary UMAP per semantic_reembed turn.
+function umapToggleGeometryAware() {
+  const cb = document.getElementById('umap-geom-aware');
+  _umapGeometryAware = !!(cb && cb.checked);
+  // Reuse openUmap so the loading state, no-store fetch, and re-render path are
+  // exercised exactly as on the first open — keeps the two paths consistent.
+  if (state.sessionId) openUmap();
 }
 
 function _umapExportName(ext) {
@@ -2380,6 +2525,7 @@ async function startSession() {
     const sessData  = await sessRes.json();
     state.sessionId = sessData.id;
 
+    state.isBusy = true;
     startLoadingMessage(btn);
     let clRes = await fetch(`/clusters/${state.sessionId}`, {
       method:  'POST',
@@ -2433,6 +2579,7 @@ async function startSession() {
     showError(e.message);
     state.sessionId = null;
   } finally {
+    state.isBusy = false;
     stopLoadingMessage();
     btn.disabled    = false;
     btn.textContent = 'Start';
@@ -2448,6 +2595,24 @@ function _pointText(p) {
     ?? JSON.stringify(p.data);
 }
 
+function _escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function _highlight(text, query) {
+  const escaped = _escapeHtml(text);
+  if (!query) return escaped;
+  const q = query.trim();
+  if (!q) return escaped;
+  const safe = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return escaped.replace(new RegExp(safe, 'gi'), m => `<mark>${m}</mark>`);
+}
+
 function _renderExpandList(filter) {
   const lower    = filter.trim().toLowerCase();
   const filtered = lower
@@ -2456,10 +2621,14 @@ function _renderExpandList(filter) {
 
   const shown   = (_expandShowAll || lower) ? filtered : filtered.slice(0, 5);
   const hasMore = !lower && !_expandShowAll && filtered.length > 5;
+  const pad     = String(filtered.length).length;
 
   document.getElementById('expand-list').innerHTML = shown.length
-    ? shown.map(p => `<li>${_pointText(p)}</li>`).join('')
-    : '<li>No results.</li>';
+    ? shown.map((p, i) => {
+        const idx = String(i + 1).padStart(pad, '0');
+        return `<li><span class="idx">${idx}</span><span class="txt">${_highlight(_pointText(p), filter)}</span></li>`;
+      }).join('')
+    : '<li class="empty">No results.</li>';
 
   const footer = document.getElementById('expand-footer');
   if (hasMore) {
@@ -2483,7 +2652,7 @@ async function expandCluster(id) {
   _expandShowAll = false;
   document.getElementById('lbl-expand').textContent = `${c.emoji} ${c.name}`;
   document.getElementById('expand-search').value    = '';
-  document.getElementById('expand-list').innerHTML  = '<li>Loading…</li>';
+  document.getElementById('expand-list').innerHTML  = '<li class="empty">Loading…</li>';
   document.getElementById('expand-footer').style.display = 'none';
   openModal('modal-expand');
 
@@ -2496,7 +2665,7 @@ async function expandCluster(id) {
     document.getElementById('lbl-expand').textContent = `${c.emoji} ${c.name} (${_expandPoints.length} reviews)`;
     _renderExpandList('');
   } catch (e) {
-    document.getElementById('expand-list').innerHTML = `<li>Error: ${e.message}</li>`;
+    document.getElementById('expand-list').innerHTML = `<li class="empty">Error: ${_escapeHtml(e.message)}</li>`;
   }
 }
 
@@ -2507,7 +2676,18 @@ document.getElementById('expand-search').addEventListener('input', e => {
 
 // ── SESSION CLOSE ──────────────────────────────────────────────────────────
 
+function _updateBackBtn() {
+  const btn = document.querySelector('#header .btn-back');
+  if (!btn) return;
+  btn.disabled = state.isBusy;
+  btn.title = state.isBusy ? 'Please wait — an operation is in progress' : '';
+}
+
 function goBackToWelcome() {
+  if (state.isBusy) {
+    alert('An operation is in progress. Please wait for it to finish before leaving this session.');
+    return;
+  }
   state.sessionId = null;
   state.selectedClusterIds.clear();
   state.drawerExpanded = false;

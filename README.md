@@ -45,6 +45,31 @@ python scripts/cli.py --session <id>        # resume an existing session
 running the bare API), use the helpers in `src/dataset_processing/`, or upload a dataset
 at runtime via `POST /datasets/upload` (handles insert + embedding in one call).
 
+### LLM-as-oracle (persona) sessions
+
+Run a clustering session end-to-end with an LLM playing the oracle. Each persona is a
+JSON file in `personas/` defining a goal, tone notes, dataset, `k_initial`, and an
+optional model override. The runner creates a session per persona (visible in the UI
+as `persona/<name>`), drives the turn loop via the live API, and writes a
+`results.jsonl` + `summary.md` to `reports/<timestamp>-persona/`.
+
+```bash
+# 1. Start the API (in another terminal)
+PYTHONPATH=. python scripts/serve_ui.py
+
+# 2. Run one or more personas
+python scripts/run_persona_eval.py \
+    --personas personas/curious_explorer.json \
+    --max-turns 12
+
+# Globs work — run all shipped personas at once
+python scripts/run_persona_eval.py --personas 'personas/*.json'
+```
+
+Each run terminates per-persona on `oracle_satisfied`, `system_stop`, `max_turns`, or
+on an error (`oracle_parse_error` / `api_error`). The end-of-session `/sessions/{sid}/eval`
+metrics (A1–A3, B1–B4) are folded into each row automatically.
+
 ## Project structure
 
 ```

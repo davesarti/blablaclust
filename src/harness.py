@@ -21,11 +21,17 @@ BASE_DELAY = float(os.environ.get("HARNESS_BASE_DELAY", "1.0"))
 MAX_DELAY = float(os.environ.get("HARNESS_MAX_DELAY", "60.0"))
 MAX_INPUT_TOKENS = int(os.environ.get("MAX_INPUT_TOKENS_PER_TURN", "8000"))
 
-# Pricing per million tokens (input, output) — update when Anthropic changes rates
+# Pricing per million tokens (input, output) — update when a provider changes
+# rates. Keys are the model slugs each provider reports: bare names for Anthropic,
+# fully-qualified `vendor/model` slugs for OpenRouter. Gemini has no prompt-cache
+# billing on our usage (cache_* tokens are always 0), so cache rates are 0.
 _PRICING: dict[str, dict[str, float]] = {
     "claude-sonnet-4-6": {"input": 3.0, "output": 15.0, "cache_read": 0.30, "cache_write": 3.75},
     "claude-opus-4-7":   {"input": 15.0, "output": 75.0, "cache_read": 1.50, "cache_write": 18.75},
     "claude-haiku-4-5-20251001": {"input": 0.80, "output": 4.0, "cache_read": 0.08, "cache_write": 1.0},
+    # OpenRouter (Google Gemini) — rates per OpenRouter's published pricing.
+    "google/gemini-2.5-flash":      {"input": 0.30, "output": 2.50, "cache_read": 0.0, "cache_write": 0.0},
+    "google/gemini-2.5-flash-lite": {"input": 0.10, "output": 0.40, "cache_read": 0.0, "cache_write": 0.0},
 }
 
 _DRY_RUN_OUTPUT = json.dumps({
@@ -348,14 +354,33 @@ def extract_usage(message: "anthropic.types.Message") -> dict[str, int]:
     }
 
 # stima il costo in dollari delle chiamate effettuate al modello
-def estimate_cost_usd(usage: dict[str, int], model: str = DEFAULT_MODEL) -> float:
+def _active_model() -> str:
+    """The model the active provider will actually call.
+
+    Cost must be priced against the model that produced the tokens — not always
+    the Anthropic default. Callers that already know the model (e.g. from
+    ``LLMResponse.model``) should pass it explicitly; callers that don't (the
+    turn router) rely on this to resolve it from ``LLM_PROVIDER`` + the provider's
+    model env var.
+    """
+    provider = os.environ.get("LLM_PROVIDER", "claude").lower()
+    if provider == "openrouter":
+        return os.environ.get("OPENROUTER_MODEL", DEFAULT_MODEL)
+    if provider == "openai":
+        return os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
+    return DEFAULT_MODEL
+
+
+def estimate_cost_usd(usage: dict[str, int], model: str | None = None) -> float:
+    if model is None:
+        model = _active_model()
     rates = _PRICING.get(model, _PRICING["claude-sonnet-4-6"])
     per_m = 1_000_000
     return (
         usage.get("input_tokens", 0) * rates["input"] / per_m
         + usage.get("output_tokens", 0) * rates["output"] / per_m
-        + usage.get("cache_read_tokens", 0) * rates["cache_read"] / per_m
-        + usage.get("cache_creation_tokens", 0) * rates["cache_write"] / per_m
+        + usage.get("cache_read_tokens", 0) * rates.get("cache_read", 0.0) / per_m
+        + usage.get("cache_creation_tokens", 0) * rates.get("cache_write", 0.0) / per_m
     )
 
 
@@ -366,7 +391,7 @@ def estimate_cost_usd(usage: dict[str, int], model: str = DEFAULT_MODEL) -> floa
 def call_llm(
     messages: list[dict[str, str]],
     system: str,
-    max_tokens: int = 2048,
+    max_tokens: int = 8192,
 ) -> LLMResponse:
     provider = os.environ.get("LLM_PROVIDER", "claude").lower()
     if provider == "openai":

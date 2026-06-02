@@ -44,7 +44,7 @@ class TestCosineAxisScores:
         mock_model = MagicMock()
         mock_model.encode.return_value = np.ones(4, dtype=np.float64)
 
-        with patch(f"{MOD}.SentenceTransformer", return_value=mock_model):
+        with patch(f"{MOD}._get_st_model", return_value=mock_model):
             from src.engine.f_semantic_reembed import _cosine_axis_scores
             scores = _cosine_axis_scores(points, "very angry text", "calm satisfied text")
 
@@ -57,7 +57,7 @@ class TestCosineAxisScores:
         mock_model = MagicMock()
         mock_model.encode.return_value = np.zeros(4, dtype=np.float64)
 
-        with patch(f"{MOD}.SentenceTransformer", return_value=mock_model):
+        with patch(f"{MOD}._get_st_model", return_value=mock_model):
             from src.engine.f_semantic_reembed import _cosine_axis_scores
             _cosine_axis_scores(points, "high pole text", "low pole text")
 
@@ -89,7 +89,7 @@ class TestCosineAxisScores:
         mock_model = MagicMock()
         mock_model.encode.side_effect = [pole_pos, pole_neg]
 
-        with patch(f"{MOD}.SentenceTransformer", return_value=mock_model):
+        with patch(f"{MOD}._get_st_model", return_value=mock_model):
             from src.engine.f_semantic_reembed import _cosine_axis_scores
             scores = _cosine_axis_scores([dp_pos, dp_neg], "high text", "low text")
 

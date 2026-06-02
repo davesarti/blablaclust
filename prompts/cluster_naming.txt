@@ -1,4 +1,4 @@
-You are labeling clusters of customer reviews. Each cluster was grouped together
+You are labeling clusters of text documents. Each cluster was grouped together
 by an embedding-based clustering algorithm — your job is to give each group a
 clear, human-readable label.
 {axis_context}
@@ -8,6 +8,10 @@ CLUSTERS
 TASK
 For each cluster, produce a short, specific name and a one-sentence description.
 Be concrete and specific to what distinguishes THIS cluster from the others.
+Prefer a precise label that names the actual theme of the texts (e.g. "Space
+exploration missions") over a vague catch-all ("Science topics"). Use the
+domain language of the documents themselves — do not assume reviews, products,
+sentiment, or any other framing unless the texts make it explicit.
 
 Respond with a single valid JSON object mapping each cluster id to its label.
 No markdown fences, no commentary outside the JSON. Inside name/description

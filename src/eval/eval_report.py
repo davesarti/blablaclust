@@ -1,4 +1,4 @@
-"""Shared eval report writer used by both the API endpoint and run_eval.py."""
+"""Shared eval report writer used by both the API endpoint and run_scenario_eval.py."""
 
 import datetime
 import json
@@ -10,7 +10,7 @@ def write_report(record: dict, out_dir: str) -> None:
     """Write one eval record to results.jsonl + summary.md in out_dir."""
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, "results.jsonl"), "w") as f:
-        f.write(json.dumps(record) + "\n")
+        f.write(json.dumps(record, indent=2) + "\n")
     write_summary([record], out_dir)
 
 

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from backend.main import get_db
 from backend.session_state import build_session_state
 from src.engine.f_apply_operations import f_apply_operations
+from src.engine.f_boundary_repair import f_boundary_repair
 from src.engine.f_cognitive_load import f_cognitive_load
 from src.engine.f_next_best_step import f_next_best_step
 from src.engine.f_output import f_output
@@ -360,7 +361,7 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
             start_turn = latest_snapshot_turn + 1
 
         try:
-            f_apply_operations(
+            final_turn = f_apply_operations(
                 operations,
                 session_id=session.id,
                 turn_number=start_turn,
@@ -374,6 +375,58 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
                 status_code=422,
                 detail=f"Engine produced an invalid operation: {exc}",
             )
+
+        # ── Boundary repair: LLM validates uncertain points after merge/split ──
+        structural_types = {op.get("type") for op in operations}
+        if structural_types & {"merge", "split"}:
+            affected_clusters = [
+                c.id
+                for c in db.query(DbCluster.id)
+                .filter(
+                    DbCluster.session_id == session.id,
+                    DbCluster.created_at_turn >= start_turn,
+                    DbCluster.dissolved_at_turn.is_(None),
+                )
+                .all()
+            ]
+            moves = f_boundary_repair(
+                session_id=session.id,
+                affected_cluster_ids=affected_clusters,
+                oracle_text=payload.raw_text,
+                db=db,
+            )
+            if moves:
+                latest_snap = (
+                    db.query(func.max(SoftAssignment.turn_number))
+                    .filter(SoftAssignment.cluster_id.in_([
+                        c.id for c in db.query(DbCluster.id)
+                        .filter(DbCluster.session_id == session.id,
+                                DbCluster.dissolved_at_turn.is_(None))
+                        .all()
+                    ]))
+                    .scalar()
+                ) or final_turn
+                repair_turn = latest_snap + 1
+                try:
+                    f_apply_operations(
+                        [{"type": "move",
+                          "point_ids": [m["point_id"]],
+                          "target_cluster_id": m["target_cluster_id"]}
+                         for m in moves],
+                        session_id=session.id,
+                        turn_number=repair_turn,
+                        db=db,
+                    )
+                    db.commit()
+                    print(
+                        f"[turns] boundary-repair  session={session.id}  "
+                        f"moved={len(moves)}",
+                        flush=True,
+                    )
+                except Exception as exc:
+                    db.rollback()
+                    log_repair_skip = f"boundary repair moves failed ({exc}), skipping"
+                    print(f"[turns] {log_repair_skip}", flush=True)
 
     # ── Common path: planner + persist turn ───────────────────────────────────
     updated_state = build_session_state(db, session)

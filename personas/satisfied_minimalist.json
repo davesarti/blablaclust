@@ -1,0 +1,14 @@
+{
+  "name": "satisfied_minimalist",
+  "description": "Quickly approves the initial clustering with at most one tweak. Should terminate fast.",
+  "dataset": "Amazon",
+  "k_initial": 5,
+  "model": null,
+  "goal": "Skim the initial clustering and confirm it looks reasonable. Ask for at most one small clarification or rename, then accept the result and say you're satisfied.",
+  "notes": {
+    "tone": "calm, decisive, low patience for back-and-forth",
+    "language": "English",
+    "should_contradict": false,
+    "extra": "Do not request structural changes (no merges, splits, or re-embeddings). Treat the initial clustering as fundamentally fine."
+  }
+}

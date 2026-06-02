@@ -44,12 +44,18 @@ def _softmax(x: np.ndarray, axis: int = -1) -> np.ndarray:
     return e / np.sum(e, axis=axis, keepdims=True)
 
 
-def _fit_kmeans(X: np.ndarray, k: int) -> KMeans:
+def _fit_kmeans(X: np.ndarray, k: int, seed: int = KMEANS_RANDOM_STATE) -> KMeans:
     if k < 1:
         raise ValueError("k must be >= 1")
     if k > len(X):
         raise ValueError(f"k={k} exceeds number of embedded points ({len(X)})")
-    model = KMeans(n_clusters=k, random_state=KMEANS_RANDOM_STATE, n_init="auto")
+    # n_init=20 runs 20 independent k-means++ initialisations and keeps the best
+    # (lowest inertia). This substantially reduces the chance of a bad local
+    # minimum — particularly important for k >= 5 where topic embeddings can be
+    # geometrically close and a single init sometimes merges two categories into
+    # one cluster. 20 is the value recommended by the sklearn docs for production
+    # use; the default "auto" (10 restarts) is not enough for k=6 on 1200 points.
+    model = KMeans(n_clusters=k, random_state=seed, n_init=20)
     model.fit(X)
     return model
 
@@ -59,6 +65,7 @@ def initial_clustering(
     k: int,
     session_id: str,
     turn_number: int = 0,
+    seed: int = KMEANS_RANDOM_STATE,
 ) -> tuple[list[DbCluster], list[DbSoftAssignment], float | None]:
     """Run k-means on the embedding matrix and compute soft assignments.
 
@@ -71,6 +78,9 @@ def initial_clustering(
         session_id: The ChatSession this clustering belongs to.
         turn_number: Turn at which the clustering is recorded (default 0 —
             the pre-oracle state; oracle turns start at 1).
+        seed: Random seed for k-means (default ``KMEANS_RANDOM_STATE = 42``).
+            Override only for robustness / multi-seed eval; production callers
+            should leave this at the default so all logged runs stay comparable.
 
     Returns:
         (db_clusters, db_assignments, silhouette) — not yet added to any DB
@@ -83,7 +93,7 @@ def initial_clustering(
         ValueError: if k < 1, no points have embeddings, or k > number of points.
     """
     points, X = _embedding_matrix(data_points)
-    model = _fit_kmeans(X, k)
+    model = _fit_kmeans(X, k, seed=seed)
 
     cluster_ids = [str(uuid.uuid4()) for _ in range(k)]
     db_clusters = [
@@ -137,7 +147,7 @@ def initial_clustering(
         session_id=session_id,
         k=k,
         backend=KMEANS_BACKEND,
-        seed=KMEANS_RANDOM_STATE,
+        seed=seed,
         n_points=len(points),
         silhouette=silhouette,
         turn_number=turn_number,

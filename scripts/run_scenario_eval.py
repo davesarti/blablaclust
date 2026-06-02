@@ -6,7 +6,7 @@ B1, B2, B3, B4. Out-of-band end-of-session — does **not** modify the live turn
 path.
 
 Usage:
-    PYTHONPATH=. python scripts/run_eval.py --scenarios scenarios/*.json --out reports/
+    PYTHONPATH=. python scripts/run_scenario_eval.py --scenarios scenarios/*.json --out reports/
 
 If --out is omitted, a timestamped directory under reports/ is created.
 
@@ -28,7 +28,7 @@ import time
 import urllib.error
 import urllib.request
 
-from src.eval_report import write_summary
+from src.eval.eval_report import write_summary
 
 BASE = "http://localhost:8000"
 
@@ -171,7 +171,7 @@ def main():
                 scenario = json.load(fh)
             rec = run_scenario(scenario)
             records.append(rec)
-            f.write(json.dumps(rec) + "\n")
+            f.write(json.dumps(rec, indent=2) + "\n")
             f.flush()
             term = (rec.get("A2") or {}).get("termination")
             overall = (rec.get("B1") or {}).get("overall_score")

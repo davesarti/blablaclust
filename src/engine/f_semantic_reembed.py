@@ -31,6 +31,17 @@ from src.models import DataPoint
 # does not discriminate the axis well — fall back to LLM scoring instead.
 COSINE_VARIANCE_THRESHOLD = 0.01
 
+# Module-level singleton — loading 103 weight files takes ~0.5s even from disk
+# cache. Re-embed can be triggered multiple times per session, so we load once.
+_ST_MODEL: SentenceTransformer | None = None
+
+
+def _get_st_model() -> SentenceTransformer:
+    global _ST_MODEL
+    if _ST_MODEL is None:
+        _ST_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+    return _ST_MODEL
+
 # Minimum std of LLM scores (0-10 scale) to consider the axis discriminative.
 # Below this threshold the axis doesn't separate the data and the oracle is
 # asked to pick a different one rather than silently falling back to topic clustering.
@@ -84,7 +95,7 @@ def _cosine_axis_scores(
 
     Returns an (N,) float64 array of signed scores.
     """
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    model = _get_st_model()
     pole_pos = model.encode(pole_pos_text, convert_to_numpy=True).astype(np.float64)
     pole_neg = model.encode(pole_neg_text, convert_to_numpy=True).astype(np.float64)
     # Normalize defensively — SentenceTransformer usually returns unit vectors,

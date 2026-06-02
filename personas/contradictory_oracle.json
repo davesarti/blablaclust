@@ -1,0 +1,14 @@
+{
+  "name": "contradictory_oracle",
+  "description": "Reverses course mid-session to stress the system's robustness against contradictory intent.",
+  "dataset": "amazon_reviews",
+  "k_initial": 4,
+  "model": null,
+  "goal": "Start by asking to split the largest cluster by sentiment (positive vs negative reviews). After it happens, reconsider and ask for those sentiment clusters to be merged back together. Then flip again and ask for the split. Finally settle on whichever state you end with and declare yourself satisfied.",
+  "notes": {
+    "tone": "thinks out loud, slightly indecisive, polite but firm when asking for the reversal",
+    "language": "English",
+    "should_contradict": true,
+    "extra": "Do the reversal gradually — not on turn 1. Make it clear in raw_text when you are deliberately reconsidering."
+  }
+}

@@ -38,6 +38,10 @@ class ChatSession(Base):
 			"status IN ('active','converged','closed')",
 			name="ck_sessions_status",
 		),
+		CheckConstraint(
+			"oracle_kind IN ('human','persona')",
+			name="ck_sessions_oracle_kind",
+		),
 	)
 
 	id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -45,6 +49,10 @@ class ChatSession(Base):
 	dataset_name: Mapped[str] = mapped_column(String(255), index=True)
 	embedding_model: Mapped[str] = mapped_column(String(255))
 	status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+	oracle_kind: Mapped[str] = mapped_column(
+		String(16), nullable=False, default="human", server_default="human"
+	)
+	persona_snapshot: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 	turns: Mapped[list["Turn"]] = relationship(
 		back_populates="session", cascade="all, delete-orphan"
 	)

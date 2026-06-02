@@ -7,6 +7,9 @@ Turn: {turn_number}
 Total data points: {total_points}
 
 CURRENT CLUSTERS
+Each cluster is listed with its position number [N], its UUID id, name, size and description.
+The oracle may refer to clusters by number (e.g. "cluster 2", "the third cluster", "#4").
+Resolve number references to the correct UUID using the list below.
 {clusters_json}
 
 ORACLE INPUT
@@ -26,8 +29,9 @@ operations to perform. A separate algorithm handles all data point reassignment.
 Use the cluster names and descriptions as signals when deciding what to propose:
 - Suggest a MERGE only when two clusters are redundant across ALL meaningful dimensions
   (same topic AND same sentiment/tone/angle/perspective). Sharing a broad topic alone is
-  NOT enough — "enthusiastic film reviews" and "disappointed film reviews" are about the
-  same subject but represent intentionally opposite axes and must stay separate.
+  NOT enough — two clusters about the same subject but split along an intentional axis
+  (e.g. "formal tone" vs. "casual tone", "pro" vs. "con", "beginner" vs. "advanced")
+  must stay separate.
 - Suggest a SPLIT when a cluster's name or description is too broad and covers clearly
   distinct sub-themes that could each stand alone as coherent groups.
 - Emit a SEMANTIC_REEMBED or CLARIFY when the oracle's message names a semantic
@@ -45,7 +49,7 @@ Use the cluster names and descriptions as signals when deciding what to propose:
   (2) AMBIGUOUS INTENT → emit "clarify". The message is a bare noun/adjective
       phrase naming a text property, with NO explicit operation verb and NO
       reference to a specific cluster or a count. Examples that must trigger
-      clarify: "angry tone", "battery life", "sentiment", "formality",
+      clarify: "angry tone", "writing style", "sentiment", "formality",
       "tono arrabbiato", "qualità". The phrase COULD be a semantic axis, but
       it could equally be a comment on the current state. Never silently ignore
       it or emit no_change — always ask.
@@ -76,7 +80,7 @@ Use the cluster names and descriptions as signals when deciding what to propose:
   axis_label extraction (for semantic_reembed): bare noun phrase in the oracle's
   own language, imperative/prepositional wrappers stripped ("cluster by sentiment"
   → "sentiment"; "raggruppa per tono arrabbiato" → "tono arrabbiato"; "look at
-  this through battery life" → "battery life"). Keep two-pole contrasts intact
+  this through writing style" → "writing style"). Keep two-pole contrasts intact
   ("formal vs casual"). Drop fillers. ≤ 40 chars.
 - When in doubt, respect the oracle's existing structure. If the history shows that the
   oracle already separated or named these clusters deliberately, do not propose reversing
@@ -110,7 +114,7 @@ Respond with a single valid JSON object. No markdown fences, no commentary outsi
     }},
     {{
       "type": "semantic_reembed",
-      "axis_label": "<short noun phrase naming the axis, e.g. 'battery life' or 'angry tone'>"
+      "axis_label": "<short noun phrase naming the axis, e.g. 'writing style' or 'angry tone'>"
     }}
   ],
   "display": "<plain English explanation of what changed and why, max 3 sentences, shown directly to oracle>"
@@ -118,7 +122,7 @@ Respond with a single valid JSON object. No markdown fences, no commentary outsi
 
 CONSTRAINTS
 - Use only cluster IDs present in the provided CURRENT CLUSTERS list. Do not invent IDs.
-- NEVER use a cluster name as a cluster_id. cluster_id must always be the UUID string from the list above.
+- NEVER use a cluster name or number as a cluster_id. cluster_id must always be the UUID string from the list above. When the oracle says "cluster 2", look up [2] and use its UUID.
 - To merge several clusters into one, emit a SINGLE merge operation whose cluster_ids lists ALL of them (e.g. ["id_1", "id_2", "id_3"]). NEVER chain multiple merge operations — each merge dissolves its inputs, so a later op referencing them will fail.
 - A merge operation MUST always include at least 2 distinct cluster_ids. If the oracle asks to "eliminate", "remove", or "delete" a cluster, there is no delete operation — instead merge it with the most similar remaining cluster and include BOTH ids in cluster_ids.
 - You cannot reference a cluster created by an earlier operation in the same list (e.g. after a merge you do not know the new cluster's UUID). If you need to merge then split, just emit the merge — the oracle will ask for the split in the next turn.
@@ -135,6 +139,6 @@ CONSTRAINTS
 - When the oracle supplies cluster names (in "new_name" on merge/rename, or in "new_names" on split), copy them VERBATIM — character-for-character — into the operation. Do NOT rephrase, expand, abbreviate, censor, sanitize, translate, capitalize differently, or "improve" them. If the oracle says split into "miss" and "piss", the names are exactly "miss" and "piss". If the oracle says rename to "blabla", the name is exactly "blabla". The oracle's chosen label is authoritative; your job is to apply it, not to edit it.
 - For "move", point_ids may ONLY contain data point IDs the oracle explicitly referenced (see Target points above, or IDs named earlier in the conversation). NEVER invent point IDs or move points the oracle did not name — bulk reassignment is the clustering algorithm's job, not yours. Use "move" for point-level feedback such as resolving a boundary point or correcting a single misplaced point.
 - A "semantic_reembed" operation is EXCLUSIVE: when you emit one it MUST be the only entry in operations[]. Never combine it with merge, split, rename, or move in the same response — the re-embedding dissolves every existing cluster, so any other op IDs in the same response would be invalid afterwards.
-- axis_label MUST be the bare noun phrase naming the dimension (≤ 40 chars), with imperative or prepositional wrappers stripped. Examples of correct extraction: "cluster by sentiment" → "sentiment"; "let's re-embed along formal vs casual" → "formal vs casual"; "look at it through the lens of battery life" → "battery life"; "battery life" → "battery life". It must NEVER be a full sentence, a structural instruction ("make 5 clusters"), an existing cluster name, or a generic word like "data" / "clusters" / "groups".
+- axis_label MUST be the bare noun phrase naming the dimension (≤ 40 chars), with imperative or prepositional wrappers stripped. Examples of correct extraction: "cluster by sentiment" → "sentiment"; "let's re-embed along formal vs casual" → "formal vs casual"; "look at it through the lens of writing style" → "writing style"; "writing style" → "writing style". It must NEVER be a full sentence, a structural instruction ("make 5 clusters"), an existing cluster name, or a generic word like "data" / "clusters" / "groups".
 - If feedback_type is "explain", set action to "explain" and leave operations empty.
 - Never emit action "no_change" when the oracle's message contains a recognisable text property or axis (sentiment, tone, quality, formality, etc.) without referencing a specific cluster or count — use "clarify" instead.

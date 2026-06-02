@@ -22,6 +22,8 @@ never writes a new snapshot so it never consumes a turn_number.
 The final turn_number used is returned so the caller can record it.
 """
 
+import difflib
+
 from sqlalchemy.orm import Session
 
 from src.engine.cluster_operations import (
@@ -30,7 +32,72 @@ from src.engine.cluster_operations import (
     rename_cluster,
     split_cluster,
 )
+from src.logger import log
 from src.models import Cluster as DbCluster
+
+
+def _resolve_cluster_id(raw_id: str, active_ids: list[str], active_set: set[str]) -> str:
+    """Map an LLM-emitted cluster id onto a real active cluster id.
+
+    The prompt asks the LLM to copy a 36-char UUID verbatim; in practice models
+    occasionally mistype a single character (e.g. ``…99a5305bc071`` →
+    ``…99a5303bc071``), which would otherwise fail downstream with an opaque
+    "clusters not found". Active session UUIDs are random, so two real ids are
+    never close — a unique near-match at high similarity is almost certainly the
+    intended cluster with a transcription error. Correct it; if there is no
+    match (or it is ambiguous), leave the id untouched so the op still fails
+    loudly rather than silently mutating into the wrong cluster.
+    """
+    if not isinstance(raw_id, str) or raw_id in active_set:
+        return raw_id
+    matches = difflib.get_close_matches(raw_id, active_ids, n=2, cutoff=0.8)
+    if not matches:
+        return raw_id
+    best = matches[0]
+    r0 = difflib.SequenceMatcher(None, raw_id, best).ratio()
+    if len(matches) == 1:
+        chosen = best if r0 >= 0.8 else raw_id
+    else:
+        r1 = difflib.SequenceMatcher(None, raw_id, matches[1]).ratio()
+        # Only accept when the top match is both strong and clearly unique.
+        chosen = best if (r0 >= 0.9 and r0 - r1 >= 0.1) else raw_id
+    if chosen != raw_id:
+        log.warning(
+            "f_apply_operations: corrected mistyped cluster_id %s -> %s "
+            "(similarity %.3f)", raw_id, chosen, r0
+        )
+    return chosen
+
+
+def _normalize_cluster_ids(operations: list[dict], session_id: str, db: Session) -> None:
+    """Repair transcription errors in cluster ids in-place before dispatch.
+
+    Resolves ``cluster_ids`` (merge), ``cluster_id`` (split/rename) and
+    ``target_cluster_id`` (move) against the clusters that are currently active
+    in the session. Point ids are deliberately left alone — they are not drawn
+    from a small known set and the oracle names them explicitly.
+    """
+    active_ids = [
+        c.id
+        for c in db.query(DbCluster.id)
+        .filter(DbCluster.session_id == session_id, DbCluster.dissolved_at_turn.is_(None))
+        .all()
+    ]
+    if not active_ids:
+        return
+    active_set = set(active_ids)
+    for op in operations:
+        if isinstance(op.get("cluster_ids"), list):
+            op["cluster_ids"] = [
+                _resolve_cluster_id(cid, active_ids, active_set)
+                for cid in op["cluster_ids"]
+            ]
+        if op.get("cluster_id") is not None:
+            op["cluster_id"] = _resolve_cluster_id(op["cluster_id"], active_ids, active_set)
+        if op.get("target_cluster_id") is not None:
+            op["target_cluster_id"] = _resolve_cluster_id(
+                op["target_cluster_id"], active_ids, active_set
+            )
 
 
 def f_apply_operations(
@@ -69,6 +136,10 @@ def f_apply_operations(
             (e.g. cluster_ids on a merge).  Same rationale.
     """
     current_turn = turn_number
+
+    # Repair any single-character UUID transcription slips the LLM made before
+    # the ids reach the clustering functions (which fail hard on unknown ids).
+    _normalize_cluster_ids(operations, session_id, db)
 
     for op in operations:
         op_type = op.get("type")
