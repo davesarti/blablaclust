@@ -242,6 +242,137 @@ real LLM judge `gemini-2.5-flash`). Converged silhouette 0.0562.
 > (works). quality_specs' frozen-model (v1) reference should be updated to match —
 > the model swap affects all Family-B judge numbers, not just generalization.
 
+### 11. UMAP Phase 2 — geometry-aware projection (#53 follow-up)
+
+`src/viz/umap_projection.py` (new: `_build_hybrid_space`, `compute_geometry_aware_coords`) +
+`backend/routers/umap.py` (`?geometry_aware=true` query param) +
+`tests/test_umap_projection.py` (8 new tests, 18 total).
+
+On semantic_reembed turns the partition appeared to "cut across" the original
+topic layout — the original UMAP was fit on the raw embeddings, not on the
+re-oriented hybrid space k-means actually used. Phase 2 adds a **second UMAP
+per reembed turn**, fit on the `(N, D+1)` hybrid space reconstructed
+**deterministically** (`"very {axis}"` / `"not {axis} at all"` poles, no LLM,
+zero API cost, reproducible). Cached in memory per `(session, turn)`.
+
+**Drive-by fix:** the old `reembed_turns` detection used a "≥2 clusters
+dissolved AND ≥2 created same turn" heuristic that silently missed real
+re-embeds (e.g. session `b502918a` t9 axis="happy and hungry" — engine
+dissolved 1 / created many). Replaced with direct read of the persisted
+`semantic_reembed` op from `state_snapshot`. `reembed_turns` and `axis_arrows`
+now reflect the truth.
+
+### 12. UMAP UI rework (issue #58)
+
+`ui/index.html` — three changes, all surgical:
+
+1. **Ghost circles removed.** The gray `circle-open` markers (dissolved cluster
+   centroids from the prior turn) were confusing and positionally wrong. Removed
+   entirely; the re-embed event is already communicated by ✦ new-cluster markers.
+
+2. **Semantic axis now readable.** Replaced the PCA-arrow overlay (a line in
+   data coordinates, hard to interpret) with: (a) a **paper-anchored annotation**
+   `↻ re-embed axis: "sentiment"` at the top of the plot, and (b) a
+   **coloured badge** in the info bar — both use the real `axis_label` from the
+   DB.
+
+3. **Layout shift fixed.** Info bar and slider were on the same flex row;
+   changing info text width shifted the slider. New layout: **two rows** — row 1
+   is play + slider + "Turn 3 / 5" + PNG/HTML + Close (stable width); row 2 is
+   `.umap-info-bar` with `min-height: 18px` (text changes, layout never shifts).
+   Removed the confusing "geom-aware" checkbox from the UI (hidden, still
+   accessible programmatically for dev/eval).
+
+### 13. History bar enrichment
+
+`ui/index.html` — per-turn meta line under each system message:
+- Badge `↻ re-embed: "sentiment"` (yellow) when the turn ran a semantic_reembed
+- Turn number, token count, cost per-turn
+- Works on both live turns (`handleSystemTurn`) and historical turns loaded on
+  session resume
+
+### 14. Token/cost cost fix — correct provider pricing
+
+`src/harness.py`:
+- Added `google/gemini-2.5-flash` ($0.30/$2.50 per M) and
+  `google/gemini-2.5-flash-lite` ($0.10/$0.40) to `_PRICING`
+- `estimate_cost_usd` now resolves the model from the active provider via
+  `_active_model()` instead of always defaulting to Claude Sonnet
+
+Previously every turn was priced at Claude Sonnet rates (~$0.025) instead of
+Gemini rates (~$0.0025) — **10× over-reported cost**.
+
+### 15. Token/cost persist on session resume
+
+`ui/index.html` — resume block now accumulates `resumeTokens` / `resumeCost` /
+`resumeLoad` from the historical turn list (same loop that builds the chat),
+then assigns them to state instead of hard-coded 0. Opened issue #65 for
+Arianna with the same bug in the new React frontend (`UPDATE_METRICS` reducer
+replaces totals instead of accumulating).
+
+### 16. IMDB dataset added (third dataset)
+
+`src/dataset_processing/sample_imdb_dataset.py` + `data/imdb_train.csv` (1200
+rows) + `data/imdb_frozen.csv` (300 rows).
+
+Reads the 50k-row IMDB Dataset CSV, strips HTML (`<br />`), balances 750
+positive + 750 negative, writes `label,title,text` (2=positive, 1=negative —
+same convention as Amazon). Injected into the DB via the standard pipeline;
+both splits have full embeddings. The dataset does **not** appear in the UI
+dropdown (covered by the `_frozen` filter in `GET /datasets` for the frozen
+split).
+
+### 17. Frozen dataset hidden from UI
+
+`backend/routers/datasets.py` — added `.filter(~Dataset.name.like("%_frozen"))`
+to `list_datasets`. Held-out splits (`imdb_reviews_frozen`, etc.) are now
+excluded from `GET /datasets` and therefore from the new-session dropdown.
+
+### 18. DB migration — Dataset model (P1 cross-team alignment)
+
+P1 introduced `Dataset` as a proper table (`datasets`), changing `DataPoint`
+and `ChatSession` from a plain `dataset_name` string to a FK `dataset_id →
+datasets.id`. The DB still had the old schema.
+
+Migration executed (non-destructive):
+1. Created 4 `Dataset` rows from the distinct `dataset_name` values already in
+   the DB
+2. Added `dataset_id` columns to `data_points` (3900 rows) and `sessions` (9
+   rows)
+3. Recreated `sessions` table to remove the `NOT NULL` constraint on
+   `dataset_name` (SQLite doesn't support `ALTER COLUMN`; the old constraint
+   blocked any new session creation with the updated router)
+
+All 295 tests pass after migration; API and ORM verified.
+
+### 19. LLM-as-oracle end-to-end verified
+
+Fixed two broken personas (`"dataset": "Amazon"` → `"amazon_reviews"`) and
+confirmed the full runner works: `satisfied_minimalist` → `oracle_satisfied` in
+1 turn, $0.006, errors=0. All 3 personas (`satisfied_minimalist`,
+`curious_explorer`, `contradictory_oracle`) are ready to run.
+
+```bash
+# Both terminals needed
+PYTHONPATH=. python scripts/serve_ui.py          # terminal 1
+PYTHONPATH=. python scripts/run_persona_eval.py \
+  --personas 'personas/*.json' \
+  --out reports/run_$(date +%Y%m%d) --max-turns 12   # terminal 2
+```
+
+### 20. React frontend bootstrap (P5 merge + build fix)
+
+After merging Arianna's full React + TypeScript + Tailwind v4 rewrite
+(`frontend/`), fixed two TypeScript build errors:
+- `frontend/tsconfig.app.json`: `noUnusedLocals: false` (React 18 JSX transform
+  doesn't require `import React`, but files still had it — TS strict mode broke
+  the build)
+- `frontend/src/plotly.d.ts`: `declare module 'plotly.js-dist-min'` (no
+  `@types` package available)
+
+Build now compiles clean. Dev server: `cd frontend && npm run dev` →
+`http://localhost:5173` (proxies API calls to `:8000`).
+
 ## Results
 
 | Check | Result |
@@ -254,10 +385,18 @@ real LLM judge `gemini-2.5-flash`). Converged silhouette 0.0562.
 | Live API session (merge/split/move + Gemini) | all correct end-to-end |
 | `generalization.py` mutation test | argmin→argmax caught (3 tests fail) |
 | Post-merge suite stabilization | 210p/1f/22e → all green |
-| UMAP projection module | 10 unit tests; merge snapshot → new cluster, 0 unassigned |
-| UMAP blank-plot fix (SVG) | 12 reopens → 1200 points each time |
-| UMAP stale fix (no-store) | merge → endpoint returns new turn live |
-| Full test suite (after generalization rework) | 281 pass, 0 fail (was 273; +8 ingest tests) |
+| UMAP projection module | 18 unit tests (10 baseline + 8 geometry-aware) |
+| UMAP geometry-aware Phase 2 | second UMAP on hybrid (D+1) space, deterministic, cached |
+| UMAP reembed detection fix | reads op directly from state_snapshot (was heuristic) |
+| UMAP UI rework (#58) | ghost circles removed; axis badge; no-shift 2-row layout |
+| Token/cost pricing fix | Gemini rates in `_PRICING`; `_active_model()` resolves provider |
+| Token/cost persist on resume | accumulates from turn history instead of reset to 0 |
+| IMDB dataset | 1200 + 300 frozen, balanced, HTML stripped, full embeddings |
+| Frozen datasets hidden from UI | `_frozen` filter in `GET /datasets` |
+| DB migration (P1 Dataset model) | non-destructive; 3900 data_points + 9 sessions migrated |
+| LLM-as-oracle | personas fixed; `satisfied_minimalist` → oracle_satisfied in 1 turn |
+| React frontend build | TypeScript errors fixed; `npm run dev` → localhost:5173 |
+| Full test suite | **295 passed**, 0 fail |
 
 ## Issues opened this sprint
 
@@ -265,7 +404,9 @@ real LLM judge `gemini-2.5-flash`). Converged silhouette 0.0562.
 descriptions — P3, fixed), #47 (token/cost/load to UI — me), #48 (prompts
 dataset-agnostic — P4), #49 (loop verification — closed), #50 (eval scenarios
 for 20NG — P5), #51 (datasets API record count — P1, merged), #52
-(generalization — closed), #53 (UMAP clustering-evolution viz — me, delivered).
+(generalization — closed), #53 (UMAP clustering-evolution viz — me, delivered),
+**#56** (generalization reframe — me, closed), **#58** (UMAP UI — me, closed),
+**#65** (token/cost reset on session load — opened for P5/Arianna).
 
 ## Honest scope notes (for the report)
 
@@ -296,28 +437,33 @@ for 20NG — P5), #51 (datasets API record count — P1, merged), #52
       P3 test fix) — done; @MatteoPareto notified.
 - [x] Post-merge suite stabilization (22 errors + dry-run import-order race) —
       done, suite green.
-- [x] UMAP viz (#53) — delivered + verified (Phase 1 + Phase 2 + 3 bug fixes).
-- [ ] **Push** the local UMAP SVG-render fix (`6401a5f`, ahead 1) and **notify
-      @ariannaschiavi-AIS** — the UMAP modal lives in her `ui/index.html`.
-- [ ] (Optional, UMAP polish) 23-cluster sessions overflow the legend and the
-      12-colour palette repeats — cap / group small clusters or widen the palette.
-- [ ] (Optional) Geometry-aware UMAP: a second layout fit on the hybrid (D+1)
-      re-embed space to show the re-oriented geometry. Deferred (needs an LLM
-      pole call per session); the parallel axis-arrow overlay partly covers this.
-- [x] `n_init=20` k-means robustness fix — kept (fixes degenerate partition at
-      seeds 2+7 with n_init=10/auto). The multi-seed *accuracy* script was removed.
-- [x] **Generalization reframed (label-free online eval)** — `ingest_points`
-      (read-only ingestion) + `run_generalization_stability_eval.py` (A1/B2
-      paired Δ + bootstrap CI around an ingestion event) + quality_specs
-      "Generalization (procedure)" subsection. The four label-driven scripts
-      removed. Plumbing verified on a smoke run; 21 generalization tests pass.
-- [ ] **Full-scale online eval run** — run `run_generalization_stability_eval.py`
-      with no `--limit` and **real-LLM B2** (not dry-run) on 20NG (and Amazon
-      `--k 2`) to get the deliverable A1/B2 paired-Δ numbers; fill into §10.
-- [ ] **Coordinate with P1/P5** — the reframing touches shared docs:
-      `docs/quality_specs.md` (added a subsection; P1/P3/P5 authored) and
-      `notes/progress_report.md` (still states the old held-out-accuracy claim,
-      P5/P1 authored — *not edited here*, needs their update). Flag before merge.
-- [ ] Coordinate with P5 on folding into the final report / notebook
-      (turns-to-convergence, the online generalization A1/B2 result, the
-      topic-vs-sentiment contrast, and the UMAP figures are all report-ready).
+- [x] UMAP viz (#53) — delivered + verified (Phase 1 + Phase 2 + UI rework #58).
+- [x] `n_init=20` k-means robustness fix — kept.
+- [x] **Generalization reframed** (#56, closed) — `ingest_points` + online eval
+      + 21 tests + quality_specs subsection. Full-scale verified (20NG).
+- [x] UMAP Phase 2 — geometry-aware projection, deterministic, cached, 8 tests.
+- [x] UMAP UI rework (#58) — ghost circles removed, axis badge, no-shift layout.
+- [x] Token/cost pricing fix — Gemini rates; `_active_model()` provider-aware.
+- [x] Token/cost persist on resume — accumulates from history, not reset to 0.
+      Issue #65 opened for Arianna (same bug in React `UPDATE_METRICS` reducer).
+- [x] IMDB dataset — 1200+300 rows, balanced, full embeddings, hidden _frozen.
+- [x] DB migration — P1 Dataset model aligned; `sessions` table recreated.
+- [x] LLM-as-oracle end-to-end verified; personas dataset names fixed.
+- [x] React frontend bootstrap — TypeScript build fixed; `npm run dev` works.
+- [ ] **Commit pending:** `frontend/tsconfig.app.json` + `frontend/src/plotly.d.ts`
+      (two small build-fix files, awaiting Thomas's ok).
+- [ ] **Run personas at scale** — produce `reports/` with results.jsonl +
+      summary.md across all 3 personas; commit as deliverable for the prof.
+- [ ] **CI on convergence claim** — `eval_report.py` aggregates mean±std but
+      lacks bootstrap CI. Needed for the prof's "1 claim with CI" requirement.
+- [ ] **Baseline comparison** — clustering without dialogue for the
+      trio/quartet headline experiment (prof's spec).
+- [ ] **Human study protocol** — at minimum a written protocol (within-subject,
+      randomized, scripted, consented). Prof flags "3 friends with no protocol"
+      as a risk.
+- [ ] **Update `notes/progress_report.md`** — still dated 2026-05-29, says
+      "LLM-as-oracle: Not yet" and cites old 87% accuracy claim. Both wrong now.
+      P5/P1 authored — flag to them.
+- [ ] Coordinate with P5 on folding into the final report:
+      turns-to-convergence, online generalization A1/B2 result,
+      topic-vs-sentiment contrast, UMAP figures.
