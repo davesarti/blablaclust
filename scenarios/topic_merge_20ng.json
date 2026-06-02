@@ -1,0 +1,32 @@
+{
+  "name": "topic_merge_20ng",
+  "description": "Oracle starts with an over-fragmented clustering (k=7) on 20 Newsgroups and progressively merges related topic clusters. Tests that merge operations work correctly on topic-based data and that coherence improves. Mirrors the amazon_reviews topic_merge scenario for cross-dataset comparison.",
+  "dataset": "20_newsgroups",
+  "k_initial": 7,
+  "oracle_turns": [
+    {
+      "raw_text": "There are too many clusters. I see two that both deal with science — one about medical and health topics, the other about space exploration and astronomy. Merge them into a single 'Science' cluster.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "I also see clusters about cars and about baseball that are both recreational hobbies. Combine them into one 'Recreation & Sports' cluster.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "The computer graphics cluster and whatever is left about technology can also be merged — call it 'Technology & Computing'.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "That looks much cleaner. The remaining clusters now have clear, distinct themes. I'm happy with this — no further changes needed.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    }
+  ]
+}

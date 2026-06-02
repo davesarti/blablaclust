@@ -1,0 +1,32 @@
+{
+  "name": "contradictory_topic_20ng",
+  "description": "Oracle first splits a broad topic cluster by domain, then reverses course and merges the two new clusters back, then splits again. Tests that the agent handles contradictory topic-based intent gracefully on 20 Newsgroups news data and keeps producing valid state throughout. Mirrors the contradictory_oracle scenario for cross-dataset comparison.",
+  "dataset": "20_newsgroups",
+  "k_initial": 4,
+  "oracle_turns": [
+    {
+      "raw_text": "The science cluster mixes medical posts with space exploration posts. Split it into a 'Medical & Health' cluster and a 'Space & Astronomy' cluster.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Actually, keeping science together is more useful for my analysis. Merge the medical and space clusters back into a single 'Science' cluster.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "On reflection, the split is better after all — please separate medical topics from space topics again.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Let's keep the split this time. The current clustering is fine as it is. No more changes.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    }
+  ]
+}
