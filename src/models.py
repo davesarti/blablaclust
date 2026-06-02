@@ -70,6 +70,7 @@ class ChatSession(Base):
 		String(16), nullable=False, default="human", server_default="human"
 	)
 	persona_snapshot: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+	preference_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 	dataset: Mapped[Dataset] = relationship()
 	turns: Mapped[list["Turn"]] = relationship(
 		back_populates="session", cascade="all, delete-orphan"

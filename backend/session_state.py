@@ -177,4 +177,5 @@ def build_session_state(db: Session, session: ChatSession) -> ChatSessionState:
         status=session.status,
         clusters=cluster_states,
         feedback_history=feedback_history,
+        oracle_preference_summary=session.preference_summary or None,
     )

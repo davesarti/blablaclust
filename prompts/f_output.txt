@@ -21,6 +21,11 @@ Target points: {target_point_ids}
 CONVERSATION HISTORY
 {history_summary}
 
+ORACLE PREFERENCE PROFILE
+The following bullet points summarise the oracle's revealed preferences so far.
+Use them to anticipate what they want and to resolve ambiguity in their latest message.
+{oracle_preference_summary}
+
 TASK
 Interpret the oracle's feedback and return the operations needed to update the clustering.
 You must NEVER decide which data points belong to which cluster — only specify what structural

@@ -13,6 +13,7 @@ from src.engine.f_next_best_step import f_next_best_step
 from src.engine.f_output import f_output
 from src.engine.f_semantic_reembed import AxisNotDiscriminativeError
 from src.engine.f_uncertainty import f_cluster_uncertainty
+from src.engine.f_update_preferences import f_update_preferences
 from src.engine.semantic_clustering import semantic_clustering
 from src.harness import ConversationContext, estimate_cost_usd
 from src.models import ChatSession, Cluster as DbCluster, DataPoint, SoftAssignment, Turn
@@ -476,5 +477,15 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     db.add(new_turn)
     db.commit()
     db.refresh(new_turn)
+
+    # Update the rolling oracle preference summary.  This is a best-effort
+    # background step: if the LLM call inside f_update_preferences fails, we
+    # keep the previous summary and never raise.  We build a fresh state that
+    # includes the turn we just persisted so the summary covers all turns.
+    final_state = build_session_state(db, session)
+    new_summary = f_update_preferences(final_state)
+    if new_summary is not None:
+        session.preference_summary = new_summary
+        db.commit()
 
     return TurnRead.model_validate(new_turn, from_attributes=True)

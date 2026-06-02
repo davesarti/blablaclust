@@ -1,7 +1,7 @@
 import os
 
 from fastapi import FastAPI
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 from src.models import Base
@@ -10,6 +10,25 @@ _DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data"
 engine = create_engine(f"sqlite:///{_DB_PATH}", connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base.metadata.create_all(bind=engine)
+
+
+def _run_migrations() -> None:
+    """Add columns that exist in the ORM but may be missing from an older DB.
+
+    SQLAlchemy's create_all only creates missing *tables*, not missing
+    *columns* on existing tables. This function bridges the gap for the
+    columns added after the initial schema was deployed. It is idempotent —
+    safe to call on every startup.
+    """
+    with engine.connect() as conn:
+        insp = inspect(engine)
+        sessions_cols = {c["name"] for c in insp.get_columns("sessions")}
+        if "preference_summary" not in sessions_cols:
+            conn.execute(text("ALTER TABLE sessions ADD COLUMN preference_summary TEXT"))
+            conn.commit()
+
+
+_run_migrations()
 
 
 def get_db():

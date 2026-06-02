@@ -34,6 +34,7 @@ class ChatSessionState(BaseModel):
     status: Literal["active", "converged", "closed"]
     clusters: List[Cluster]
     feedback_history: List[FeedbackEntry]
+    oracle_preference_summary: Optional[str] = None
 
 
 class ClusterPoint(BaseModel):

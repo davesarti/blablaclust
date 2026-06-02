@@ -29,6 +29,12 @@ def f_output(
     # Build the prompt by injecting current state and oracle input into the
     # f_output.txt template. Claude receives the full picture: existing clusters,
     # what the oracle just said, and the conversation history so far.
+    preference_block = (
+        state.oracle_preference_summary
+        if state.oracle_preference_summary
+        else "(no preferences recorded yet)"
+    )
+
     prompt = render_prompt(
         "f_output",
         session_id=state.session_id,
@@ -40,6 +46,7 @@ def f_output(
         target_cluster_ids=json.dumps(oracle_turn.target_cluster_ids),
         target_point_ids=json.dumps(oracle_turn.target_point_ids),
         history_summary=json.dumps([f.model_dump() for f in state.feedback_history]),
+        oracle_preference_summary=preference_block,
     )
 
     # Register the oracle's message in the conversation memory so future turns
