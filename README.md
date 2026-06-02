@@ -14,24 +14,28 @@ pip install -r requirements.txt --extra-index-url https://download.pytorch.org/w
 cp .env.example .env
 #   edit .env and set the API key for your chosen LLM_PROVIDER
 
-# 3. Run — auto-seeds the demo dataset on first launch, then serves the UI
+# 3. Backend — auto-seeds the demo dataset on first launch
 PYTHONPATH=. python scripts/serve_ui.py
+
+# 4. React frontend (separate terminal)
+cd frontend && npm install && npm run dev
 ```
 
 Then open:
 
-- **UI:**  http://localhost:8000/ui
+- **React UI (primary):**  http://localhost:5173
+- **Legacy HTML UI:**  http://localhost:8000/ui
 - **API docs:**  http://localhost:8000/docs
 
 On the **first** run the database is empty, so `serve_ui.py` loads `data/train.csv`
-(~1,200 Amazon Electronics reviews) and generates sentence-transformer embeddings
-with `all-MiniLM-L6-v2` (~60 s on CPU, model auto-downloads). Every later run sees a
+(~1,200 Amazon reviews) and generates sentence-transformer embeddings with
+`all-MiniLM-L6-v2` (~60 s on CPU, model auto-downloads). Every later run sees a
 populated DB and starts immediately.
 
 ## Other ways to run
 
 ```bash
-# API only (no auto-seed — seed manually first, see below)
+# Backend only, with hot-reload (no auto-seed — seed manually first, see below)
 uvicorn backend.main:app --reload
 
 # Interactive terminal client against a running server
@@ -81,11 +85,18 @@ metrics (A1–A3, B1–B4) are folded into each row automatically.
 │       ├── sessions.py        # create / read sessions, initial clustering
 │       ├── turns.py           # the main oracle-interaction loop endpoint
 │       └── clusters.py        # read clusters and their points
+├── frontend/                  # React UI (Vite + TypeScript) — primary interface
+│   ├── src/
+│   │   ├── App.tsx
+│   │   ├── components/        # UI components
+│   │   ├── store/             # App state (context + reducers)
+│   │   └── api/               # API client helpers
+│   └── package.json
 ├── scripts/
-│   ├── serve_ui.py            # auto-seed + serve UI (recommended entrypoint)
+│   ├── serve_ui.py            # auto-seed + serve backend (recommended entrypoint)
 │   └── cli.py                 # interactive terminal client
 ├── ui/
-│   ├── index.html             # single-file web UI (served at /ui)
+│   ├── index.html             # legacy single-file HTML UI (served at /ui)
 │   └── DESIGN.md
 ├── data/
 │   ├── train.csv              # 1200 training records (demo dataset)
