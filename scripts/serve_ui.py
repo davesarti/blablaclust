@@ -45,6 +45,7 @@ def _auto_seed():
     """
     from src.models import DataPoint
     from src.dataset_processing.dataset_load_utils import (
+        get_or_create_dataset,
         ingest_csv_path,
         generate_embeddings_for_dataset,
     )
@@ -63,8 +64,13 @@ def _auto_seed():
             print("[seed] DB already populated — skipping.")
             return
 
+        # Create the Dataset record first to get its UUID, then pass that
+        # UUID to ingest_csv_path (which stores it as a FK on each DataPoint).
+        dataset = get_or_create_dataset(DATASET_NAME, db)
+        db.flush()
+
         print(f"[seed] Loading '{DATASET_NAME}' from {TRAIN_CSV} …")
-        inserted, skipped = ingest_csv_path(str(TRAIN_CSV), DATASET_NAME, db)
+        inserted, skipped = ingest_csv_path(str(TRAIN_CSV), dataset.id, db)
         db.flush()   # make rows visible to the embedding query below
         print(f"[seed] {inserted} rows inserted, {skipped} skipped.")
 
@@ -72,7 +78,7 @@ def _auto_seed():
         # The model (all-MiniLM-L6-v2) is downloaded automatically by
         # sentence-transformers on the first call and cached locally afterward.
         print("[seed] Generating embeddings (first run: ~60 s, model auto-downloads) …")
-        n = generate_embeddings_for_dataset(DATASET_NAME, db)
+        n = generate_embeddings_for_dataset(dataset.id, db)
         db.commit()
         print(f"[seed] Done — {n} embeddings stored.  Ready.")
     except Exception as exc:
