@@ -10,7 +10,7 @@ from src.schemas import (
 
 
 def hard_cluster_stats(
-    db: Session, session_id: str, top_n: int = 3
+    db: Session, session_id: str, top_n: int = 10
 ) -> dict[str, tuple[int, list[str]]]:
     """Hard-assignment size and representative points per cluster of a session.
 

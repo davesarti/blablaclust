@@ -9,7 +9,7 @@ from src.harness import call_llm, render_prompt, loads_llm_json
 from src.logger import log
 from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoftAssignment
 
-REPRESENTATIVE_SAMPLE_SIZE = 8
+REPRESENTATIVE_SAMPLE_SIZE = 25
 
 
 def _point_text(dp: DataPoint) -> str:
