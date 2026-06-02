@@ -16,6 +16,15 @@ Design notes:
   ``coords_cache`` and it will be reused across requests.
 - Hard label at turn t = argmax soft-assignment probability for that point at t.
 - The silhouette overlay is read from the clustering-runs log (best-effort).
+- **Geometry-aware mode** (Phase 2): for turns where a ``semantic_reembed`` op
+  ran, we additionally fit a *second* UMAP on the hybrid (D+1) re-embed space —
+  the actual geometry k-means saw at that turn — so the projection visually
+  re-orients alongside the new partition instead of cutting across the original
+  topic layout. The poles are deterministic abstract phrases (``very {axis}`` /
+  ``not {axis} at all``) — the same fallback ``_generate_axis_poles`` already
+  uses on LLM failure — so the view is reproducible and free of API calls. This
+  trades faithfulness (the live clustering may have used LLM-judged poles) for
+  determinism; the cluster *partition* shown is still the real one from the DB.
 """
 
 from __future__ import annotations
@@ -113,11 +122,153 @@ def _silhouette_by_turn(session_id: str) -> dict[str, float | None]:
     return result
 
 
+def _axis_label_at_turn(
+    db, session_id: str, turn_number: int
+) -> str | None:
+    """Read the ``axis_label`` of the semantic_reembed op recorded at ``turn_number``.
+
+    Returns None when the turn has no semantic_reembed op (so the caller knows
+    to skip the geometry-aware layout for that turn). Tolerates the older
+    ``axis_hint`` key for resumed sessions, matching ``_active_axis_from_history``
+    in the turns router.
+    """
+    row = (
+        db.query(Turn)
+        .filter(Turn.session_id == session_id, Turn.turn_number == turn_number)
+        .one_or_none()
+    )
+    if row is None:
+        return None
+    ops = ((row.system_output or {}).get("state_snapshot") or {}).get("operations") or []
+    for op in ops:
+        if isinstance(op, dict) and op.get("type") == "semantic_reembed":
+            label = op.get("axis_label") or op.get("axis_hint")
+            if label:
+                return str(label)
+    return None
+
+
+def _encode_poles_default(axis_label: str) -> tuple[np.ndarray, np.ndarray]:
+    """Encode the two abstract pole phrases via MiniLM (the engine's encoder)."""
+    from sentence_transformers import SentenceTransformer
+
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    pos = model.encode(f"very {axis_label}", convert_to_numpy=True).astype(np.float64)
+    neg = model.encode(f"not {axis_label} at all", convert_to_numpy=True).astype(np.float64)
+    return pos, neg
+
+
+def _build_hybrid_space(
+    point_ids: list[str],
+    embeddings: np.ndarray,
+    axis_label: str,
+    axis_weight: float = 0.7,
+    *,
+    pole_encoder=None,
+) -> np.ndarray:
+    """Reconstruct the (N, D+1) hybrid space for a ``semantic_reembed`` axis,
+    deterministically (no LLM calls).
+
+    Mirrors ``f_semantic_reembed.reembed_for_axis`` but with **abstract phrase
+    poles** ("very {axis}" / "not {axis} at all") — the same fallback that
+    ``_generate_axis_poles`` returns on LLM failure. Cosine scoring against
+    those poles is fully deterministic, so the geometry-aware UMAP is
+    reproducible across requests and costs zero API calls.
+
+    Args:
+        point_ids: ids parallel to ``embeddings`` rows (unused here, kept so the
+            caller can build a session-stable cache key).
+        embeddings: (N, D) float32/64 matrix of the *original* dataset embeddings.
+            D must match the pole encoder's output dimensionality (384 for the
+            default MiniLM encoder, i.e. the production case).
+        axis_label: axis text, e.g. "positive sentiment".
+        axis_weight: same default 0.7 as the engine's ``reembed_for_axis``.
+        pole_encoder: optional callable ``axis_label -> (pos, neg)`` returning two
+            (D,) vectors. Defaults to MiniLM (matches the engine). Injection
+            exists so unit tests can run without downloading MiniLM and against
+            arbitrary D.
+
+    Returns:
+        (N, D+1) float32 matrix in the hybrid space — what k-means saw at the
+        reembed turn (modulo the LLM-judged variant when the engine used it).
+
+    Raises:
+        ValueError: when the pole encoding's dimension does not match ``D``.
+    """
+    encoder = pole_encoder or _encode_poles_default
+    pole_pos, pole_neg = (np.asarray(v, dtype=np.float64) for v in encoder(axis_label))
+
+    X = np.asarray(embeddings, dtype=np.float64)
+    if pole_pos.shape[0] != X.shape[1]:
+        raise ValueError(
+            f"pole dimension ({pole_pos.shape[0]}) does not match embeddings dim "
+            f"({X.shape[1]}) — encoder/embedding model mismatch?"
+        )
+
+    pole_pos /= np.linalg.norm(pole_pos) + 1e-8
+    pole_neg /= np.linalg.norm(pole_neg) + 1e-8
+    row_norms = np.linalg.norm(X, axis=1, keepdims=True)
+    orig_norm = X / (row_norms + 1e-8)
+    scores = orig_norm @ pole_pos - orig_norm @ pole_neg  # (N,) signed cosine axis
+    axis_norm = (scores - scores.mean()) / (scores.std() + 1e-8)
+
+    orig_scale = float(np.sqrt(1.0 - axis_weight))
+    ax_scale = float(np.sqrt(axis_weight))
+    return np.hstack(
+        [orig_norm * orig_scale, axis_norm.reshape(-1, 1) * ax_scale]
+    ).astype(np.float32)
+
+
+def compute_geometry_aware_coords(
+    db,
+    session_id: str,
+    turn_number: int,
+    embeddings: np.ndarray,
+    point_ids: list[str],
+    *,
+    reducer: str | None = None,
+    cache: dict | None = None,
+    pole_encoder=None,
+) -> tuple[np.ndarray, str, str] | None:
+    """Geometry-aware 2-D layout for a single ``semantic_reembed`` turn.
+
+    Fits a *second* UMAP on the hybrid (D+1) space the engine clustered at this
+    turn, so the partition shown by the slider is laid out in the re-oriented
+    geometry instead of the original topic layout. Returns ``None`` when this
+    turn has no semantic_reembed op — the caller then keeps the baseline coords.
+
+    Cached by ``(session_id, turn_number)`` because the hybrid space depends on
+    the session's axis. Pass a shared ``cache`` dict to amortise across requests.
+
+    Returns:
+        ``(coords_2d, reducer_name, axis_label)`` or ``None``.
+    """
+    axis_label = _axis_label_at_turn(db, session_id, turn_number)
+    if axis_label is None:
+        return None
+
+    key = (session_id, int(turn_number))
+    if cache is not None and key in cache:
+        return cache[key]
+
+    X_hybrid = _build_hybrid_space(
+        point_ids, embeddings, axis_label, pole_encoder=pole_encoder
+    )
+    coords, reducer_name = compute_coords(X_hybrid, reducer=reducer)
+    result = (coords, reducer_name, axis_label)
+    if cache is not None:
+        cache[key] = result
+    return result
+
+
 def project_session(
     db,
     session_id: str,
     coords_cache: dict[str, tuple[list[str], np.ndarray, str]] | None = None,
     reducer: str | None = None,
+    *,
+    geometry_aware: bool = False,
+    geometry_cache: dict | None = None,
 ) -> dict[str, Any]:
     """Build the full UMAP projection payload for one session.
 
@@ -141,6 +292,17 @@ def project_session(
               "centroids_by_turn": {"<turn>": {"<cluster_id>": [cx, cy]}},
               "reembed_turns": [int, ...],
               "axis_arrows": {"<turn>": {"from": [x,y], "to": [x,y], "label": str}},
+              # Only present when geometry_aware=True; one entry per reembed_turn
+              # containing the secondary UMAP of the hybrid (D+1) space.
+              "geometry_aware": {
+                  "<turn>": {
+                      "axis_label": str,
+                      "reducer": str,
+                      "points": [{"id", "x", "y"}],            # parallel to points
+                      "centroids": {"<cluster_id>": [cx, cy]},
+                  },
+                  ...
+              },
             }
 
     Raises:
@@ -239,30 +401,24 @@ def project_session(
             for cid, idxs in cluster_point_idxs.items()
         }
 
-    # ── Semantic re-embed turns: turn where ≥2 clusters dissolved AND ≥2 created ─
-    reembed_turns: list[int] = []
-    for t in turns:
-        dissolved = [cid for cid, m in clusters_meta.items() if m["dissolved_at_turn"] == t]
-        created   = [cid for cid, m in clusters_meta.items() if m["created_at_turn"] == t]
-        if len(dissolved) >= 2 and len(created) >= 2:
-            reembed_turns.append(t)
-
-    # ── Axis arrows: PCA direction of new cluster centroids at reembed turns ──
-    # Also read axis_label from the turn's state_snapshot operations.
+    # ── Semantic re-embed turns: read DIRECTLY from persisted ops ──────────────
+    # The previous "≥2 clusters dissolved AND ≥2 created same turn" heuristic
+    # missed real re-embeds where the engine dissolved 1 cluster and created
+    # many (or vice-versa). The truth is the `semantic_reembed` op stored in
+    # the turn's system_output — use it as the single source.
     axis_labels: dict[int, str] = {}
-    if reembed_turns:
-        turn_rows = (
-            db.query(Turn)
-            .filter(Turn.session_id == session_id)
-            .all()
-        )
-        for row in turn_rows:
-            ops = ((row.system_output or {}).get("state_snapshot") or {}).get("operations") or []
-            for op in ops:
-                if isinstance(op, dict) and op.get("type") == "semantic_reembed":
-                    label = op.get("axis_label") or op.get("axis_hint") or ""
-                    if label:
-                        axis_labels[row.turn_number] = str(label)
+    turn_rows = (
+        db.query(Turn)
+        .filter(Turn.session_id == session_id)
+        .all()
+    )
+    for row in turn_rows:
+        ops = ((row.system_output or {}).get("state_snapshot") or {}).get("operations") or []
+        for op in ops:
+            if isinstance(op, dict) and op.get("type") == "semantic_reembed":
+                label = op.get("axis_label") or op.get("axis_hint") or ""
+                axis_labels[row.turn_number] = str(label)
+    reembed_turns = sorted(axis_labels.keys())
 
     axis_arrows: dict[str, dict] = {}
     for t in reembed_turns:
@@ -283,6 +439,52 @@ def project_session(
             "label": axis_labels.get(t, ""),
         }
 
+    # ── Phase 2: geometry-aware projection for semantic_reembed turns ────────
+    # Opt-in (geometry_aware=True). For each reembed_turn we fit a SECOND UMAP
+    # on the hybrid (D+1) space the engine clustered in at that turn, so the
+    # partition is shown in the re-oriented geometry instead of cutting across
+    # the original topic layout. Deterministic (abstract-phrase poles, no LLM).
+    geometry_aware_payload: dict[str, dict[str, Any]] = {}
+    if geometry_aware and reembed_turns:
+        # Re-materialise the original embedding matrix only when we actually
+        # need it (the baseline path uses a coords cache, so X may not be in
+        # scope yet). Same row order as ``points``.
+        X_orig = np.array([p.embedding for p in points], dtype=np.float32)
+        for t in reembed_turns:
+            res = compute_geometry_aware_coords(
+                db,
+                session_id=session_id,
+                turn_number=t,
+                embeddings=X_orig,
+                point_ids=point_ids,
+                reducer=reducer,
+                cache=geometry_cache,
+            )
+            if res is None:
+                continue
+            ga_coords, ga_reducer, axis_label_t = res
+            ga_centroids: dict[str, list[float]] = {}
+            for cid, idxs in {
+                cid: [idx[pid] for pid, (_, cid_p) in best[t].items()
+                      if cid_p == cid and pid in idx]
+                for cid in {c for _, c in best[t].values()}
+            }.items():
+                if idxs:
+                    ga_centroids[cid] = [
+                        float(np.mean(ga_coords[idxs, 0])),
+                        float(np.mean(ga_coords[idxs, 1])),
+                    ]
+            geometry_aware_payload[str(t)] = {
+                "axis_label": axis_label_t,
+                "reducer": ga_reducer,
+                "points": [
+                    {"id": point_ids[i], "x": float(ga_coords[i, 0]),
+                     "y": float(ga_coords[i, 1])}
+                    for i in range(len(point_ids))
+                ],
+                "centroids": ga_centroids,
+            }
+
     return {
         "session_id": session_id,
         "dataset_name": dataset,
@@ -297,4 +499,5 @@ def project_session(
         "centroids_by_turn": centroids_by_turn,
         "reembed_turns": reembed_turns,
         "axis_arrows": axis_arrows,
+        "geometry_aware": geometry_aware_payload,
     }

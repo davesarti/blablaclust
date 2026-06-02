@@ -15,8 +15,13 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import src.logger as logger
-from src.models import Base, ChatSession, Cluster, DataPoint, SoftAssignment
-from src.viz.umap_projection import compute_coords, project_session
+from src.models import Base, ChatSession, Cluster, DataPoint, SoftAssignment, Turn
+from src.viz.umap_projection import (
+    _build_hybrid_space,
+    compute_coords,
+    compute_geometry_aware_coords,
+    project_session,
+)
 
 SESSION_ID = "sess-umap"
 DATASET = "ds"
@@ -211,3 +216,159 @@ def test_project_session_no_embeddings_raises(db):
     db.commit()
     with pytest.raises(ValueError, match="no embedded points"):
         project_session(db, SESSION_ID, reducer="pca")
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — geometry-aware projection (semantic_reembed turns)
+# ---------------------------------------------------------------------------
+#
+# Tests inject a deterministic pole encoder so they don't need to download the
+# MiniLM model and can run with arbitrary embedding dimensions. The encoder
+# returns axis-dependent poles in the *same* dimensionality as the points'
+# embeddings, exactly like the production encoder must.
+
+
+def _make_dummy_encoder(dim: int):
+    """Deterministic encoder: pole vectors derived from a hash of the axis text.
+
+    Different axes -> different (pos, neg) -> different hybrid space, but the
+    output is reproducible across calls (same seed). Tests verify both
+    properties via this encoder.
+    """
+    def encode(axis_label: str):
+        seed = abs(hash(("pole", axis_label))) % (2**32)
+        rng = np.random.default_rng(seed)
+        return rng.standard_normal(dim), rng.standard_normal(dim)
+    return encode
+
+
+def _seed_reembed_turn(db, axis_label: str = "positive sentiment") -> None:
+    """Add the Turn row for turn 1 so `_axis_label_at_turn` finds the axis.
+
+    The fixture's turn 1 already dissolves c1/c2 and creates c3/c4, which the
+    reembed-detection heuristic (≥2 dissolved + ≥2 created at same turn) picks
+    up. The Turn row supplies the axis_label in its system_output snapshot.
+    """
+    db.add(
+        Turn(
+            session_id=SESSION_ID,
+            turn_number=1,
+            oracle_input={"raw_text": "split by sentiment", "feedback_type": "global"},
+            system_output={
+                "state_snapshot": {
+                    "operations": [
+                        {"type": "semantic_reembed", "axis_label": axis_label}
+                    ]
+                }
+            },
+        )
+    )
+    db.commit()
+
+
+def test_build_hybrid_space_shape_and_determinism():
+    """The hybrid space is (N, D+1), deterministic for the same axis."""
+    enc = _make_dummy_encoder(dim=8)
+    X = np.random.default_rng(0).standard_normal((6, 8)).astype(np.float32)
+    ids = ["p" + str(i) for i in range(6)]
+    H1 = _build_hybrid_space(ids, X, "happy", pole_encoder=enc)
+    H2 = _build_hybrid_space(ids, X, "happy", pole_encoder=enc)
+    assert H1.shape == (6, 9)
+    np.testing.assert_allclose(H1, H2)  # no LLM, fully reproducible
+
+
+def test_build_hybrid_space_axis_changes_geometry():
+    """Different axes must produce different hybrid spaces."""
+    enc = _make_dummy_encoder(dim=8)
+    X = np.random.default_rng(1).standard_normal((6, 8)).astype(np.float32)
+    ids = ["p" + str(i) for i in range(6)]
+    H_a = _build_hybrid_space(ids, X, "happy", pole_encoder=enc)
+    H_b = _build_hybrid_space(ids, X, "technical", pole_encoder=enc)
+    # Last column = the axis projection — must differ between axes.
+    assert not np.allclose(H_a[:, -1], H_b[:, -1])
+
+
+def test_build_hybrid_space_rejects_dim_mismatch():
+    enc = _make_dummy_encoder(dim=5)  # poles in 5-D
+    X = np.random.default_rng(2).standard_normal((6, 8)).astype(np.float32)  # points in 8-D
+    with pytest.raises(ValueError, match="does not match"):
+        _build_hybrid_space(["a", "b", "c", "d", "e", "f"], X, "x", pole_encoder=enc)
+
+
+def test_compute_geometry_aware_coords_returns_none_when_no_reembed(db):
+    """Without a semantic_reembed op on this turn, the function returns None."""
+    enc = _make_dummy_encoder(dim=2)
+    X = np.array([db.get(DataPoint, pid).embedding for pid in _EMB], dtype=np.float32)
+    res = compute_geometry_aware_coords(
+        db, SESSION_ID, turn_number=1, embeddings=X,
+        point_ids=list(_EMB.keys()), reducer="pca", pole_encoder=enc,
+    )
+    assert res is None  # no Turn row seeded yet → no axis_label
+
+
+def test_compute_geometry_aware_coords_uses_axis_and_caches(db):
+    _seed_reembed_turn(db, axis_label="positive sentiment")
+    enc = _make_dummy_encoder(dim=2)
+    X = np.array([db.get(DataPoint, pid).embedding for pid in _EMB], dtype=np.float32)
+    cache: dict = {}
+
+    res = compute_geometry_aware_coords(
+        db, SESSION_ID, turn_number=1, embeddings=X,
+        point_ids=list(_EMB.keys()), reducer="pca", cache=cache, pole_encoder=enc,
+    )
+    assert res is not None
+    coords, reducer_name, axis_label = res
+    assert coords.shape == (6, 2)
+    assert reducer_name == "pca"
+    assert axis_label == "positive sentiment"
+    assert (SESSION_ID, 1) in cache  # cached for reuse
+
+    # Second call hits the cache and returns the same tuple instance.
+    assert compute_geometry_aware_coords(
+        db, SESSION_ID, turn_number=1, embeddings=X,
+        point_ids=list(_EMB.keys()), reducer="pca", cache=cache, pole_encoder=enc,
+    ) is res
+
+
+def test_project_session_geometry_aware_off_by_default(db):
+    _seed_reembed_turn(db)
+    res = project_session(db, SESSION_ID, reducer="pca")  # no flag
+    assert res.get("geometry_aware") == {}  # opt-in only
+
+
+def test_project_session_geometry_aware_payload(db, monkeypatch):
+    """End-to-end: project_session emits the geometry_aware payload for the
+    reembed turn, parallel to the baseline points order."""
+    _seed_reembed_turn(db, axis_label="positive sentiment")
+    enc = _make_dummy_encoder(dim=2)
+    monkeypatch.setattr(
+        "src.viz.umap_projection._encode_poles_default", enc
+    )
+    res = project_session(db, SESSION_ID, reducer="pca", geometry_aware=True)
+    ga = res.get("geometry_aware") or {}
+    assert "1" in ga, "expected geometry_aware payload for the reembed turn"
+    entry = ga["1"]
+    assert entry["axis_label"] == "positive sentiment"
+    assert entry["reducer"] == "pca"
+    assert len(entry["points"]) == 6
+    # parallel to the top-level points order
+    assert [p["id"] for p in entry["points"]] == [p["id"] for p in res["points"]]
+    # centroids cover both turn-1 clusters (c3, c4)
+    assert set(entry["centroids"].keys()) == {"c3", "c4"}
+
+
+def test_project_session_geometry_aware_differs_from_baseline(db, monkeypatch):
+    """The geometry-aware layout should not be identical to the baseline one —
+    that's the whole point of fitting a second UMAP on the hybrid space."""
+    _seed_reembed_turn(db)
+    enc = _make_dummy_encoder(dim=2)
+    monkeypatch.setattr("src.viz.umap_projection._encode_poles_default", enc)
+    res = project_session(db, SESSION_ID, reducer="pca", geometry_aware=True)
+    baseline = {p["id"]: (p["x"], p["y"]) for p in res["points"]}
+    ga_points = res["geometry_aware"]["1"]["points"]
+    ga = {p["id"]: (p["x"], p["y"]) for p in ga_points}
+    diffs = [
+        np.hypot(ga[pid][0] - baseline[pid][0], ga[pid][1] - baseline[pid][1])
+        for pid in baseline
+    ]
+    assert max(diffs) > 1e-6
