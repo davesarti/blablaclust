@@ -117,45 +117,57 @@ def name_clusters(
         axis_context=axis_context,
     )
 
-    # Naming is best-effort: a failed LLM call (no API key, rate limit,
-    # unreachable) or an unparseable response must not abort clustering.
+    # Naming is best-effort: a failed LLM call or unparseable response must not
+    # abort clustering. Retry up to 2 extra times before giving up — malformed
+    # JSON from the LLM is the most common transient failure here.
+    _MAX_ATTEMPTS = 3
     response = None
-    try:
-        response = call_llm(
-            [{"role": "user", "content": "Name all clusters."}],
-            system=prompt,
-        )
-        parsed = loads_llm_json(response.text)
+    last_exc: Exception | None = None
 
-        clusters_by_id = {c.id: c for c in clusters}
-        parsed_keys = list(parsed.keys())
-        for cluster_id in nameable_ids:
-            entry = parsed.get(cluster_id)
-            if not isinstance(entry, dict):
-                # The LLM may have mistyped one character of the UUID key.
-                # Try a fuzzy match on the parsed keys — same fix as the
-                # UUID repair in f_apply_operations for the inverse direction.
-                matches = difflib.get_close_matches(cluster_id, parsed_keys, n=1, cutoff=0.9)
-                if matches:
-                    log.warning(
-                        "cluster_naming: LLM mistyped cluster_id key %s -> %s, "
-                        "recovering via fuzzy match", cluster_id, matches[0]
-                    )
-                    entry = parsed.get(matches[0])
-            if not isinstance(entry, dict):
-                continue  # truly missing — keep placeholder
-            cluster = clusters_by_id[cluster_id]
-            if name := entry.get("name"):
-                cluster.name = str(name)[:255]
-            if description := entry.get("description"):
-                cluster.description = str(description)
-    except Exception as e:
-        # Log a snippet of the raw response so a recurring parse failure is
-        # diagnosable rather than opaque (the response itself was never logged).
-        snippet = repr(response.text[:500]) if response is not None else "<no response>"
-        log.warning(
-            f"cluster_naming: LLM call failed or returned invalid JSON, keeping "
-            f"placeholder names for all clusters. Error: {e}. Raw response: {snippet}"
-        )
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            response = call_llm(
+                [{"role": "user", "content": "Name all clusters."}],
+                system=prompt,
+            )
+            parsed = loads_llm_json(response.text)
+
+            clusters_by_id = {c.id: c for c in clusters}
+            parsed_keys = list(parsed.keys())
+            for cluster_id in nameable_ids:
+                entry = parsed.get(cluster_id)
+                if not isinstance(entry, dict):
+                    # The LLM may have mistyped one character of the UUID key.
+                    # Try a fuzzy match on the parsed keys — same fix as the
+                    # UUID repair in f_apply_operations for the inverse direction.
+                    matches = difflib.get_close_matches(cluster_id, parsed_keys, n=1, cutoff=0.9)
+                    if matches:
+                        log.warning(
+                            "cluster_naming: LLM mistyped cluster_id key %s -> %s, "
+                            "recovering via fuzzy match", cluster_id, matches[0]
+                        )
+                        entry = parsed.get(matches[0])
+                if not isinstance(entry, dict):
+                    continue  # truly missing — keep placeholder
+                cluster = clusters_by_id[cluster_id]
+                if name := entry.get("name"):
+                    cluster.name = str(name)[:255]
+                if description := entry.get("description"):
+                    cluster.description = str(description)
+            break  # success — stop retrying
+        except Exception as e:
+            last_exc = e
+            snippet = repr(response.text[:200]) if response is not None else "<no response>"
+            if attempt < _MAX_ATTEMPTS - 1:
+                log.warning(
+                    "cluster_naming: attempt %d/%d failed (%s), retrying. Response: %s",
+                    attempt + 1, _MAX_ATTEMPTS, e, snippet,
+                )
+            else:
+                log.warning(
+                    "cluster_naming: all %d attempts failed, keeping placeholder names. "
+                    "Last error: %s. Last response: %s",
+                    _MAX_ATTEMPTS, e, snippet,
+                )
 
     return clusters
