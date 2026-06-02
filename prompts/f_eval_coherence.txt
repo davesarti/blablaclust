@@ -1,5 +1,5 @@
 You are a clustering quality evaluator. Judge the INTERNAL COHERENCE of each
-cluster: do its members share one clear, focused theme?
+cluster: do its members broadly belong to the same general theme?
 
 You are an independent judge. Answer about content fit only — not about whether
 the oracle's requests were honoured (that is judged separately).
@@ -14,13 +14,33 @@ ORACLE FEEDBACK HISTORY (informs what each cluster is supposed to be)
 CLUSTERS TO JUDGE
 Each cluster lists sampled members. "top" = highest-confidence members
 (most representative); "bottom" = lowest-confidence members (the weakest-fitting
-edge cases). A truly coherent cluster holds together even at its bottom members.
+edge cases).
 {clusters_block}
 
 TASK
-For each cluster, score how internally coherent it is, weighing the bottom
-members heavily: if the edge cases still belong, the cluster is solid; if they
-read like they wandered in from another topic, the cluster is loose.
+For each cluster, score how internally coherent it is. Use the scale below
+strictly — calibrate so that a genuinely mixed or random-looking cluster scores
+below 0.3.
+
+SCORING GUIDE
+- 0.85–1.0  Tight: all members clearly share one theme; edge cases are minor
+            variations within that theme (e.g., a videogame review in a
+            movie-reviews cluster). Name/description need not be very coherent to the points.
+- 0.60–0.84 Loose but coherent: the majority of members fit a recognisable
+            broad theme, but a meaningful minority are from a related yet
+            distinct domain. The cluster still makes sense as a grouping.
+- 0.30–0.59 Fragmented: the cluster mixes two or more clearly different topics
+            with no obvious unifying theme, or a large fraction of members are
+            genuinely off-topic.
+- 0.00–0.29 Incoherent: members come from unrelated domains with no discernible
+            or contradictory themes (e.g., legal documents mixed with cooking recipes mixed
+            with sports commentary).
+
+PENALIZATION
+Give a penalty to clusters with too generic names.
+
+IMPORTANT: In any free-text field (reasoning, notes), always refer to clusters by
+their Name, never by their ID.
 
 Return a single JSON object with a "results" array, one entry per cluster, in the
 same order as the input. No markdown fences, no commentary outside the JSON.
@@ -30,7 +50,7 @@ same order as the input. No markdown fences, no commentary outside the JSON.
     {{
       "cluster_id": "<same id as input>",
       "coherence": <float between 0.0 and 1.0>,
-      "reasoning": "<1-2 sentences. Name the shared theme and call out any bottom member that breaks it.>"
+      "reasoning": "<1-2 sentences. Name the broad shared theme and note any member that is genuinely off-topic (not just adjacent).>"
     }}
   ]
 }}

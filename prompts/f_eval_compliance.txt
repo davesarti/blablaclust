@@ -32,6 +32,9 @@ system's operations carry out what the oracle asked?
   Just score what the system did against the most reasonable reading of the
   request.
 
+IMPORTANT: In any free-text field (notes), always refer to clusters by their name,
+never by their ID.
+
 Respond with a single valid JSON object. No markdown fences, no commentary
 outside the JSON.
 

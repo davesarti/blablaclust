@@ -37,7 +37,7 @@ export default function ClusterCard({ cluster, index, selected, totalSize, onSel
           {index + 1}
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-medium text-[16px] leading-tight text-ink truncate">{cluster.name}</h3>
+          <h3 className="font-medium text-[16px] leading-tight text-ink break-words">{cluster.name}</h3>
           <div className="flex items-center gap-2.5 mt-1.5">
             <span className="font-mono text-[13px] text-faint">{cluster.size} pts</span>
             <span className="text-faint text-[13px]">·</span>

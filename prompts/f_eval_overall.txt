@@ -39,6 +39,9 @@ verdict. Combine the axes with judgment, not arithmetic. Guiding principles:
 - A single weak cluster (low coherence_min) against otherwise strong coherence
   is a localised issue, not a session-wide failure.
 
+IMPORTANT: In any free-text field (notes), always refer to clusters by their name,
+never by their ID.
+
 Respond with a single valid JSON object. No markdown fences, no commentary
 outside the JSON.
 

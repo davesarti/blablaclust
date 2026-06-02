@@ -29,6 +29,9 @@ Read the oracle feedback as a whole and assess CONTRADICTION / AMBIGUITY:
 A CONSISTENT, CLEAR oracle scores near 0.0 even if it changed its mind once
 with a stated reason. A CONFUSED or SELF-CONTRADICTORY oracle scores near 1.0.
 
+IMPORTANT: In any free-text field (notes, examples), always refer to clusters by
+their name, never by their ID.
+
 Respond with a single valid JSON object. No markdown fences, no commentary
 outside the JSON.
 

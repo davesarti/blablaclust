@@ -123,13 +123,6 @@ export default function EvalModal({ result, onClose }: Props) {
                   </div>
                 )}
 
-                {result.B4?.examples && result.B4.examples.length > 0 && (
-                  <div className="flex flex-col gap-1.5">
-                    {result.B4.examples.map((ex, i) => (
-                      <p key={i} className="text-[14px] text-red-600 leading-snug pl-3" style={{ borderLeft: '2px solid var(--color-red)' }}>{ex}</p>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
           </div>
