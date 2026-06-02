@@ -163,20 +163,32 @@ def f_boundary_repair(
         points_block=points_block,
     )
 
-    try:
-        msg = call_llm([{"role": "user", "content": prompt}], system="")
-        log_llm_call(
-            session_id=session_id,
-            prompt_name="f_boundary_repair",
-            prompt_hash=hash_prompt("f_boundary_repair"),
-            usage=msg.usage,
-            cost_usd=estimate_cost_usd(msg.usage),
-        )
-        parsed = loads_llm_json(msg.text)
-        decisions = parsed.get("decisions", [])
-    except Exception as exc:
-        log.warning("f_boundary_repair: LLM call failed — skipping repair. Error: %s", exc)
-        return []
+    _MAX_ATTEMPTS = 3
+    decisions: list = []
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            msg = call_llm([{"role": "user", "content": prompt}], system="")
+            log_llm_call(
+                session_id=session_id,
+                prompt_name="f_boundary_repair",
+                prompt_hash=hash_prompt("f_boundary_repair"),
+                usage=msg.usage,
+                cost_usd=estimate_cost_usd(msg.usage),
+            )
+            decisions = loads_llm_json(msg.text).get("decisions", [])
+            break  # success
+        except Exception as exc:
+            if attempt < _MAX_ATTEMPTS - 1:
+                log.warning(
+                    "f_boundary_repair: attempt %d/%d failed (%s), retrying.",
+                    attempt + 1, _MAX_ATTEMPTS, exc,
+                )
+            else:
+                log.warning(
+                    "f_boundary_repair: all %d attempts failed — skipping repair. Error: %s",
+                    _MAX_ATTEMPTS, exc,
+                )
+                return []
 
     moves: list[dict] = []
     active_id_set = {c.id for c in active_clusters}

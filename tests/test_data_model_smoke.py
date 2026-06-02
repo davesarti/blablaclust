@@ -22,6 +22,7 @@ from src.models import (
     ChatSession,
     Cluster,
     DataPoint,
+    Dataset,
     SoftAssignment,
     Turn,
 )
@@ -51,10 +52,12 @@ def db():
 
 def _seed_full_graph(db: Session) -> None:
     """Insert one of every row type, fully linked: the canonical happy path."""
+    db.add(Dataset(id="ds", name="ds", description=""))
+    db.flush()
     session = ChatSession(
-        id="sess-1", dataset_name="ds", embedding_model="default", status="active"
+        id="sess-1", dataset_id="ds", embedding_model="default", status="active"
     )
-    point = DataPoint(id="dp-1", dataset_name="ds", data={"text": "hi"}, embedding=[0.1, 0.2])
+    point = DataPoint(id="dp-1", dataset_id="ds", data={"text": "hi"}, embedding=[0.1, 0.2])
     cluster = Cluster(
         id="cl-1",
         session_id="sess-1",
@@ -111,7 +114,7 @@ def test_deleting_session_cascades_to_children(db):
     [
         (
             lambda: ChatSession(
-                id="bad", dataset_name="ds", embedding_model="m", status="bogus"
+                id="bad", dataset_id="ds", embedding_model="m", status="bogus"
             ),
             "ck_sessions_status: status must be active/converged/closed",
         ),

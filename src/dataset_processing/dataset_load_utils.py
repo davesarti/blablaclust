@@ -11,8 +11,9 @@ from typing import IO, Iterable, Tuple
 
 from sqlalchemy.orm import Session
 
-from src.models import DataPoint
+from src.models import DataPoint, Dataset
 from src.dataset_processing.text_cleaning import clean_fields, clean_text
+from src.dataset_processing.dataset_description import generate_dataset_description
 
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 EMBEDDING_BATCH_SIZE = 64
@@ -49,7 +50,34 @@ def save_upload_to_tmp(upload_stream: IO[bytes], suffix: str = ".csv") -> str:
     return tmp.name
 
 
-def ingest_csv_path(path: str, dataset_name: str, db: Session) -> Tuple[int, int]:
+def get_or_create_dataset(name: str, db: Session) -> Dataset:
+    """Look up a Dataset by name, creating it if missing.
+
+    Raises ``ValueError`` if a Dataset with the given name already has
+    DataPoints attached — used by upload to reject duplicate uploads of
+    the same name without silently appending to the existing one.
+    """
+    existing = db.query(Dataset).filter(Dataset.name == name).one_or_none()
+    if existing is not None:
+        has_points = (
+            db.query(DataPoint.id)
+            .filter(DataPoint.dataset_id == existing.id)
+            .first()
+            is not None
+        )
+        if has_points:
+            raise ValueError(
+                f"A dataset named '{name}' already exists. Choose a different "
+                f"name or delete the existing one first."
+            )
+        return existing
+    ds = Dataset(id=str(uuid.uuid4()), name=name, description="")
+    db.add(ds)
+    db.flush()
+    return ds
+
+
+def ingest_csv_path(path: str, dataset_id: str, db: Session) -> Tuple[int, int]:
     inserted = 0
     skipped = 0
     with open(path, newline="", encoding="utf-8") as handle:
@@ -72,7 +100,7 @@ def ingest_csv_path(path: str, dataset_name: str, db: Session) -> Tuple[int, int
                 continue
             dp = DataPoint(
                 id=str(uuid.uuid4()),
-                dataset_name=dataset_name,
+                dataset_id=dataset_id,
                 data={
                     "label": label,
                     "title": title_clean,
@@ -84,14 +112,58 @@ def ingest_csv_path(path: str, dataset_name: str, db: Session) -> Tuple[int, int
     return inserted, skipped
 
 
+def iter_generate_embeddings_for_dataset(
+    dataset_id: str,
+    db: Session,
+    model=None,
+):
+    """Batch-by-batch embedding generator yielding ``(done, total)`` tuples.
+
+    The first yield fires before the model loads (``done=0``) so callers can show
+    a "preparing" state; subsequent yields fire after each ``EMBEDDING_BATCH_SIZE``
+    chunk is encoded and persisted onto its DataPoint. The DB session is mutated
+    in place — the caller is responsible for committing.
+    """
+    data_points = (
+        db.query(DataPoint)
+        .filter(DataPoint.dataset_id == dataset_id, DataPoint.embedding == None)
+        .all()
+    )
+    total = len(data_points)
+    yield (0, total)
+    if total == 0:
+        return
+
+    if model is None:
+        from sentence_transformers import SentenceTransformer
+
+        model = SentenceTransformer(EMBEDDING_MODEL)
+
+    texts = [clean_text(dp.data["title"], dp.data["text"]) for dp in data_points]
+    done = 0
+    for i in range(0, total, EMBEDDING_BATCH_SIZE):
+        chunk_texts = texts[i : i + EMBEDDING_BATCH_SIZE]
+        chunk_dps = data_points[i : i + EMBEDDING_BATCH_SIZE]
+        vecs = model.encode(
+            chunk_texts,
+            batch_size=EMBEDDING_BATCH_SIZE,
+            show_progress_bar=False,
+            convert_to_numpy=True,
+        )
+        for dp, vec in zip(chunk_dps, vecs):
+            dp.embedding = vec.tolist()
+        done += len(chunk_dps)
+        yield (done, total)
+
+
 def generate_embeddings_for_dataset(
-    dataset_name: str,
+    dataset_id: str,
     db: Session,
     model=None,
 ) -> int:
     data_points = (
         db.query(DataPoint)
-        .filter(DataPoint.dataset_name == dataset_name, DataPoint.embedding == None)
+        .filter(DataPoint.dataset_id == dataset_id, DataPoint.embedding == None)
         .all()
     )
     if not data_points:
@@ -121,19 +193,28 @@ def process_csv_upload(
     dataset_name: str,
     db: Session,
     generate_embeddings: bool = True,
-) -> dict[str, int]:
+) -> dict[str, object]:
+    """Ingest a CSV under ``dataset_name``, embed, and generate a description.
+
+    Returns ``{dataset_id, inserted, skipped, embeddings_generated, description}``.
+    Rejects duplicate-name uploads via :func:`get_or_create_dataset`.
+    """
     tmp_path = save_upload_to_tmp(upload_stream)
     try:
-        inserted, skipped = ingest_csv_path(tmp_path, dataset_name, db)
+        dataset = get_or_create_dataset(dataset_name, db)
+        inserted, skipped = ingest_csv_path(tmp_path, dataset.id, db)
         db.flush()
         embeddings_generated = 0
         if generate_embeddings:
-            embeddings_generated = generate_embeddings_for_dataset(dataset_name, db)
+            embeddings_generated = generate_embeddings_for_dataset(dataset.id, db)
+        description = generate_dataset_description(dataset.id, db)
         db.commit()
         return {
+            "dataset_id": dataset.id,
             "inserted": inserted,
             "skipped": skipped,
             "embeddings_generated": embeddings_generated,
+            "description": description,
         }
     except Exception:
         db.rollback()

@@ -66,7 +66,9 @@ from src.engine.f_eval import f_eval_coherence
 from src.engine.generalization import centroids_from_snapshot, ingest_points
 from src.engine.initial_clustering import KMEANS_RANDOM_STATE, initial_clustering
 from src.harness import DRY_RUN
-from src.models import Base, ChatSession, DataPoint, SoftAssignment
+from src.models import Base, ChatSession, DataPoint, Dataset, SoftAssignment
+
+DATASET_ID = "ds-gen-stability"
 
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 SESSION_ID = "gen-stability-eval"
@@ -328,13 +330,14 @@ def main() -> None:
                            poolclass=StaticPool)
     Base.metadata.create_all(bind=engine)
     db = sessionmaker(bind=engine, autoflush=False, autocommit=False)()
-    session = ChatSession(id=SESSION_ID, dataset_name="generalization",
+    db.add(Dataset(id=DATASET_ID, name="generalization", description=""))
+    session = ChatSession(id=SESSION_ID, dataset_id=DATASET_ID,
                           embedding_model=EMBEDDING_MODEL, status="converged")
     db.add(session)
 
     base_points = []
     for i, emb in enumerate(base_emb):
-        dp = DataPoint(id=f"base-{i}", dataset_name="generalization",
+        dp = DataPoint(id=f"base-{i}", dataset_id=DATASET_ID,
                        data={"title": "", "text": base_texts[i]}, embedding=emb.tolist())
         db.add(dp)
         base_points.append(dp)
@@ -376,7 +379,7 @@ def main() -> None:
         if len(idx) == 0:
             continue
         batch_points = [
-            DataPoint(id=f"new-{int(i)}", dataset_name="generalization",
+            DataPoint(id=f"new-{int(i)}", dataset_id=DATASET_ID,
                       data={"title": "", "text": new_texts[int(i)]},
                       embedding=new_emb[int(i)].tolist())
             for i in idx

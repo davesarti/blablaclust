@@ -51,7 +51,7 @@ def db():
     session.add(
         ChatSession(
             id=SESSION_ID,
-            dataset_name="ds",
+            dataset_id="ds",
             embedding_model="default",
             status="active",
         )
@@ -59,7 +59,7 @@ def db():
     data_points = []
     for point_id, embedding in _POINTS.items():
         dp = DataPoint(
-            id=point_id, dataset_name="ds", data={"text": point_id}, embedding=embedding
+            id=point_id, dataset_id="ds", data={"text": point_id}, embedding=embedding
         )
         data_points.append(dp)
         session.add(dp)
@@ -96,7 +96,7 @@ def db_big_cluster():
     session.add(
         ChatSession(
             id=SESSION_BIG,
-            dataset_name="ds",
+            dataset_id="ds",
             embedding_model="default",
             status="active",
         )
@@ -114,7 +114,7 @@ def db_big_cluster():
         session.add(
             DataPoint(
                 id=f"{point_id}-big",
-                dataset_name="ds",
+                dataset_id="ds",
                 data={"text": point_id},
                 embedding=embedding,
             )
@@ -253,7 +253,7 @@ def test_merge_preserves_argmax_on_flat_soft_assignments():
     db = Session()
 
     sid = "sess-flat"
-    db.add(ChatSession(id=sid, dataset_name="ds", embedding_model="d", status="active"))
+    db.add(ChatSession(id=sid, dataset_id="ds", embedding_model="d", status="active"))
     for i, cid in enumerate(["c1", "c2", "c3", "c4", "c5"]):
         db.add(Cluster(id=cid, session_id=sid, name=f"C{i+1}", description="",
                        created_at_turn=0))
@@ -261,7 +261,7 @@ def test_merge_preserves_argmax_on_flat_soft_assignments():
     # Two merged clusters (c4, c5) sum to 0.18+0.17 = 0.35 — would beat c1
     # under the buggy fold.
     flat = {"c1": 0.27, "c2": 0.20, "c3": 0.18, "c4": 0.18, "c5": 0.17}
-    db.add(DataPoint(id="p1", dataset_name="ds", data={"text": "p"}, embedding=[0.0]))
+    db.add(DataPoint(id="p1", dataset_id="ds", data={"text": "p"}, embedding=[0.0]))
     for cid, prob in flat.items():
         db.add(SoftAssignment(data_point_id="p1", cluster_id=cid,
                               turn_number=0, probability=prob))
@@ -339,11 +339,11 @@ def test_split_rejects_cluster_with_one_point(db):
     # a separate session whose single cluster holds just one point
     db.add(
         ChatSession(
-            id="solo", dataset_name="ds", embedding_model="default", status="active"
+            id="solo", dataset_id="ds", embedding_model="default", status="active"
         )
     )
     db.add(
-        DataPoint(id="solo-p", dataset_name="ds", data={"text": "x"}, embedding=[1.0, 1.0])
+        DataPoint(id="solo-p", dataset_id="ds", data={"text": "x"}, embedding=[1.0, 1.0])
     )
     db.add(
         Cluster(

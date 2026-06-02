@@ -15,7 +15,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import src.logger as logger
-from src.models import Base, ChatSession, Cluster, DataPoint, SoftAssignment, Turn
+from src.models import Base, ChatSession, Cluster, DataPoint, Dataset, SoftAssignment, Turn
 from src.viz.umap_projection import (
     _build_hybrid_space,
     compute_coords,
@@ -48,17 +48,19 @@ def db():
     Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     session = Session()
 
+    session.add(Dataset(id=DATASET, name=DATASET, description=""))
+    session.flush()
     session.add(
         ChatSession(
             id=SESSION_ID,
-            dataset_name=DATASET,
+            dataset_id=DATASET,
             embedding_model="default",
             status="active",
         )
     )
     for pid, emb in _EMB.items():
         session.add(
-            DataPoint(id=pid, dataset_name=DATASET, data={"text": f"text {pid}"}, embedding=emb)
+            DataPoint(id=pid, dataset_id=DATASET, data={"text": f"text {pid}"}, embedding=emb)
         )
 
     # Turn 0: two clusters (c1 = p0..p2, c2 = p3..p5).

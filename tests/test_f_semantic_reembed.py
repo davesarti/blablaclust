@@ -28,7 +28,7 @@ def _make_points(n: int, dim: int = 4) -> list[DataPoint]:
         dp.id = f"p{i}"
         dp.embedding = rng.standard_normal(dim).astype(np.float32).tolist()
         dp.data = {"text": f"text {i}"}
-        dp.dataset_name = "ds"
+        dp.dataset_id = "ds"
         points.append(dp)
     return points
 
@@ -75,13 +75,13 @@ class TestCosineAxisScores:
         dp_pos.id = "pp"
         dp_pos.embedding = pos_emb
         dp_pos.data = {}
-        dp_pos.dataset_name = "ds"
+        dp_pos.dataset_id = "ds"
 
         dp_neg = DataPoint()
         dp_neg.id = "pn"
         dp_neg.embedding = neg_emb
         dp_neg.data = {}
-        dp_neg.dataset_name = "ds"
+        dp_neg.dataset_id = "ds"
 
         pole_pos = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
         pole_neg = np.array([0.0, 1.0, 0.0, 0.0], dtype=np.float64)
@@ -259,13 +259,13 @@ class TestReembedForAxis:
         dp0.id = "p0"
         dp0.embedding = [1.0, 0.0]
         dp0.data = {}
-        dp0.dataset_name = "ds"
+        dp0.dataset_id = "ds"
 
         dp1 = DataPoint()
         dp1.id = "p1"
         dp1.embedding = [0.0, 1.0]
         dp1.data = {}
-        dp1.dataset_name = "ds"
+        dp1.dataset_id = "ds"
 
         cosine_scores = np.array([0.0, 5.0], dtype=np.float64)
 
@@ -283,7 +283,7 @@ class TestReembedForAxis:
         dp.id = "bad"
         dp.embedding = None
         dp.data = {}
-        dp.dataset_name = "ds"
+        dp.dataset_id = "ds"
 
         with pytest.raises(ValueError, match="missing embeddings"):
             from src.engine.f_semantic_reembed import reembed_for_axis

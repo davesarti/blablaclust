@@ -13,6 +13,7 @@ from src.engine.f_next_best_step import f_next_best_step
 from src.engine.f_output import f_output
 from src.engine.f_semantic_reembed import AxisNotDiscriminativeError
 from src.engine.f_uncertainty import f_cluster_uncertainty
+from src.engine.f_update_preferences import f_update_preferences
 from src.engine.semantic_clustering import semantic_clustering
 from src.harness import ConversationContext, estimate_cost_usd
 from src.models import ChatSession, Cluster as DbCluster, DataPoint, SoftAssignment, Turn
@@ -76,7 +77,7 @@ def _run_semantic_reembed(
     )
     all_data_points = (
         db.query(DataPoint)
-        .filter(DataPoint.dataset_name == session.dataset_name)
+        .filter(DataPoint.dataset_id == session.dataset_id)
         .all()
     )
     return semantic_clustering(
@@ -226,7 +227,7 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
         # Normal path: the LLM is the single intent-classification step.
         total_points = (
             db.query(DataPoint)
-            .filter(DataPoint.dataset_name == session.dataset_name)
+            .filter(DataPoint.dataset_id == session.dataset_id)
             .count()
         )
         try:
@@ -437,9 +438,23 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     system_turn.token_usage = turn_usage
     system_turn.cost_usd = turn_cost
 
-    # Surface the LLM's real display text regardless of action (show/ask/stop).
-    if isinstance(raw_display, str):
-        system_turn.display.content = raw_display
+    # Always surface the LLM's actual reply, regardless of action.
+    # Guard: only use the LLM's display text if it is plain prose, not JSON.
+    # Small/free models sometimes put structured JSON inside the display field
+    # instead of a human-readable explanation, which would show raw JSON in
+    # the chat. If the value parses as JSON or starts with { / [, fall back
+    # to the f_next_best_step message which is always a proper English string.
+    if isinstance(raw_display, str) and raw_display.strip():
+        stripped = raw_display.strip()
+        is_json = stripped.startswith(("{", "["))
+        if not is_json:
+            try:
+                json.loads(stripped)
+                is_json = True
+            except (ValueError, TypeError):
+                pass
+        if not is_json:
+            system_turn.display.content = raw_display
 
     # Close the session when the planner decides to stop.
     if system_turn.action == "stop":
@@ -462,5 +477,15 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     db.add(new_turn)
     db.commit()
     db.refresh(new_turn)
+
+    # Update the rolling oracle preference summary.  This is a best-effort
+    # background step: if the LLM call inside f_update_preferences fails, we
+    # keep the previous summary and never raise.  We build a fresh state that
+    # includes the turn we just persisted so the summary covers all turns.
+    final_state = build_session_state(db, session)
+    new_summary = f_update_preferences(final_state)
+    if new_summary is not None:
+        session.preference_summary = new_summary
+        db.commit()
 
     return TurnRead.model_validate(new_turn, from_attributes=True)

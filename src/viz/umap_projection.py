@@ -311,11 +311,12 @@ def project_session(
     session = db.get(ChatSession, session_id)
     if session is None:
         raise ValueError(f"session '{session_id}' not found")
-    dataset = session.dataset_name
+    dataset_id = session.dataset_id
+    dataset_name = session.dataset.name if session.dataset else dataset_id
 
     points = (
         db.query(DataPoint)
-        .filter(DataPoint.dataset_name == dataset, DataPoint.embedding.isnot(None))
+        .filter(DataPoint.dataset_id == dataset_id, DataPoint.embedding.isnot(None))
         .order_by(DataPoint.id)
         .all()
     )
@@ -323,18 +324,18 @@ def project_session(
     # (the JSON column serialises Python None as JSON null, not SQL NULL).
     points = [p for p in points if p.embedding is not None]
     if not points:
-        raise ValueError(f"dataset '{dataset}' has no embedded points")
+        raise ValueError(f"dataset '{dataset_name}' has no embedded points")
     point_ids = [p.id for p in points]
 
     # ── Reduce to 2-D (cached per dataset — embeddings are immutable) ──────────
-    cached = coords_cache.get(dataset) if coords_cache is not None else None
+    cached = coords_cache.get(dataset_id) if coords_cache is not None else None
     if cached is not None and cached[0] == point_ids:
         coords, reducer_name = cached[1], cached[2]
     else:
         X = np.array([p.embedding for p in points], dtype=np.float32)
         coords, reducer_name = compute_coords(X, reducer=reducer)
         if coords_cache is not None:
-            coords_cache[dataset] = (point_ids, coords, reducer_name)
+            coords_cache[dataset_id] = (point_ids, coords, reducer_name)
 
     idx = {pid: i for i, pid in enumerate(point_ids)}
 
@@ -487,7 +488,8 @@ def project_session(
 
     return {
         "session_id": session_id,
-        "dataset_name": dataset,
+        "dataset_id": dataset_id,
+        "dataset_name": dataset_name,
         "reducer": reducer_name,
         "n_points": len(points),
         "points": points_out,

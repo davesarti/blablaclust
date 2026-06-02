@@ -9,7 +9,7 @@ interface Props { onCreated: (s: Session) => void }
 export default function NewSessionModal({ onCreated }: Props) {
   const { state, dispatch } = useApp()
   const [datasets, setDatasets] = useState<Dataset[]>([])
-  const [dataset, setDataset] = useState('')
+  const [datasetId, setDatasetId] = useState('')
   const [name, setName] = useState('')
   const [k, setK] = useState(5)
   const [loading, setLoading] = useState(false)
@@ -17,19 +17,22 @@ export default function NewSessionModal({ onCreated }: Props) {
 
   useEffect(() => {
     if (state.modal !== 'new-session') return
-    getDatasets().then(d => { setDatasets(d); if (d.length) setDataset(d[0].dataset_name) }).catch(() => {})
+    getDatasets().then(d => { setDatasets(d); if (d.length) setDatasetId(d[0].dataset_id) }).catch(() => {})
   }, [state.modal])
 
   if (state.modal !== 'new-session') return null
 
+  const selectedDataset = datasets.find(d => d.dataset_id === datasetId)
+
   async function handleCreate() {
-    if (!dataset) return
+    if (!datasetId) return
     setLoading(true)
     setError('')
     try {
-      const { id } = await createSession({ dataset_name: dataset, name: name.trim() || dataset })
+      const dsName = selectedDataset?.dataset_name ?? datasetId
+      const { id } = await createSession({ dataset_id: datasetId, name: name.trim() || dsName })
       await initClustering(id, k)
-      const session: Session = { id, name: name.trim() || dataset, dataset_name: dataset, status: 'active' }
+      const session: Session = { id, name: name.trim() || dsName, dataset_name: dsName, status: 'active' }
       dispatch({ type: 'CLOSE_MODAL' })
       onCreated(session)
     } catch (e: unknown) {
@@ -56,11 +59,11 @@ export default function NewSessionModal({ onCreated }: Props) {
 
         <label className="flex flex-col gap-1.5">
           <span className="font-mono text-[10px] font-bold tracking-widest uppercase text-faint">Dataset</span>
-          <select value={dataset} onChange={e => setDataset(e.target.value)}
+          <select value={datasetId} onChange={e => setDatasetId(e.target.value)}
             className="px-3 py-2 rounded-sm border border-border text-[14px] text-ink outline-none focus:border-borders transition-colors cursor-pointer"
             style={{ background: 'var(--color-surface)' }}>
             {datasets.map(d => (
-              <option key={d.dataset_name} value={d.dataset_name}>
+              <option key={d.dataset_id} value={d.dataset_id}>
                 {d.dataset_name} — {d.n_points} pts
               </option>
             ))}
@@ -79,7 +82,7 @@ export default function NewSessionModal({ onCreated }: Props) {
             className="flex-1 py-2 rounded-sm border border-border text-[13px] font-medium text-muted hover:bg-surface2 transition-colors">
             Cancel
           </button>
-          <button onClick={handleCreate} disabled={loading || !dataset}
+          <button onClick={handleCreate} disabled={loading || !datasetId}
             className="flex-1 py-2 rounded-sm text-[13px] font-medium text-white transition-all hover:opacity-90 disabled:opacity-40"
             style={{ background: 'var(--color-accent)' }}>
             {loading ? 'Starting…' : 'Start session'}

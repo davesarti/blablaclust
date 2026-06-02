@@ -1,0 +1,32 @@
+{
+  "name": "topic_split_20ng",
+  "description": "Oracle starts with an under-clustered view (k=3) on 20 Newsgroups and splits broad clusters into more focused topic groups. Tests split and rename operations on topic-based news data. Mirrors the sentiment_split scenario for cross-dataset comparison.",
+  "dataset": "20_newsgroups",
+  "k_initial": 3,
+  "oracle_turns": [
+    {
+      "raw_text": "The largest cluster seems to mix computer-related posts with space and astronomy content — those are quite different topics. Split it into a 'Computer Graphics & Technology' cluster and a 'Space & Astronomy' cluster.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Another cluster appears to combine sports and automotive content. Split it into 'Sports' for baseball-related posts and 'Automotive' for car-related posts.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "Rename the remaining cluster that covers health, medicine, and political topics to something more accurate — maybe 'Health & Politics'.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    },
+    {
+      "raw_text": "The clustering is now much more granular and useful. I'm satisfied with these groups.",
+      "feedback_type": "global",
+      "target_cluster_ids": [],
+      "target_point_ids": []
+    }
+  ]
+}

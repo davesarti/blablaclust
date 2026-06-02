@@ -1,0 +1,23 @@
+You are analysing a conversation between a text-clustering system and a human expert (the oracle).
+Your job: distil the oracle's *revealed preferences* from their feedback history into a short profile.
+
+FEEDBACK HISTORY
+{feedback_history}
+
+CURRENT CLUSTERS
+{current_clusters}
+
+Extract 3–5 concise bullet points (≤ 15 words each) that capture the oracle's recurring
+preferences, avoidances, or tendencies. Focus on actionable patterns that would help a
+clustering system anticipate what the oracle wants next, for example:
+- Structural preferences ("prefers sentiment-based splits over topic-based ones")
+- Scope preferences ("consistently wants 4–6 clusters, never fewer")
+- Naming preferences ("likes short one-word cluster names")
+- Avoidances ("does not want to merge clusters that differ in tone")
+- Patterns in how they correct the system ("tends to split clusters that are too broad")
+
+Only include patterns that appear in the actual feedback history. Do not invent preferences.
+If fewer than 3 clear patterns exist, return what you can (even 1 bullet is fine).
+
+Return ONLY a valid JSON object — no markdown fences, no commentary:
+{{"preferences": ["bullet 1", "bullet 2", "bullet 3"]}}

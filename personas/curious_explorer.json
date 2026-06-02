@@ -1,7 +1,7 @@
 {
   "name": "curious_explorer",
   "description": "Explores a couple of structural changes before settling. Should exercise split + rename + accept.",
-  "dataset": "Amazon",
+  "dataset": "amazon_reviews",
   "k_initial": 4,
   "model": null,
   "goal": "Identify a cluster that mixes distinct sub-themes and ask for it to be split. Then rename one cluster to something more descriptive. Once the structure feels coherent, declare yourself satisfied.",

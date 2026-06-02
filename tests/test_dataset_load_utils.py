@@ -21,7 +21,7 @@ from src.dataset_processing.dataset_load_utils import (
     process_csv_upload,
     save_upload_to_tmp,
 )
-from src.models import Base, DataPoint
+from src.models import Base, DataPoint, Dataset
 
 
 @pytest.fixture
@@ -101,12 +101,14 @@ def test_ingest_inserts_valid_rows(tmp_path, db):
     csv = "label,title,text\n1,Good,Great product\n0,Bad,Terrible item\n"
     path = _write_csv(tmp_path, csv)
 
+    db.add(Dataset(id="ds1", name="ds1", description=""))
+    db.flush()
     inserted, skipped = ingest_csv_path(path, "ds1", db)
     db.commit()
 
     assert inserted == 2
     assert skipped == 0
-    rows = db.query(DataPoint).filter(DataPoint.dataset_name == "ds1").all()
+    rows = db.query(DataPoint).filter(DataPoint.dataset_id == "ds1").all()
     assert len(rows) == 2
     assert rows[0].data["label"] in (0, 1)
     assert rows[0].data["text"]  # cleaned, non-empty
@@ -151,10 +153,12 @@ def test_ingest_cleans_fields_on_insert(tmp_path, db):
     csv = 'label,title,text\n1,Greaaaaat,Works    perfectly!!!!!\n'
     path = _write_csv(tmp_path, csv)
 
+    db.add(Dataset(id="ds5", name="ds5", description=""))
+    db.flush()
     ingest_csv_path(path, "ds5", db)
     db.commit()
 
-    dp = db.query(DataPoint).filter(DataPoint.dataset_name == "ds5").first()
+    dp = db.query(DataPoint).filter(DataPoint.dataset_id == "ds5").first()
     assert dp.data["title"] == "Greaaat"
     assert dp.data["text"] == "Works perfectly!!!"
 
@@ -189,6 +193,13 @@ def test_save_upload_to_tmp_writes_content():
 # ---------------------------------------------------------------------------
 
 
+def _count_points_for(db, name: str) -> int:
+    ds = db.query(Dataset).filter(Dataset.name == name).one_or_none()
+    if ds is None:
+        return 0
+    return db.query(DataPoint).filter(DataPoint.dataset_id == ds.id).count()
+
+
 def test_process_csv_upload_inserts_without_embeddings(db):
     stream = io.BytesIO(b"label,title,text\n1,Good,Great product\n0,Bad,Bad item\n")
     result = process_csv_upload(stream, "up1", db, generate_embeddings=False)
@@ -196,7 +207,8 @@ def test_process_csv_upload_inserts_without_embeddings(db):
     assert result["inserted"] == 2
     assert result["skipped"] == 0
     assert result["embeddings_generated"] == 0
-    assert db.query(DataPoint).filter(DataPoint.dataset_name == "up1").count() == 2
+    assert result["dataset_id"]
+    assert _count_points_for(db, "up1") == 2
 
 
 def test_process_csv_upload_rolls_back_on_error(db, monkeypatch):
@@ -211,8 +223,10 @@ def test_process_csv_upload_rolls_back_on_error(db, monkeypatch):
     with pytest.raises(RuntimeError, match="embedding model exploded"):
         process_csv_upload(stream, "up2", db, generate_embeddings=True)
 
-    # The inserted-but-not-committed row must have been rolled back.
-    assert db.query(DataPoint).filter(DataPoint.dataset_name == "up2").count() == 0
+    # The inserted-but-not-committed row must have been rolled back —
+    # along with the Dataset row created by get_or_create_dataset.
+    assert _count_points_for(db, "up2") == 0
+    assert db.query(Dataset).filter(Dataset.name == "up2").count() == 0
 
 
 def test_process_csv_upload_rolls_back_on_bad_headers(db):
@@ -221,4 +235,18 @@ def test_process_csv_upload_rolls_back_on_bad_headers(db):
     with pytest.raises(ValueError, match="Missing headers"):
         process_csv_upload(stream, "up3", db, generate_embeddings=False)
 
-    assert db.query(DataPoint).filter(DataPoint.dataset_name == "up3").count() == 0
+    assert _count_points_for(db, "up3") == 0
+    assert db.query(Dataset).filter(Dataset.name == "up3").count() == 0
+
+
+def test_process_csv_upload_rejects_duplicate_name(db):
+    """Re-uploading under an existing name (with points) raises ValueError."""
+    stream1 = io.BytesIO(b"label,title,text\n1,Good,Great product\n")
+    process_csv_upload(stream1, "dup", db, generate_embeddings=False)
+    assert _count_points_for(db, "dup") == 1
+
+    stream2 = io.BytesIO(b"label,title,text\n1,Other,Other text\n")
+    with pytest.raises(ValueError, match="already exists"):
+        process_csv_upload(stream2, "dup", db, generate_embeddings=False)
+    # First upload is intact.
+    assert _count_points_for(db, "dup") == 1

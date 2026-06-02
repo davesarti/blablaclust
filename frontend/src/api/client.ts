@@ -22,7 +22,7 @@ export const getDatasets = () => req<Dataset[]>('/datasets')
 
 // Sessions
 export const getSessions   = () => req<Session[]>('/sessions')
-export const createSession = (body: { dataset_name: string; name: string }) =>
+export const createSession = (body: { dataset_id: string; name: string }) =>
   req<{ id: string }>('/sessions', { method: 'POST', body: JSON.stringify(body) })
 export const getSessionState = (id: string) => req<SessionState>(`/sessions/${id}/state`)
 export const patchSessionState = (id: string, status: string) =>

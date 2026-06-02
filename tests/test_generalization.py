@@ -179,11 +179,11 @@ def converged_db():
     )
     Base.metadata.create_all(bind=engine)
     db = sessionmaker(bind=engine, autoflush=False, autocommit=False)()
-    db.add(ChatSession(id=_INGEST_SESSION, dataset_name="ds",
+    db.add(ChatSession(id=_INGEST_SESSION, dataset_id="ds",
                        embedding_model="default", status="converged"))
     points = []
     for pid, emb in _GROUPS.items():
-        dp = DataPoint(id=pid, dataset_name="ds", data={"text": pid}, embedding=emb)
+        dp = DataPoint(id=pid, dataset_id="ds", data={"text": pid}, embedding=emb)
         db.add(dp)
         points.append(dp)
     clusters, assignments, _ = initial_clustering(
@@ -214,7 +214,7 @@ def _frozen_centroids(db):
 
 def test_ingest_writes_new_snapshot_at_next_turn(converged_db):
     cids, centroids = _frozen_centroids(converged_db)
-    new = [DataPoint(id="n_a", dataset_name="ds", data={"text": "n_a"}, embedding=[0.1, 0.1])]
+    new = [DataPoint(id="n_a", dataset_id="ds", data={"text": "n_a"}, embedding=[0.1, 0.1])]
 
     new_turn, rows = ingest_points(_INGEST_SESSION, new, cids, centroids, converged_db)
     converged_db.commit()
@@ -229,7 +229,7 @@ def test_ingest_carries_existing_points_forward_verbatim(converged_db):
     """Pre-existing points are copied to the new turn unchanged (read-only)."""
     snap0 = _snapshot(converged_db, 0)
     cids, centroids = _frozen_centroids(converged_db)
-    new = [DataPoint(id="n_a", dataset_name="ds", data={"text": "n_a"}, embedding=[0.1, 0.1])]
+    new = [DataPoint(id="n_a", dataset_id="ds", data={"text": "n_a"}, embedding=[0.1, 0.1])]
 
     ingest_points(_INGEST_SESSION, new, cids, centroids, converged_db)
     converged_db.commit()
@@ -244,7 +244,7 @@ def test_ingest_does_not_mutate_the_converged_snapshot(converged_db):
     """Turn 0 (the converged snapshot) is never touched."""
     before = _snapshot(converged_db, 0)
     cids, centroids = _frozen_centroids(converged_db)
-    new = [DataPoint(id="n_a", dataset_name="ds", data={"text": "n_a"}, embedding=[0.1, 0.1])]
+    new = [DataPoint(id="n_a", dataset_id="ds", data={"text": "n_a"}, embedding=[0.1, 0.1])]
 
     ingest_points(_INGEST_SESSION, new, cids, centroids, converged_db)
     converged_db.commit()
@@ -259,7 +259,7 @@ def test_ingest_assigns_new_point_to_nearest_centroid(converged_db):
     a_cluster = max(snap0["a1"], key=snap0["a1"].get)
     cids, centroids = _frozen_centroids(converged_db)
 
-    new = [DataPoint(id="n_a", dataset_name="ds", data={"text": "n_a"}, embedding=[0.05, 0.05])]
+    new = [DataPoint(id="n_a", dataset_id="ds", data={"text": "n_a"}, embedding=[0.05, 0.05])]
     expected = assign_nearest(np.array([[0.05, 0.05]]), cids, centroids)[0]
 
     ingest_points(_INGEST_SESSION, new, cids, centroids, converged_db)
@@ -276,8 +276,8 @@ def test_ingest_calibrates_boundary_point_lower(converged_db):
     sitting on a centroid — this is what lets B2's bottom-2 sample catch bad new
     members."""
     cids, centroids = _frozen_centroids(converged_db)
-    central = DataPoint(id="n_c", dataset_name="ds", data={"text": "c"}, embedding=[0.0, 0.0])
-    boundary = DataPoint(id="n_b", dataset_name="ds", data={"text": "b"}, embedding=[5.0, 5.0])
+    central = DataPoint(id="n_c", dataset_id="ds", data={"text": "c"}, embedding=[0.0, 0.0])
+    boundary = DataPoint(id="n_b", dataset_id="ds", data={"text": "b"}, embedding=[5.0, 5.0])
 
     ingest_points(_INGEST_SESSION, [central, boundary], cids, centroids, converged_db)
     converged_db.commit()
@@ -293,13 +293,13 @@ def test_ingest_freezes_centroids_across_batches(converged_db):
 
     t1, _ = ingest_points(
         _INGEST_SESSION,
-        [DataPoint(id="n1", dataset_name="ds", data={"text": "n1"}, embedding=[0.1, 0.1])],
+        [DataPoint(id="n1", dataset_id="ds", data={"text": "n1"}, embedding=[0.1, 0.1])],
         cids, centroids, converged_db,
     )
     converged_db.commit()
     t2, _ = ingest_points(
         _INGEST_SESSION,
-        [DataPoint(id="n2", dataset_name="ds", data={"text": "n2"}, embedding=[10.1, 10.1])],
+        [DataPoint(id="n2", dataset_id="ds", data={"text": "n2"}, embedding=[10.1, 10.1])],
         cids, centroids, converged_db,
     )
     converged_db.commit()
@@ -312,13 +312,13 @@ def test_ingest_freezes_centroids_across_batches(converged_db):
 
 def test_ingest_rejects_points_without_embedding(converged_db):
     cids, centroids = _frozen_centroids(converged_db)
-    new = [DataPoint(id="n_x", dataset_name="ds", data={"text": "x"}, embedding=None)]
+    new = [DataPoint(id="n_x", dataset_id="ds", data={"text": "x"}, embedding=None)]
     with pytest.raises(ValueError):
         ingest_points(_INGEST_SESSION, new, cids, centroids, converged_db)
 
 
 def test_ingest_rejects_session_without_clustering(converged_db):
     cids, centroids = _frozen_centroids(converged_db)
-    new = [DataPoint(id="n_y", dataset_name="ds", data={"text": "y"}, embedding=[0.1, 0.1])]
+    new = [DataPoint(id="n_y", dataset_id="ds", data={"text": "y"}, embedding=[0.1, 0.1])]
     with pytest.raises(ValueError):
         ingest_points("no-such-session", new, cids, centroids, converged_db)

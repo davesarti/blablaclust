@@ -934,6 +934,24 @@
       border-radius: 0 2px 2px 0;
       line-height: 1.65;
     }
+    .msg-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      font-size: 10px;
+      color: var(--text-faint);
+      font-family: var(--mono);
+    }
+    .msg-meta .badge-reembed {
+      color: #e8c94a;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+    .msg-meta .badge-cost {
+      opacity: 0.7;
+    }
 
     /* typing indicator */
     #typing-indicator {
@@ -1123,6 +1141,20 @@
     .form-field input:focus,
     .form-field select:focus { border-color: rgba(74,124,89,.5); }
     .form-field select option { background: var(--surface-2); }
+    .dataset-desc {
+      margin: 6px 0 0;
+      padding: 6px 10px;
+      border-left: 2px solid var(--accent);
+      background: var(--accent-dim);
+      border-radius: 0 var(--r) var(--r) 0;
+      font-size: 11px;
+      line-height: 1.55;
+      color: var(--text-muted);
+      font-style: italic;
+      min-height: 0;
+      display: none;
+    }
+    .dataset-desc.visible { display: block; }
 
     .modal-actions {
       display: flex;
@@ -1276,12 +1308,43 @@
     }
 
     /* ── UMAP visualization (P2 — clustering evolution) ── */
-    #modal-umap .modal-card { width: 900px; max-width: 96vw; }
-    #umap-plot { width: 100%; height: 460px; }
-    .umap-controls { display: flex; align-items: center; gap: 14px; margin: 2px 0 14px; }
-    .umap-controls input[type=range] { flex: 1; }
+    #modal-umap .modal-card { width: 940px; max-width: 96vw; }
+    #umap-plot { width: 100%; height: 500px; }
+
+    /* Controls: two-row layout so the info line never shifts the slider.
+       Row 1: play  ·  "Turn 3 / 5"  ·  slider  ·  (export pills)
+       Row 2: fixed-height info text — grows without touching row 1         */
+    .umap-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 4px 0 12px;
+    }
+    .umap-controls-row1 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .umap-controls-row1 input[type=range] { flex: 1; }
+    .umap-turn-label {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      min-width: 72px;       /* "Turn 12 / 12" never wraps */
+    }
+    .umap-info-bar {
+      min-height: 18px;      /* fixed height — info text changes but layout never shifts */
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.4;
+      padding-left: 2px;
+    }
+    /* keep .umap-meta for any legacy callers */
     .umap-meta { font-family: var(--mono); font-size: 11px; color: var(--text-muted); white-space: nowrap; }
-    .umap-status { font-size: 12px; color: var(--text-muted); padding: 60px 0; text-align: center; }
+    .umap-status { font-size: 12px; color: var(--text-muted); padding: 80px 0; text-align: center; }
     .umap-play-btn { border: 1px solid var(--border-s); background: var(--surface); border-radius: 6px;
       width: 30px; height: 26px; cursor: pointer; font-size: 11px; color: var(--text); flex: none; }
     .umap-play-btn:hover { background: var(--surface-2); }
@@ -1404,9 +1467,10 @@
     </div>
     <div class="form-field">
       <label for="inp-dataset">Dataset</label>
-      <select id="inp-dataset">
-        <option value="amazon_reviews_train">amazon_reviews_train (Amazon Electronics Reviews)</option>
+      <select id="inp-dataset" onchange="updateDatasetDesc()">
+        <option value="" disabled selected>Loading datasets…</option>
       </select>
+      <p id="inp-dataset-desc" class="dataset-desc"></p>
     </div>
     <div class="form-field">
       <label for="inp-k">Suggested initial clusters</label>
@@ -1568,37 +1632,33 @@
 <!-- ── MODAL: UMAP clustering map (P2) ── -->
 <div class="modal-overlay" id="modal-umap" role="dialog" aria-modal="true" aria-labelledby="lbl-umap">
   <div class="modal-card">
-    <h2 id="lbl-umap">Clustering map — UMAP</h2>
-    <div class="modal-desc">
-      2-D projection of the dataset embeddings (fixed layout). Move the slider to
-      watch how the clustering evolves across turns — the points stay put, only the
-      colours change.
-    </div>
+    <h2 id="lbl-umap">Clustering map</h2>
+
+    <!-- Row 1: play + slider + turn counter + export + close -->
     <div class="umap-controls">
-      <button id="umap-play" class="umap-play-btn" onclick="umapTogglePlay()"
-              aria-label="Play or pause turn animation" title="Play / pause">▶</button>
-      <span class="umap-meta" id="umap-turn-label">Turn —</span>
-      <input type="range" id="umap-slider" min="0" max="0" value="0" step="1"
-             oninput="umapStopPlay(); renderUmapTurn(+this.value)" aria-label="Turn" />
-      <span class="umap-meta" id="umap-info"></span>
-      <!-- Phase 2: geometry-aware view (re-fits UMAP on the hybrid space at
-           semantic_reembed turns so the layout follows the re-oriented geometry
-           instead of cutting across the original topic plot). No-op on turns
-           without a semantic_reembed op. -->
-      <label class="umap-meta" style="display:flex; align-items:center; gap:4px; cursor:pointer;">
-        <input type="checkbox" id="umap-geom-aware" onchange="umapToggleGeometryAware()"
-               aria-label="Geometry-aware re-embed view">
-        geom-aware
-      </label>
+      <div class="umap-controls-row1">
+        <button id="umap-play" class="umap-play-btn" onclick="umapTogglePlay()"
+                aria-label="Play or pause turn animation" title="Play / pause">▶</button>
+        <input type="range" id="umap-slider" min="0" max="0" value="0" step="1"
+               oninput="umapStopPlay(); renderUmapTurn(+this.value)" aria-label="Turn" />
+        <span class="umap-turn-label" id="umap-turn-label">—</span>
+        <button class="btn-link" style="font-size:11px; padding:2px 6px;" onclick="umapExportPng()" title="Export PNG">PNG</button>
+        <button class="btn-link" style="font-size:11px; padding:2px 6px;" onclick="umapExportHtml()" title="Export interactive HTML">HTML</button>
+        <button class="btn-secondary" style="padding:4px 12px; font-size:12px;" onclick="umapStopPlay(); closeModal('modal-umap')">Close</button>
+      </div>
+      <!-- Row 2: fixed-height info — never causes layout shift -->
+      <div class="umap-info-bar" id="umap-info" aria-live="polite"></div>
     </div>
+
     <div id="umap-plot"><div class="umap-status">—</div></div>
-    <div class="modal-actions">
-      <button class="btn-link" onclick="umapExportPng()">Export PNG</button>
-      <button class="btn-link" onclick="umapExportHtml()">Export HTML</button>
-      <button class="btn-primary" onclick="umapStopPlay(); closeModal('modal-umap')">Close</button>
-    </div>
   </div>
 </div>
+<!-- geom-aware toggle hidden from UI — available programmatically via
+     _umapGeometryAware = true before calling openUmap() for dev/eval use.
+     Removed from the UI because it's a debug feature (Phase 2 P2) that
+     normal users don't need and the label was confusing. -->
+<input type="checkbox" id="umap-geom-aware" style="display:none"
+       onchange="umapToggleGeometryAware()" aria-hidden="true">
 
 <script>
 // ── CONSTANTS ──────────────────────────────────────────────────────────────
@@ -1732,12 +1792,28 @@ function renderSidebar() {
 
 function renderChat() {
   const history = document.getElementById('chat-history');
-  history.innerHTML = state.chat.map(m => `
-    <div class="msg ${m.role}">
-      ${m.text}
-      ${m.diff ? `<div class="msg-diff">${m.diff}</div>` : ''}
-    </div>
-  `).join('');
+  history.innerHTML = state.chat.map(m => {
+    let metaHtml = '';
+    if (m.role === 'system' && m.meta) {
+      const parts = [];
+      if (m.meta.reembedAxis)
+        parts.push(`<span class="badge-reembed">↻ re-embed: "${m.meta.reembedAxis}"</span>`);
+      if (m.meta.turn != null)
+        parts.push(`t${m.meta.turn}`);
+      if (m.meta.tokens)
+        parts.push(`${m.meta.tokens.toLocaleString('en-US')} tokens`);
+      if (m.meta.cost != null)
+        parts.push(`<span class="badge-cost">$${m.meta.cost.toFixed(4)}</span>`);
+      if (parts.length)
+        metaHtml = `<div class="msg-meta">${parts.join(' · ')}</div>`;
+    }
+    return `
+      <div class="msg ${m.role}">
+        ${m.text}
+        ${m.diff ? `<div class="msg-diff">${m.diff}</div>` : ''}
+        ${metaHtml}
+      </div>`;
+  }).join('');
   history.scrollTop = history.scrollHeight;
 }
 
@@ -1834,19 +1910,35 @@ function buildDiff(items) {
   return lines.length ? lines.join('\n') : null;
 }
 
+function _extractReembedAxis(systemOutput) {
+  // Read the axis_label of a semantic_reembed op from the state_snapshot, if any.
+  const ops = systemOutput?.state_snapshot?.operations || [];
+  for (const op of ops) {
+    if (op?.type === 'semantic_reembed') return op.axis_label || op.axis_hint || null;
+  }
+  return null;
+}
+
 function handleSystemTurn(turnData) {
   const out  = turnData.system_output;
   const text = out.display?.content || '';
   const diff = buildDiff(out.display?.items);
-  state.chat.push({ role: 'system', text, diff });
+
+  // Build per-turn meta: re-embed axis (if any), turn number, token count, cost.
+  const tu = out.token_usage;
+  const turnTokens = tu ? (tu.input_tokens || 0) + (tu.output_tokens || 0) : 0;
+  const meta = {
+    turn:        turnData.turn_number,
+    reembedAxis: _extractReembedAxis(out),
+    tokens:      turnTokens || null,
+    cost:        out.cost_usd ?? null,
+  };
+
+  state.chat.push({ role: 'system', text, diff, meta });
 
   state.session.turn = turnData.turn_number;
-  if (out.token_usage) {
-    state.session.tokens += (out.token_usage.input_tokens || 0) + (out.token_usage.output_tokens || 0);
-  }
-  if (out.cost_usd != null) {
-    state.session.cost += out.cost_usd;
-  }
+  if (turnTokens) state.session.tokens += turnTokens;
+  if (out.cost_usd != null) state.session.cost += out.cost_usd;
   state.session.cognitiveLoad = out.cognitive_load_score ?? state.session.cognitiveLoad;
 
   renderChat();
@@ -1861,10 +1953,24 @@ async function loadDatasets() {
     const list = await res.json();
     if (!list.length) return;
     const sel = document.getElementById('inp-dataset');
-    sel.innerHTML = list.map(d => `<option value="${d.dataset_name}">${d.dataset_name}</option>`).join('');
-    const trainOpt = [...sel.options].find(o => o.value.includes('train'));
+    // <option value> carries the dataset_id (canonical handle); the label
+    // shows the human name. The label lookup uses data-name so callers like
+    // startSession() can stash the name into state for display.
+    sel.innerHTML = list.map(d => `<option value="${d.dataset_id}" data-name="${d.dataset_name}" data-description="${(d.description || '').replace(/"/g,'&quot;')}">${d.dataset_name}</option>`).join('');
+    const trainOpt = [...sel.options].find(o => (o.dataset.name || '').includes('train'));
     if (trainOpt) sel.value = trainOpt.value;
+    updateDatasetDesc();
   } catch (_) { /* keep default option */ }
+}
+
+function updateDatasetDesc() {
+  const sel = document.getElementById('inp-dataset');
+  const desc = document.getElementById('inp-dataset-desc');
+  if (!sel || !desc) return;
+  const opt = sel.options[sel.selectedIndex];
+  const text = (opt && opt.dataset.description) || '';
+  desc.textContent = text;
+  desc.classList.toggle('visible', text.length > 0);
 }
 
 
@@ -2105,6 +2211,9 @@ async function resumeSession(sessionId, datasetName, status, sessionName) {
     }
 
     let chat = [];
+    let resumeTokens = 0;
+    let resumeCost   = 0;
+    let resumeLoad   = 1;
     if (turnsRes.ok) {
       const turns = await turnsRes.json();
       chat = turns.flatMap(t => {
@@ -2115,7 +2224,22 @@ async function resumeSession(sessionId, datasetName, status, sessionName) {
         const out  = t.system_output;
         const text = out?.display?.content || '';
         const diff = buildDiff(out?.display?.items);
-        if (text || diff) msgs.push({ role: 'system', text, diff });
+        if (text || diff) {
+          const tu = out?.token_usage;
+          const turnTokens = tu ? (tu.input_tokens || 0) + (tu.output_tokens || 0) : 0;
+          const meta = {
+            turn:        t.turn_number,
+            reembedAxis: _extractReembedAxis(out),
+            tokens:      turnTokens || null,
+            cost:        out?.cost_usd ?? null,
+          };
+          msgs.push({ role: 'system', text, diff, meta });
+          // Accumulate totals while parsing turns so the sidebar shows the
+          // real cumulative figures on resume instead of resetting to zero.
+          resumeTokens += turnTokens;
+          if (out?.cost_usd != null) resumeCost += out.cost_usd;
+          if (out?.cognitive_load_score != null) resumeLoad = out.cognitive_load_score;
+        }
         return msgs;
       });
     }
@@ -2128,9 +2252,9 @@ async function resumeSession(sessionId, datasetName, status, sessionName) {
     state.session.dataset        = datasetName;
     state.session.status         = status;
     state.session.turn           = turnNumber;
-    state.session.tokens         = 0;
-    state.session.cost           = 0;
-    state.session.cognitiveLoad  = 1;
+    state.session.tokens         = resumeTokens;
+    state.session.cost           = resumeCost;
+    state.session.cognitiveLoad  = resumeLoad;
     state.clusters               = activeClusters.map(mapCluster);
     state.chat                   = chat;
     state.selectedClusterIds = new Set();
@@ -2265,8 +2389,8 @@ async function openUmap() {
   if (window.Plotly) Plotly.purge('umap-plot');  // release any prior plot before re-render
   document.getElementById('umap-plot').innerHTML =
     '<div class="umap-status">Computing UMAP projection… (the first run can take a few seconds)</div>';
-  document.getElementById('umap-info').textContent = '';
-  document.getElementById('umap-turn-label').textContent = 'Turn —';
+  document.getElementById('umap-info').innerHTML = '';
+  document.getElementById('umap-turn-label').textContent = '—';
   try {
     // no-store: a merge/split adds a new snapshot turn server-side, so the
     // projection must never be served from the browser HTTP cache.
@@ -2370,78 +2494,57 @@ function renderUmapTurn(ti) {
     hoverlabel: { align: 'left', bgcolor: '#fbf9f4', bordercolor: '#d8d2c4',
                   font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#2a2a28' } },
   };
-  // ── Semantic re-embed overlays ────────────────────────────────────────────
-  // The ghost-centroids and axis-arrow overlays are computed in the BASELINE
-  // 2-D layout (see backend `axis_arrows` / `centroids_by_turn`). In geometry-
-  // aware mode the coordinates change, so we suppress the overlays — they would
-  // sit in the wrong place. The cluster colouring is the same partition either
-  // way, so the re-embed event is still visually obvious.
+  // ── Semantic re-embed indicator ───────────────────────────────────────────
+  // Ghost-circles (dissolved cluster centroids) have been removed: they sat in
+  // the wrong part of the layout and added visual noise without clear meaning.
+  // The re-embed event is already communicated by the ✦ new-cluster markers and
+  // the "↻ re-embed" badge in the info bar below.
+  //
+  // We keep a subtle title annotation on re-embed turns so the user can see
+  // the axis label directly on the plot without needing to read the info bar.
   const isReembed = (_umapData.reembed_turns || []).includes(turn);
-  if (isReembed && ti > 0 && !gaEntry) {
-    // Ghost circles: centroids of dissolved clusters from the previous turn.
-    const prevTurn = _umapData.turns[ti - 1];
-    const prevCents = ((_umapData.centroids_by_turn || {})[String(prevTurn)]) || {};
-    const prevEntries = Object.entries(prevCents);
-    if (prevEntries.length) {
-      traces.push({
-        x: prevEntries.map(([, c]) => c[0]),
-        y: prevEntries.map(([, c]) => c[1]),
-        text: prevEntries.map(([cid]) => (_umapData.clusters[cid] || {}).name || cid),
-        name: 'Previous clusters',
-        mode: 'markers',
-        type: 'scatter',
-        marker: { symbol: 'circle-open', size: 52, color: '#888',
-                  line: { width: 2.5, color: '#888' } },
-        hovertemplate: '<b>%{text}</b><br>(dissolved this turn)<extra></extra>',
-      });
-    }
-    // Axis arrow: scatter line + triangle marker at tip (more reliable than
-    // Plotly annotation arrows when axref/ayref are data coordinates).
-    const arrow = ((_umapData.axis_arrows || {})[String(turn)]);
-    if (arrow) {
-      const label = arrow.label ? `axis: ${arrow.label}` : 'semantic axis';
-      const dx = arrow.to[0] - arrow.from[0];
-      const dy = arrow.to[1] - arrow.from[1];
-      // Rotate triangle marker to match arrow direction (Plotly angle is clockwise from up).
-      const angleDeg = Math.atan2(dy, dx) * 180 / Math.PI - 90;
-      traces.push({
-        x: [arrow.from[0], arrow.to[0]],
-        y: [arrow.from[1], arrow.to[1]],
-        mode: 'lines+markers',
-        type: 'scatter',
-        line: { color: '#e8c94a', width: 2.5 },
-        marker: { symbol: ['circle', 'triangle-up'], size: [3, 14],
-                  color: '#e8c94a', angle: [0, angleDeg] },
-        name: label,
-        hovertemplate: '<b>' + label + '</b><extra></extra>',
-      });
-      // Label annotation at the arrowhead (text only, no arrow).
-      layout.annotations = [{
-        x: arrow.to[0], y: arrow.to[1],
-        xref: 'x', yref: 'y',
-        showarrow: false,
-        text: label,
-        font: { size: 10, color: '#e8c94a' },
-        bgcolor: 'rgba(0,0,0,0.5)', borderpad: 3,
-        xshift: 10, yshift: 10,
-      }];
-    }
+  const reembedAxisLabel = isReembed
+    ? ((_umapData.axis_arrows || {})[String(turn)] || {}).label || null
+    : null;
+  if (reembedAxisLabel && !gaEntry) {
+    // Single centred annotation: shows the axis name at the top of the plot,
+    // anchored to paper coordinates (never overlaps the data).
+    layout.annotations = [{
+      x: 0.5, y: 1.0,
+      xref: 'paper', yref: 'paper',
+      xanchor: 'center', yanchor: 'top',
+      showarrow: false,
+      text: `↻ re-embed axis: <b>${reembedAxisLabel}</b>`,
+      font: { size: 11, color: '#e8c94a', family: 'Inter, system-ui, sans-serif' },
+      bgcolor: 'rgba(30,28,24,0.72)', borderpad: 4,
+      bordercolor: 'rgba(232,201,74,0.35)', borderwidth: 1,
+    }];
   }
 
   const gd = document.getElementById('umap-plot');
   const leftover = gd.querySelector('.umap-status');  // clear the loading text
   if (leftover) leftover.remove();
   Plotly.react(gd, traces, layout, { displayModeBar: false, responsive: true });
-  document.getElementById('umap-turn-label').textContent = 'Turn ' + turn;
-  // Real cluster count = point groups only (exclude overlay traces: ghost
-  // centroids + axis arrow pushed for re-embed turns, and any 'unassigned').
+  // Turn label: "Turn 3 / 5"
+  const totalTurns = _umapData.turns.length;
+  document.getElementById('umap-turn-label').textContent =
+    'Turn ' + (ti + 1) + ' / ' + totalTurns;
+
+  // Info bar (row 2, fixed height — never shifts the slider above it).
   const clusterCount = Object.keys(groups).filter(c => c !== 'unassigned').length;
-  document.getElementById('umap-info').textContent =
-    clusterCount + ' clusters · ' + String(_umapData.reducer).toUpperCase() +
-    (sil != null ? ' · silhouette ' + sil.toFixed(3) : '') +
-    (gaEntry ? ' · geom-aware: ' + (gaEntry.axis_label || 'axis') : '') +
-    (newCount ? ' · ✦' + newCount + ' new' : '') +
-    (dissolvedCount ? ' · −' + dissolvedCount + ' gone' : '');
+  const infoEl = document.getElementById('umap-info');
+  const infoParts = [];
+  infoParts.push(clusterCount + ' clusters');
+  infoParts.push(String(_umapData.reducer).toUpperCase());
+  if (sil != null) infoParts.push('silhouette ' + sil.toFixed(3));
+  if (gaEntry) infoParts.push('<span style="color:#e8c94a">⬡ hybrid layout</span>');
+  if (reembedAxisLabel && !gaEntry)
+    infoParts.push('<span style="color:#e8c94a">↻ re-embed: "' + reembedAxisLabel + '"</span>');
+  if (newCount)
+    infoParts.push('<span style="color:var(--accent)">✦ ' + newCount + ' new</span>');
+  if (dissolvedCount)
+    infoParts.push('−' + dissolvedCount + ' dissolved');
+  infoEl.innerHTML = infoParts.join(' &nbsp;·&nbsp; ');
 }
 
 // ── UMAP Phase 2: play/pause animation + PNG/HTML export (P2) ────────────────
@@ -2476,8 +2579,10 @@ function umapToggleGeometryAware() {
 
 function _umapExportName(ext) {
   const sid = _umapData ? _umapData.session_id.slice(0, 8) : 'session';
-  const turn = document.getElementById('umap-turn-label').textContent.replace(/\s+/g, '_');
-  return 'umap_' + sid + '_' + turn + '.' + ext;
+  // Turn label is now "Turn 3 / 5" — extract just the turn number for the filename.
+  const raw = document.getElementById('umap-turn-label').textContent;
+  const turn = raw.replace(/[^0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'turn';
+  return 'umap_' + sid + '_t' + turn + '.' + ext;
 }
 function umapExportPng() {
   const gd = document.getElementById('umap-plot');
@@ -2505,8 +2610,13 @@ async function startSession() {
   const name = document.getElementById('inp-name').value.trim();
   if (!name) { document.getElementById('inp-name').focus(); return; }
 
-  const dataset = document.getElementById('inp-dataset').value;
-  const k       = parseInt(document.getElementById('inp-k').value, 10) || 5;
+  const sel       = document.getElementById('inp-dataset');
+  const datasetId = sel.value;
+  // Pull the display name from the option's data-name (set by loadDatasets);
+  // the default static option falls back to its visible label.
+  const opt       = sel.options[sel.selectedIndex];
+  const dataset   = (opt && (opt.dataset.name || opt.textContent.trim())) || datasetId;
+  const k         = parseInt(document.getElementById('inp-k').value, 10) || 5;
 
   const btn = document.querySelector('#modal-new-session .btn-primary');
   btn.disabled    = true;
@@ -2516,7 +2626,7 @@ async function startSession() {
     const sessRes = await fetch('/sessions', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ dataset_name: dataset, name }),
+      body:    JSON.stringify({ dataset_id: datasetId, name }),
     });
     if (!sessRes.ok) {
       const err = await sessRes.json().catch(() => ({}));

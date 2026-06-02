@@ -12,7 +12,8 @@ import json
 
 from sqlalchemy.orm import Session
 
-from src.harness import DEFAULT_MODEL, hash_prompt
+from src.harness import hash_prompt
+from src.harness_claude import DEFAULT_MODEL
 from src.models import EvalCache
 from src.schemas import ChatSessionState
 

@@ -44,10 +44,11 @@ import src.logger as logger
 from src.dataset_processing.text_cleaning import clean_text
 from src.engine.f_apply_operations import f_apply_operations
 from src.engine.initial_clustering import initial_clustering
-from src.models import Base, ChatSession, Cluster, DataPoint, SoftAssignment
+from src.models import Base, ChatSession, Cluster, DataPoint, Dataset, SoftAssignment
 
 TRAIN_CSV = "data/20newsgroups_train.csv"
 DATASET = "20_newsgroups"
+DATASET_ID = "ds-20ng"
 SESSION_ID = "verify-20ng"
 K = 6
 
@@ -118,11 +119,12 @@ def setup(db):
     embeddings = model.encode(texts, batch_size=64, show_progress_bar=False,
                               convert_to_numpy=True)
 
-    db.add(ChatSession(id=SESSION_ID, dataset_name=DATASET,
+    db.add(Dataset(id=DATASET_ID, name=DATASET, description=""))
+    db.add(ChatSession(id=SESSION_ID, dataset_id=DATASET_ID,
                        embedding_model="all-MiniLM-L6-v2", status="active"))
     points = []
     for i, (t, emb) in enumerate(zip(texts, embeddings)):
-        dp = DataPoint(id=f"p{i}", dataset_name=DATASET,
+        dp = DataPoint(id=f"p{i}", dataset_id=DATASET_ID,
                        data={"title": "", "text": t}, embedding=emb.tolist())
         db.add(dp)
         points.append(dp)

@@ -1,7 +1,9 @@
 export interface Dataset {
+  dataset_id: string;
   dataset_name: string;
   n_points: number;
   has_embeddings: boolean;
+  description?: string;
 }
 
 export interface Session {

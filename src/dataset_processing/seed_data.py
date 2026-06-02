@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from src.models import Base, DataPoint
+from src.models import Base, DataPoint, Dataset
 
 DB_PATH = "sqlite:///./data/demo_database.db"
 FILES = [
@@ -18,14 +18,25 @@ Base.metadata.create_all(bind=engine)
 SessionLocal = sessionmaker(bind=engine)
 
 
+def _get_or_create_dataset(name: str, db) -> Dataset:
+    existing = db.query(Dataset).filter(Dataset.name == name).one_or_none()
+    if existing is not None:
+        return existing
+    ds = Dataset(id=str(uuid.uuid4()), name=name, description="")
+    db.add(ds)
+    db.flush()
+    return ds
+
+
 def load_csv(filepath: str, dataset_name: str, db) -> int:
+    dataset = _get_or_create_dataset(dataset_name, db)
     count = 0
     with open(filepath, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             dp = DataPoint(
                 id=str(uuid.uuid4()),
-                dataset_name=dataset_name,
+                dataset_id=dataset.id,
                 data={
                     "label": int(row["label"]),
                     "title": row["title"],
@@ -68,7 +79,8 @@ if __name__ == "__main__":
     if "--force" in sys.argv:
         db = SessionLocal()
         db.query(DataPoint).delete()
+        db.query(Dataset).delete()
         db.commit()
         db.close()
-        print("Cleared existing data points.")
+        print("Cleared existing data points and datasets.")
     main()

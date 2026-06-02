@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend.main import app, get_db
-from src.models import Base, DataPoint
+from src.models import Base, DataPoint, Dataset
 
 
 @pytest.fixture
@@ -23,14 +23,17 @@ def client():
     TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
     db = TestingSessionLocal()
+    db.add(Dataset(id="alpha", name="alpha", description=""))
+    db.add(Dataset(id="beta", name="beta", description=""))
+    db.flush()
     # Mirror the production ingest pattern: rows without embeddings are
     # inserted without the embedding= kwarg (SQL NULL). Explicitly passing
     # embedding=None would store a JSON null literal instead, which
     # COUNT(embedding) treats as non-null — not what production sees.
-    db.add(DataPoint(id="a1", dataset_name="alpha", data={"text": "x"}, embedding=[0.1]))
-    db.add(DataPoint(id="a2", dataset_name="alpha", data={"text": "y"}, embedding=[0.2]))
-    db.add(DataPoint(id="a3", dataset_name="alpha", data={"text": "z"}))
-    db.add(DataPoint(id="b1", dataset_name="beta", data={"text": "q"}))
+    db.add(DataPoint(id="a1", dataset_id="alpha", data={"text": "x"}, embedding=[0.1]))
+    db.add(DataPoint(id="a2", dataset_id="alpha", data={"text": "y"}, embedding=[0.2]))
+    db.add(DataPoint(id="a3", dataset_id="alpha", data={"text": "z"}))
+    db.add(DataPoint(id="b1", dataset_id="beta", data={"text": "q"}))
     db.commit()
     db.close()
 
@@ -51,8 +54,20 @@ def test_list_datasets_returns_counts(client):
     assert res.status_code == 200
     body = res.json()
     assert body == [
-        {"dataset_name": "alpha", "n_points": 3, "has_embeddings": 2},
-        {"dataset_name": "beta", "n_points": 1, "has_embeddings": 0},
+        {
+            "dataset_id": "alpha",
+            "dataset_name": "alpha",
+            "n_points": 3,
+            "has_embeddings": 2,
+            "description": "",
+        },
+        {
+            "dataset_id": "beta",
+            "dataset_name": "beta",
+            "n_points": 1,
+            "has_embeddings": 0,
+            "description": "",
+        },
     ]
 
 
