@@ -8,8 +8,8 @@ const UMAP_COLORS = [
   '#2e8b8b','#b07a2e','#9e3e5a','#5a6e8a','#7a9e3e','#3e8a5a',
 ]
 
-function tier(v: number | undefined, invert = false): string {
-  if (v === undefined) return 'var(--color-faint)'
+function tier(v: number | undefined | null, invert = false): string {
+  if (v == null) return 'var(--color-faint)'
   const good = invert ? v <= 0.30 : v >= 0.70
   const mid  = invert ? v <= 0.60 : v >= 0.50
   if (good) return '#3a6e4a'
@@ -17,9 +17,9 @@ function tier(v: number | undefined, invert = false): string {
   return '#8a3030'
 }
 
-interface ScorePillProps { label: string; value?: number; invert?: boolean }
+interface ScorePillProps { label: string; value?: number | null; invert?: boolean }
 function ScorePill({ label, value, invert }: ScorePillProps) {
-  if (value === undefined) return null
+  if (value == null) return null
   return (
     <div className="flex flex-col items-center gap-0.5">
       <span className="font-mono text-[11px] font-bold" style={{ color: tier(value, invert) }}>
@@ -232,7 +232,7 @@ export default function AnalyticsPanel({ onOpenUmap, onOpenEval }: Props) {
                     {ev.B1.overall_score.toFixed(2)}
                   </span>
                   <span className="font-mono text-[10px] text-faint tracking-widest uppercase">overall</span>
-                  {silh !== undefined && (
+                  {silh != null && (
                     <>
                       <span className="text-faint text-[11px] ml-1">·</span>
                       <span className="font-mono text-[11px]" style={{ color: tier(silh) }}>

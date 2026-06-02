@@ -2,8 +2,8 @@ import React from 'react'
 import type { EvalResult } from '../../types'
 import Modal from './Modal'
 
-function tierCls(v: number | undefined, invert = false): string {
-  if (v === undefined) return 'text-faint'
+function tierCls(v: number | undefined | null, invert = false): string {
+  if (v == null) return 'text-faint'
   const good = invert ? v <= 0.30 : v >= 0.70
   const mid  = invert ? v <= 0.60 : v >= 0.50
   if (good) return 'text-green-700'
@@ -11,8 +11,8 @@ function tierCls(v: number | undefined, invert = false): string {
   return 'text-red-700'
 }
 
-function Row({ label, value, invert, extra }: { label: string; value?: number; invert?: boolean; extra?: React.ReactNode }) {
-  if (value === undefined) return null
+function Row({ label, value, invert, extra }: { label: string; value?: number | null; invert?: boolean; extra?: React.ReactNode }) {
+  if (value == null) return null
   return (
     <div className="flex items-start justify-between py-2.5 px-3 border-b border-border last:border-0 gap-3">
       <span className="text-[13px] text-muted leading-snug">{label}</span>
@@ -134,8 +134,8 @@ export default function EvalModal({ result, onClose }: Props) {
             {result.A3 && (
               <div className="flex items-center justify-between py-2.5 px-3 border-b border-border last:border-0">
                 <span className="text-[13px] text-muted">Mean cognitive load</span>
-                <span className={`font-mono text-[13px] font-bold ${tierCls(1 - (result.A3.mean_cognitive_load - 1) / 4)}`}>
-                  {result.A3.mean_cognitive_load.toFixed(1)}
+                <span className={`font-mono text-[13px] font-bold ${tierCls(result.A3.mean_cognitive_load != null ? 1 - (result.A3.mean_cognitive_load - 1) / 4 : null)}`}>
+                  {result.A3.mean_cognitive_load?.toFixed(1) ?? '–'}
                 </span>
               </div>
             )}
