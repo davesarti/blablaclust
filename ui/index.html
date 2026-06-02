@@ -2211,6 +2211,9 @@ async function resumeSession(sessionId, datasetName, status, sessionName) {
     }
 
     let chat = [];
+    let resumeTokens = 0;
+    let resumeCost   = 0;
+    let resumeLoad   = 1;
     if (turnsRes.ok) {
       const turns = await turnsRes.json();
       chat = turns.flatMap(t => {
@@ -2231,6 +2234,11 @@ async function resumeSession(sessionId, datasetName, status, sessionName) {
             cost:        out?.cost_usd ?? null,
           };
           msgs.push({ role: 'system', text, diff, meta });
+          // Accumulate totals while parsing turns so the sidebar shows the
+          // real cumulative figures on resume instead of resetting to zero.
+          resumeTokens += turnTokens;
+          if (out?.cost_usd != null) resumeCost += out.cost_usd;
+          if (out?.cognitive_load_score != null) resumeLoad = out.cognitive_load_score;
         }
         return msgs;
       });
@@ -2244,9 +2252,9 @@ async function resumeSession(sessionId, datasetName, status, sessionName) {
     state.session.dataset        = datasetName;
     state.session.status         = status;
     state.session.turn           = turnNumber;
-    state.session.tokens         = 0;
-    state.session.cost           = 0;
-    state.session.cognitiveLoad  = 1;
+    state.session.tokens         = resumeTokens;
+    state.session.cost           = resumeCost;
+    state.session.cognitiveLoad  = resumeLoad;
     state.clusters               = activeClusters.map(mapCluster);
     state.chat                   = chat;
     state.selectedClusterIds = new Set();
