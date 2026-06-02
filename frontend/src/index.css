@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg:       #f5f4ef;
+  --color-surface:  #eceae3;
+  --color-surface2: #e4e0d6;
+  --color-surface3: #dbd6ca;
+  --color-border:   #d8d4c8;
+  --color-borders:  #c0baa8;
+  --color-ink:      #1e1e1a;
+  --color-muted:    #3a3a34;
+  --color-faint:    #787868;
+  --color-accent:   #4a7c59;
+  --color-green:    #3a6e4a;
+  --color-blue:     #3a5e7a;
+  --color-red:      #8a3030;
+  --color-amber:    #9a7a30;
+
+  --font-sans:  'Inter', system-ui, sans-serif;
+  --font-serif: Georgia, 'Times New Roman', serif;
+  --font-mono:  ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--color-ink);
+    background-color: var(--color-bg);
+    background-image: radial-gradient(circle at 1px 1px, rgba(74,124,89,.06) 1px, transparent 0);
+    background-size: 28px 28px;
+    -webkit-font-smoothing: antialiased;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  #root { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-borders) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--color-borders); border-radius: 2px; }
+}
+
+@keyframes barBreathe {
+  0%, 100% { transform: scaleY(1); }
+  50%       { transform: scaleY(0.84); }
+}
+@keyframes liveDot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.25; }
+}
+@keyframes slideRight {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideLeft {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.animate-bar-breathe { animation: barBreathe 2.8s ease-in-out infinite; }
+.animate-live-dot    { animation: liveDot 2.6s ease-in-out infinite; }
+.animate-slide-right { animation: slideRight 0.18s ease-out; }
+.animate-slide-left  { animation: slideLeft 0.18s ease-out; }
+.animate-modal-in    { animation: modalIn 0.2s cubic-bezier(0.4,0,0.2,1); }
+.animate-spin-slow   { animation: spin 0.8s linear infinite; }
