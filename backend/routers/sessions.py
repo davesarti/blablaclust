@@ -19,7 +19,7 @@ from src.engine.f_eval import (
     f_eval_contradiction,
     f_eval_overall,
 )
-from src.models import ChatSession, DataPoint, SoftAssignment, Turn
+from src.models import ChatSession, DataPoint, Dataset, SoftAssignment, Turn
 from src.schemas import ChatSessionState
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -33,7 +33,7 @@ _FEEDBACK_TYPE_WEIGHTS = {
 
 
 class CreateSessionRequest(BaseModel):
-    dataset_name: str
+    dataset_id: str
     name: Optional[str] = None
     oracle_kind: Literal["human", "persona"] = "human"
     persona_snapshot: Optional[Dict[str, Any]] = Field(default=None)
@@ -345,7 +345,8 @@ def read_sessions(db: Session = Depends(get_db)):
         {
             "id": session.id,
             "name": session.name,
-            "dataset_name": session.dataset_name,
+            "dataset_id": session.dataset_id,
+            "dataset_name": session.dataset.name if session.dataset else "",
             "embedding_model": session.embedding_model,
             "status": session.status,
             "oracle_kind": session.oracle_kind,
@@ -356,15 +357,22 @@ def read_sessions(db: Session = Depends(get_db)):
 
 @router.post("")
 def create_session(payload: CreateSessionRequest, db: Session = Depends(get_db)):
-    dataset_exists = (
-        db.query(DataPoint)
-        .filter(DataPoint.dataset_name == payload.dataset_name)
-        .first()
-    )
-    if dataset_exists is None:
+    dataset = db.query(Dataset).filter(Dataset.id == payload.dataset_id).one_or_none()
+    if dataset is None:
         raise HTTPException(
             status_code=422,
-            detail=f"No datapoints found for dataset '{payload.dataset_name}'",
+            detail=f"Dataset '{payload.dataset_id}' not found",
+        )
+    has_points = (
+        db.query(DataPoint.id)
+        .filter(DataPoint.dataset_id == dataset.id)
+        .first()
+        is not None
+    )
+    if not has_points:
+        raise HTTPException(
+            status_code=422,
+            detail=f"No datapoints found for dataset '{dataset.name}'",
         )
     if payload.oracle_kind == "persona" and payload.persona_snapshot is None:
         raise HTTPException(
@@ -374,7 +382,7 @@ def create_session(payload: CreateSessionRequest, db: Session = Depends(get_db))
     new_session = ChatSession(
         id=str(uuid.uuid4()),
         name=payload.name,
-        dataset_name=payload.dataset_name,
+        dataset_id=dataset.id,
         embedding_model="default",
         status="active",
         oracle_kind=payload.oracle_kind,
@@ -386,7 +394,8 @@ def create_session(payload: CreateSessionRequest, db: Session = Depends(get_db))
     return {
         "id": new_session.id,
         "name": new_session.name,
-        "dataset_name": new_session.dataset_name,
+        "dataset_id": new_session.dataset_id,
+        "dataset_name": dataset.name,
         "embedding_model": new_session.embedding_model,
         "status": new_session.status,
         "oracle_kind": new_session.oracle_kind,

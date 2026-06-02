@@ -25,13 +25,13 @@ def client():
     db = TestingSessionLocal()
     db.add(
         ChatSession(
-            id="sess-1", dataset_name="ds", embedding_model="default", status="active"
+            id="sess-1", dataset_id="ds", embedding_model="default", status="active"
         )
     )
     db.add(
         ChatSession(
             id="sess-empty",
-            dataset_name="ds",
+            dataset_id="ds",
             embedding_model="default",
             status="active",
         )
@@ -39,13 +39,13 @@ def client():
     db.add(
         ChatSession(
             id="sess-closed",
-            dataset_name="ds",
+            dataset_id="ds",
             embedding_model="default",
             status="closed",
         )
     )
-    db.add(DataPoint(id="p1", dataset_name="ds", data={"text": "a"}, embedding=[0.1]))
-    db.add(DataPoint(id="p2", dataset_name="ds", data={"text": "b"}, embedding=[0.2]))
+    db.add(DataPoint(id="p1", dataset_id="ds", data={"text": "a"}, embedding=[0.1]))
+    db.add(DataPoint(id="p2", dataset_id="ds", data={"text": "b"}, embedding=[0.2]))
     db.add(
         Cluster(id="c1", session_id="sess-1", name="C1", description="d", created_at_turn=1)
     )

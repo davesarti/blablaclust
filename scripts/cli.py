@@ -45,8 +45,19 @@ def _get(base_url: str, path: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def create_session(base_url: str, dataset_name: str) -> str:
-    """Create a new session and return its ID."""
-    result = _post(base_url, "/sessions", {"dataset_name": dataset_name})
+    """Create a new session and return its ID.
+
+    Resolves the human dataset name to its UUID via GET /datasets before
+    POST /sessions (which now takes ``dataset_id``).
+    """
+    datasets = _get(base_url, "/datasets")
+    match = next((d for d in datasets if d.get("dataset_name") == dataset_name), None)
+    if match is None:
+        raise SystemExit(
+            f"Dataset '{dataset_name}' not found on {base_url}. "
+            f"Upload it first or pass a different --dataset."
+        )
+    result = _post(base_url, "/sessions", {"dataset_id": match["dataset_id"]})
     return result["id"]
 
 

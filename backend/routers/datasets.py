@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from backend.main import get_db
 from src.dataset_processing.dataset_load_utils import process_csv_upload
-from src.models import DataPoint
+from src.models import DataPoint, Dataset
 from src.schemas import DatasetUploadResponse
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
@@ -12,23 +12,32 @@ router = APIRouter(prefix="/datasets", tags=["datasets"])
 
 @router.get("")
 def list_datasets(db: Session = Depends(get_db)):
-    rows = (
+    counts = dict(
         db.query(
-            DataPoint.dataset_name,
+            DataPoint.dataset_id,
             func.count(DataPoint.id).label("n_points"),
-            func.count(DataPoint.embedding).label("has_embeddings"),
         )
-        .group_by(DataPoint.dataset_name)
-        .order_by(DataPoint.dataset_name)
+        .group_by(DataPoint.dataset_id)
         .all()
     )
+    embedded = dict(
+        db.query(
+            DataPoint.dataset_id,
+            func.count(DataPoint.embedding).label("has_embeddings"),
+        )
+        .group_by(DataPoint.dataset_id)
+        .all()
+    )
+    datasets = db.query(Dataset).order_by(Dataset.name).all()
     return [
         {
-            "dataset_name": row.dataset_name,
-            "n_points": int(row.n_points),
-            "has_embeddings": int(row.has_embeddings),
+            "dataset_id": d.id,
+            "dataset_name": d.name,
+            "n_points": int(counts.get(d.id, 0)),
+            "has_embeddings": int(embedded.get(d.id, 0)),
+            "description": d.description or "",
         }
-        for row in rows
+        for d in datasets
     ]
 
 
@@ -55,14 +64,12 @@ def upload_dataset(
     return DatasetUploadResponse(dataset_name=dataset_name, **result)
 
 
-@router.delete("/{dataset_name}")
-def delete_dataset(dataset_name: str, db: Session = Depends(get_db)):
-    deleted = (
-        db.query(DataPoint)
-        .filter(DataPoint.dataset_name == dataset_name)
-        .delete(synchronize_session=False)
-    )
-    if deleted == 0:
-        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_name}' not found")
+@router.delete("/{dataset_id}")
+def delete_dataset(dataset_id: str, db: Session = Depends(get_db)):
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).one_or_none()
+    if dataset is None:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
+    name = dataset.name
+    db.delete(dataset)
     db.commit()
-    return {"dataset_name": dataset_name, "deleted": deleted}
+    return {"dataset_id": dataset_id, "dataset_name": name}

@@ -19,7 +19,7 @@ def test_legacy_session_defaults_to_human():
     s = ChatSession(
         id="s1",
         name="legacy",
-        dataset_name="ds",
+        dataset_id="ds",
         embedding_model="default",
         status="active",
     )
@@ -37,7 +37,7 @@ def test_persona_session_round_trips_snapshot():
     s = ChatSession(
         id="s2",
         name="persona/p",
-        dataset_name="ds",
+        dataset_id="ds",
         embedding_model="default",
         status="active",
         oracle_kind="persona",

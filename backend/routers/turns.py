@@ -76,7 +76,7 @@ def _run_semantic_reembed(
     )
     all_data_points = (
         db.query(DataPoint)
-        .filter(DataPoint.dataset_name == session.dataset_name)
+        .filter(DataPoint.dataset_id == session.dataset_id)
         .all()
     )
     return semantic_clustering(
@@ -226,7 +226,7 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
         # Normal path: the LLM is the single intent-classification step.
         total_points = (
             db.query(DataPoint)
-            .filter(DataPoint.dataset_name == session.dataset_name)
+            .filter(DataPoint.dataset_id == session.dataset_id)
             .count()
         )
         try:

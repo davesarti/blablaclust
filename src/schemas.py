@@ -50,10 +50,12 @@ class ClusterPointsResponse(BaseModel):
 
 
 class DatasetUploadResponse(BaseModel):
+    dataset_id: str
     dataset_name: str
     inserted: int
     skipped: int
     embeddings_generated: int
+    description: str = ""
 
 
 class InputOracle(BaseModel):

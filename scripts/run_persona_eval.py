@@ -84,9 +84,19 @@ def run_persona(persona: Persona, max_turns: int) -> Dict[str, Any]:
     }
     t_start = time.time()
 
-    # --- create session + initial clustering -------------------------------
+    # --- resolve dataset name → id, then create session + clustering -------
+    s, ds_list = _call("GET", "/datasets")
+    if s != 200:
+        record["errors"].append(f"list_datasets http={s} body={ds_list}")
+        record["wall_time_s"] = round(time.time() - t_start, 1)
+        return record
+    ds_match = next((d for d in ds_list if d.get("dataset_name") == persona.dataset), None)
+    if ds_match is None:
+        record["errors"].append(f"dataset '{persona.dataset}' not found on server")
+        record["wall_time_s"] = round(time.time() - t_start, 1)
+        return record
     s, sess = _call("POST", "/sessions", {
-        "dataset_name": persona.dataset,
+        "dataset_id": ds_match["dataset_id"],
         "name": f"persona/{persona.name}",
         "oracle_kind": "persona",
         "persona_snapshot": persona.model_dump(),

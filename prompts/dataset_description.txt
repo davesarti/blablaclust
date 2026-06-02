@@ -1,0 +1,22 @@
+You are describing a text dataset. Below is a random sample of documents drawn
+from the dataset — your job is to summarize what the dataset is about in one
+short, concrete sentence.
+
+SAMPLE
+{sample_block}
+
+TASK
+Write a single sentence (max 25 words) describing the dataset's content. Be
+specific about the domain and the kind of texts (e.g. "Customer reviews of
+consumer electronics products from Amazon", "Newsgroup posts spanning religion,
+sports, computing, and politics"). Avoid filler like "This dataset contains".
+Use the domain language of the documents themselves — do not assume reviews,
+products, sentiment, or any other framing unless the texts make it explicit.
+
+Respond with a single valid JSON object. No markdown fences, no commentary
+outside the JSON. Escape any double quote inside the description as \" or
+avoid it entirely.
+
+{{
+  "description": "<one-sentence dataset description>"
+}}

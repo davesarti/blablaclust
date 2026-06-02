@@ -59,13 +59,13 @@ def run_initial_clustering(
 
     data_points = (
         db.query(DataPoint)
-        .filter(DataPoint.dataset_name == session.dataset_name)
+        .filter(DataPoint.dataset_id == session.dataset_id)
         .all()
     )
     if not data_points:
         raise HTTPException(
             status_code=422,
-            detail=f"No data points found for dataset '{session.dataset_name}'",
+            detail=f"No data points found for dataset '{session.dataset.name if session.dataset else session.dataset_id}'",
         )
 
     # If the oracle described their intent in natural language, let Claude extract k.
@@ -146,13 +146,13 @@ def suggest_k(
 
     data_points = (
         db.query(DataPoint)
-        .filter(DataPoint.dataset_name == session.dataset_name)
+        .filter(DataPoint.dataset_id == session.dataset_id)
         .all()
     )
     if not data_points:
         raise HTTPException(
             status_code=422,
-            detail=f"No data points found for dataset '{session.dataset_name}'",
+            detail=f"No data points found for dataset '{session.dataset.name if session.dataset else session.dataset_id}'",
         )
 
     try:

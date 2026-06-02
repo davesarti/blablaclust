@@ -14,7 +14,7 @@ from src.viz.umap_projection import project_session
 
 router = APIRouter(prefix="/sessions", tags=["umap"])
 
-# {dataset_name: (point_ids, coords, reducer_name)} — UMAP is dataset-stable.
+# {dataset_id: (point_ids, coords, reducer_name)} — UMAP is dataset-stable.
 _coords_cache: dict = {}
 # {(session_id, turn_number): (coords, reducer_name, axis_label)} — geometry-aware
 # layouts depend on the per-turn semantic axis, so they're scoped per (session,turn).

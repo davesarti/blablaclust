@@ -18,14 +18,29 @@ class Base(DeclarativeBase):
 	pass
 
 
+class Dataset(Base):
+	__tablename__ = "datasets"
+
+	id: Mapped[str] = mapped_column(String(36), primary_key=True)
+	name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+	description: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+	data_points: Mapped[list["DataPoint"]] = relationship(
+		back_populates="dataset", cascade="all, delete-orphan"
+	)
+
+
 class DataPoint(Base):
 	__tablename__ = "data_points"
 
 	id: Mapped[str] = mapped_column(String(36), primary_key=True)
-	dataset_name: Mapped[str] = mapped_column(String(255), index=True)
+	dataset_id: Mapped[str] = mapped_column(
+		ForeignKey("datasets.id", ondelete="CASCADE"), index=True, nullable=False
+	)
 	data: Mapped[dict] = mapped_column(JSON)
 	embedding: Mapped[list | None] = mapped_column(JSON, nullable=True)
-	
+
+	dataset: Mapped[Dataset] = relationship(back_populates="data_points")
 	soft_assignments: Mapped[list["SoftAssignment"]] = relationship(
 		back_populates="data_point", cascade="all, delete-orphan"
 	)
@@ -46,13 +61,16 @@ class ChatSession(Base):
 
 	id: Mapped[str] = mapped_column(String(36), primary_key=True)
 	name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-	dataset_name: Mapped[str] = mapped_column(String(255), index=True)
+	dataset_id: Mapped[str] = mapped_column(
+		ForeignKey("datasets.id", ondelete="CASCADE"), index=True, nullable=False
+	)
 	embedding_model: Mapped[str] = mapped_column(String(255))
 	status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
 	oracle_kind: Mapped[str] = mapped_column(
 		String(16), nullable=False, default="human", server_default="human"
 	)
 	persona_snapshot: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+	dataset: Mapped[Dataset] = relationship()
 	turns: Mapped[list["Turn"]] = relationship(
 		back_populates="session", cascade="all, delete-orphan"
 	)

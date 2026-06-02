@@ -1123,6 +1123,20 @@
     .form-field input:focus,
     .form-field select:focus { border-color: rgba(74,124,89,.5); }
     .form-field select option { background: var(--surface-2); }
+    .dataset-desc {
+      margin: 6px 0 0;
+      padding: 6px 10px;
+      border-left: 2px solid var(--accent);
+      background: var(--accent-dim);
+      border-radius: 0 var(--r) var(--r) 0;
+      font-size: 11px;
+      line-height: 1.55;
+      color: var(--text-muted);
+      font-style: italic;
+      min-height: 0;
+      display: none;
+    }
+    .dataset-desc.visible { display: block; }
 
     .modal-actions {
       display: flex;
@@ -1404,9 +1418,10 @@
     </div>
     <div class="form-field">
       <label for="inp-dataset">Dataset</label>
-      <select id="inp-dataset">
-        <option value="amazon_reviews_train">amazon_reviews_train (Amazon Electronics Reviews)</option>
+      <select id="inp-dataset" onchange="updateDatasetDesc()">
+        <option value="" disabled selected>Loading datasets…</option>
       </select>
+      <p id="inp-dataset-desc" class="dataset-desc"></p>
     </div>
     <div class="form-field">
       <label for="inp-k">Suggested initial clusters</label>
@@ -1861,10 +1876,24 @@ async function loadDatasets() {
     const list = await res.json();
     if (!list.length) return;
     const sel = document.getElementById('inp-dataset');
-    sel.innerHTML = list.map(d => `<option value="${d.dataset_name}">${d.dataset_name}</option>`).join('');
-    const trainOpt = [...sel.options].find(o => o.value.includes('train'));
+    // <option value> carries the dataset_id (canonical handle); the label
+    // shows the human name. The label lookup uses data-name so callers like
+    // startSession() can stash the name into state for display.
+    sel.innerHTML = list.map(d => `<option value="${d.dataset_id}" data-name="${d.dataset_name}" data-description="${(d.description || '').replace(/"/g,'&quot;')}">${d.dataset_name}</option>`).join('');
+    const trainOpt = [...sel.options].find(o => (o.dataset.name || '').includes('train'));
     if (trainOpt) sel.value = trainOpt.value;
+    updateDatasetDesc();
   } catch (_) { /* keep default option */ }
+}
+
+function updateDatasetDesc() {
+  const sel = document.getElementById('inp-dataset');
+  const desc = document.getElementById('inp-dataset-desc');
+  if (!sel || !desc) return;
+  const opt = sel.options[sel.selectedIndex];
+  const text = (opt && opt.dataset.description) || '';
+  desc.textContent = text;
+  desc.classList.toggle('visible', text.length > 0);
 }
 
 
@@ -2505,8 +2534,13 @@ async function startSession() {
   const name = document.getElementById('inp-name').value.trim();
   if (!name) { document.getElementById('inp-name').focus(); return; }
 
-  const dataset = document.getElementById('inp-dataset').value;
-  const k       = parseInt(document.getElementById('inp-k').value, 10) || 5;
+  const sel       = document.getElementById('inp-dataset');
+  const datasetId = sel.value;
+  // Pull the display name from the option's data-name (set by loadDatasets);
+  // the default static option falls back to its visible label.
+  const opt       = sel.options[sel.selectedIndex];
+  const dataset   = (opt && (opt.dataset.name || opt.textContent.trim())) || datasetId;
+  const k         = parseInt(document.getElementById('inp-k').value, 10) || 5;
 
   const btn = document.querySelector('#modal-new-session .btn-primary');
   btn.disabled    = true;
@@ -2516,7 +2550,7 @@ async function startSession() {
     const sessRes = await fetch('/sessions', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ dataset_name: dataset, name }),
+      body:    JSON.stringify({ dataset_id: datasetId, name }),
     });
     if (!sessRes.ok) {
       const err = await sessRes.json().catch(() => ({}));

@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sentence_transformers import SentenceTransformer
 
-from src.models import DataPoint
+from src.models import DataPoint, Dataset
 from src.dataset_processing.text_cleaning import clean_text
 
 DB_PATH = "sqlite:///./data/demo_database.db"
@@ -25,7 +25,11 @@ def verify_database(db):
     print(f"Total data points : {total}")
 
     for name in ["amazon_reviews_train", "amazon_reviews_eval"]:
-        n = db.query(DataPoint).filter(DataPoint.dataset_name == name).count()
+        ds = db.query(Dataset).filter(Dataset.name == name).one_or_none()
+        if ds is None:
+            print(f"  {name}: 0 (dataset not found)")
+            continue
+        n = db.query(DataPoint).filter(DataPoint.dataset_id == ds.id).count()
         print(f"  {name}: {n}")
 
     missing_emb = db.query(DataPoint).filter(DataPoint.embedding == None).count()
@@ -34,7 +38,7 @@ def verify_database(db):
     sample = db.query(DataPoint).first()
     print(f"\nSample data point:")
     print(f"  id           : {sample.id}")
-    print(f"  dataset_name : {sample.dataset_name}")
+    print(f"  dataset_name : {sample.dataset.name if sample.dataset else sample.dataset_id}")
     print(f"  label        : {sample.data['label']}")
     print(f"  title        : {sample.data['title'][:60]}")
     print(f"  text         : {sample.data['text'][:80]}...")
