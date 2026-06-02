@@ -112,10 +112,15 @@ def initial_clustering(
     diffs = X[:, np.newaxis, :] - centroids[np.newaxis, :, :]  # (n, k, dim)
     sq_dists = np.sum(diffs ** 2, axis=2)  # (n, k)
 
-    # Temperature scaled to the data's own distance spread keeps the softmax
-    # sharp regardless of embedding magnitude. Guard against a zero mean (e.g.
-    # k == n, where every point sits exactly on its own centroid).
-    temperature = max(SOFTMAX_TEMPERATURE_FRACTION * float(sq_dists.mean()), 1e-12)
+    # Temperature is scaled to the mean WITHIN-CLUSTER distance (each point's
+    # distance to its nearest centroid), not the mean over all centroids.
+    # Using the full mean inflates the scale when clusters are well-separated
+    # (far centroids dominate the average), which softens the distribution
+    # unnecessarily. Within-cluster distance is the right reference: it reflects
+    # how tight the clusters actually are, giving sharper probabilities for
+    # well-placed points and gracefully flat ones for genuinely ambiguous points.
+    min_sq_dists = sq_dists.min(axis=1)  # (n,) — distance to nearest centroid
+    temperature = max(SOFTMAX_TEMPERATURE_FRACTION * float(min_sq_dists.mean()), 1e-12)
 
     # Softmax of negative scaled distances → probabilities in (0, 1) summing to 1 per point
     probs = _softmax(-sq_dists / temperature, axis=1)  # (n, k)
