@@ -129,6 +129,10 @@
       color: var(--text);
       background: var(--surface-2);
     }
+    #header .btn-back:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
     .status-badge {
       font-family: var(--mono);
       font-size: 10px;
@@ -1621,6 +1625,7 @@ const state = {
   chat: [],
   selectedClusterIds: new Set(),
   drawerExpanded: false,
+  isBusy: false,
 };
 
 // expand modal cache
@@ -2147,6 +2152,9 @@ async function sendMessage() {
   startLoadingMessage(typingEl);
   document.getElementById('typing-indicator').classList.add('visible');
 
+  state.isBusy = true;
+  _updateBackBtn();
+
   try {
     const payload = {
       session_id:         state.sessionId,
@@ -2178,6 +2186,8 @@ async function sendMessage() {
     document.getElementById('typing-indicator').classList.remove('visible');
     btn.disabled    = false;
     btn.textContent = 'Send';
+    state.isBusy = false;
+    _updateBackBtn();
   }
 }
 
@@ -2465,6 +2475,7 @@ async function startSession() {
     const sessData  = await sessRes.json();
     state.sessionId = sessData.id;
 
+    state.isBusy = true;
     startLoadingMessage(btn);
     let clRes = await fetch(`/clusters/${state.sessionId}`, {
       method:  'POST',
@@ -2518,6 +2529,7 @@ async function startSession() {
     showError(e.message);
     state.sessionId = null;
   } finally {
+    state.isBusy = false;
     stopLoadingMessage();
     btn.disabled    = false;
     btn.textContent = 'Start';
@@ -2614,7 +2626,18 @@ document.getElementById('expand-search').addEventListener('input', e => {
 
 // ── SESSION CLOSE ──────────────────────────────────────────────────────────
 
+function _updateBackBtn() {
+  const btn = document.querySelector('#header .btn-back');
+  if (!btn) return;
+  btn.disabled = state.isBusy;
+  btn.title = state.isBusy ? 'Please wait — an operation is in progress' : '';
+}
+
 function goBackToWelcome() {
+  if (state.isBusy) {
+    alert('An operation is in progress. Please wait for it to finish before leaving this session.');
+    return;
+  }
   state.sessionId = null;
   state.selectedClusterIds.clear();
   state.drawerExpanded = false;
