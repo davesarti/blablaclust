@@ -39,10 +39,13 @@ OPENROUTER_SITE_URL = os.environ.get("OPENROUTER_SITE_URL", "http://localhost")
 # wildly different rates, so look up by the fully-qualified model slug. Unknown
 # models fall back to free (0.0) — update this table as paid models are adopted.
 _PRICING: dict[str, dict[str, float]] = {
-    "deepseek/deepseek-v4-flash:free": {"input": 0.0, "output": 0.0},
-    "deepseek/deepseek-chat": {"input": 0.14, "output": 0.28},
-    "openai/gpt-4o": {"input": 2.50, "output": 10.0},
-    "anthropic/claude-3.5-sonnet": {"input": 3.0, "output": 15.0},
+    "deepseek/deepseek-v4-flash:free":   {"input": 0.0,  "output": 0.0},
+    "deepseek/deepseek-chat":            {"input": 0.14, "output": 0.28},
+    "openai/gpt-4o":                     {"input": 2.50, "output": 10.0},
+    "anthropic/claude-3.5-sonnet":       {"input": 3.0,  "output": 15.0},
+    # Google Gemini via OpenRouter
+    "google/gemini-2.5-flash":           {"input": 0.30, "output": 2.50},
+    "google/gemini-2.5-flash-lite":      {"input": 0.10, "output": 0.40},
 }
 _DEFAULT_RATES = {"input": 0.0, "output": 0.0}
 
