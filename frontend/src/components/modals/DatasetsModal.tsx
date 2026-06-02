@@ -295,6 +295,7 @@ export default function DatasetsModal({ onClose }: Props) {
   const [preview, setPreview] = useState<DatasetPreview | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
   const [tab, setTab] = useState<'list' | 'upload'>('list')
 
   const loadDatasets = useCallback(async () => {
@@ -306,10 +307,14 @@ export default function DatasetsModal({ onClose }: Props) {
   useEffect(() => { loadDatasets() }, [loadDatasets])
 
   async function handlePreview(id: string) {
-    if (previewId === id) { setPreviewId(null); setPreview(null); return }
-    setPreviewId(id); setPreviewLoading(true)
+    if (previewId === id) { setPreviewId(null); setPreview(null); setPreviewError(null); return }
+    setPreviewId(id); setPreviewLoading(true); setPreviewError(null)
     try { setPreview(await previewDataset(id)) }
-    catch { setPreview(null) }
+    catch (e: unknown) {
+      setPreview(null)
+      setPreviewId(null)
+      setPreviewError(e instanceof Error ? e.message : 'Preview failed')
+    }
     finally { setPreviewLoading(false) }
   }
 
@@ -376,6 +381,13 @@ export default function DatasetsModal({ onClose }: Props) {
                       />
                     ))}
                   </div>
+
+                  {/* Preview error */}
+                  {previewError && (
+                    <div className="mx-6 mt-4 px-4 py-3 rounded-sm border border-red-200 bg-red-50 text-[13px] text-red-700 font-mono">
+                      preview error: {previewError}
+                    </div>
+                  )}
 
                   {/* Preview panel */}
                   {preview && !previewLoading && (
