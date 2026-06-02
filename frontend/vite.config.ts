@@ -4,6 +4,9 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [tailwindcss(), react()],
+  optimizeDeps: {
+    include: ['plotly.js-dist-min'],
+  },
   server: {
     port: 5173,
     proxy: {

@@ -46,4 +46,4 @@ export const getTurns = (sessionId: string) => req<TurnRead[]>(`/turns/${session
 
 // UMAP
 export const getUmap = (sessionId: string, geometryAware = false) =>
-  req<UmapData>(`/umap/${sessionId}${geometryAware ? '?geometry_aware=true' : ''}`)
+  req<UmapData>(`/sessions/${sessionId}/umap${geometryAware ? '?geometry_aware=true' : ''}`)

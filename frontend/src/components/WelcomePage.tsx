@@ -76,14 +76,14 @@ export default function WelcomePage() {
             ))}
           </div>
 
-          <h1 className="font-serif text-[44px] font-normal tracking-tight mb-3 leading-tight">BlaBlaClust</h1>
-          <p className="text-base text-muted leading-relaxed mb-8 max-w-md mx-auto">
+          <h1 className="font-serif text-[56px] font-normal tracking-tight mb-4 leading-tight">BlaBlaClust</h1>
+          <p className="text-[19px] text-muted leading-relaxed mb-10 max-w-md mx-auto">
             Conversational clustering — refine how your data is grouped through natural language.
           </p>
 
           <button
             onClick={() => dispatch({ type: 'OPEN_MODAL', modal: 'new-session' })}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-sm font-medium text-sm text-white transition-all duration-150 hover:opacity-90 active:scale-95"
+            className="inline-flex items-center gap-2 px-7 py-3.5 rounded-sm font-medium text-[17px] text-white transition-all duration-150 hover:opacity-90 active:scale-95"
             style={{ background: 'var(--color-accent)' }}>
             + New session
           </button>
@@ -92,40 +92,40 @@ export default function WelcomePage() {
         {/* Session list */}
         {!loading && sessions.length > 0 && (
           <div className="relative z-10 w-full max-w-xl px-5 mt-10">
-            <p className="font-mono text-[10px] font-bold tracking-[0.14em] uppercase text-faint mb-3">Recent sessions</p>
-            <div className="flex flex-col gap-1.5 max-h-[40dvh] overflow-y-auto scrollbar-thin pr-1">
+            <p className="font-mono text-[13px] font-bold tracking-[0.14em] uppercase text-faint mb-4">Recent sessions</p>
+            <div className="flex flex-col gap-2 max-h-[40dvh] overflow-y-auto scrollbar-thin pr-1">
               {sessions.map(s => (
                 <div key={s.id}
-                  className="flex items-center gap-3 px-4 py-3 rounded-sm border border-border bg-surface/70 hover:bg-surface2 hover:border-borders transition-all duration-100">
+                  className="flex items-center gap-4 px-5 py-4 rounded-sm border border-border bg-surface/70 hover:bg-surface2 hover:border-borders transition-all duration-100">
                   <div className="flex-1 min-w-0 text-left">
-                    <div className="font-mono text-[10px] text-faint truncate uppercase tracking-wider">{s.dataset_name}</div>
-                    <div className="text-sm text-muted mt-0.5 truncate">{s.name || s.id.slice(0, 8)}</div>
+                    <div className="font-mono text-[13px] text-faint truncate uppercase tracking-wider">{s.dataset_name}</div>
+                    <div className="text-[17px] text-muted mt-1 truncate">{s.name || s.id.slice(0, 8)}</div>
                   </div>
                   <StatusBadge status={s.status} />
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                     <button onClick={() => setEvalId(s.id)}
-                      className="font-mono text-[10px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-sm border border-border text-faint hover:text-muted hover:border-borders transition-colors">
+                      className="font-mono text-[13px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-faint hover:text-muted hover:border-borders transition-colors">
                       eval
                     </button>
                     <button onClick={() => handleResume(s)} disabled={resumingId === s.id}
-                      className="font-mono text-[10px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-sm border text-sm transition-colors disabled:opacity-50"
+                      className="font-mono text-[13px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border transition-colors disabled:opacity-50"
                       style={{ borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}>
                       {resumingId === s.id ? '…' : 'resume'}
                     </button>
                     {confirmDeleteId === s.id ? (
                       <>
                         <button onClick={() => handleDelete(s.id)} disabled={deletingId === s.id}
-                          className="font-mono text-[10px] font-bold tracking-wider uppercase px-2 py-1 rounded-sm border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition-colors">
+                          className="font-mono text-[13px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition-colors">
                           {deletingId === s.id ? '…' : 'confirm'}
                         </button>
                         <button onClick={() => setConfirmDeleteId(null)}
-                          className="font-mono text-[10px] font-bold tracking-wider uppercase px-2 py-1 rounded-sm border border-border text-faint hover:text-muted transition-colors">
+                          className="font-mono text-[13px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-faint hover:text-muted transition-colors">
                           cancel
                         </button>
                       </>
                     ) : (
                       <button onClick={() => setConfirmDeleteId(s.id)}
-                        className="font-mono text-[10px] font-bold tracking-wider uppercase px-2 py-1 rounded-sm border border-border text-faint hover:text-red-700 hover:border-red-200 transition-colors">
+                        className="font-mono text-[13px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-faint hover:text-red-700 hover:border-red-200 transition-colors">
                         del
                       </button>
                     )}
