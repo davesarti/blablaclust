@@ -8,7 +8,26 @@ const UMAP_COLORS = [
   '#2e8b8b','#b07a2e','#9e3e5a','#5a6e8a','#7a9e3e','#3e8a5a',
 ]
 
+function wrapText(text: string, width = 52): string {
+  const words = text.split(' ')
+  const lines: string[] = []
+  let line = ''
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word
+    if (candidate.length > width && line) {
+      lines.push(line)
+      line = word
+    } else {
+      line = candidate
+    }
+  }
+  if (line) lines.push(line)
+  return lines.join('<br>')
+}
+
 interface Props { sessionId: string; onClose: () => void }
+
+interface LegendItem { id: string; name: string; color: string; count: number }
 
 export default function UmapModal({ sessionId, onClose }: Props) {
   const [data, setData] = useState<UmapData | null>(null)
@@ -17,6 +36,7 @@ export default function UmapModal({ sessionId, onClose }: Props) {
   const [turnIdx, setTurnIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [geomAware, setGeomAware] = useState(false)
+  const [legendItems, setLegendItems] = useState<LegendItem[]>([])
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const plotRef = useRef<HTMLDivElement>(null)
 
@@ -56,17 +76,31 @@ export default function UmapModal({ sessionId, onClose }: Props) {
       if (!byCluster[cid]) byCluster[cid] = { x: [], y: [], text: [] }
       byCluster[cid].x.push(p.x)
       byCluster[cid].y.push(p.y)
-      byCluster[cid].text.push(data.points[i]?.text ?? '')
+      byCluster[cid].text.push(wrapText(data.points[i]?.text ?? ''))
     })
+
+    // Build legend items sorted by count descending, unassigned last
+    const items: LegendItem[] = Object.entries(byCluster)
+      .filter(([cid]) => cid !== '__none__')
+      .map(([cid, d]) => ({ id: cid, name: data.clusters[cid]?.name ?? cid, color: colorMap[cid], count: d.x.length }))
+      .sort((a, b) => b.count - a.count)
+    const noneCount = byCluster['__none__']?.x.length ?? 0
+    if (noneCount > 0) items.push({ id: '__none__', name: 'unassigned', color: '#ccc', count: noneCount })
+    setLegendItems(items)
 
     const traces: Plotly.Data[] = Object.entries(byCluster).map(([cid, d]) => ({
       type: 'scattergl' as const,
       x: d.x, y: d.y,
       text: d.text,
-      hovertemplate: '%{text}<extra></extra>',
+      hovertemplate: '<span style="font-weight:600;font-size:11px;letter-spacing:0.04em;text-transform:uppercase">%{fullData.name}</span><br><br>%{text}<extra></extra>',
       mode: 'markers',
       name: cid === '__none__' ? 'unassigned' : (data.clusters[cid]?.name ?? cid),
-      marker: { color: cid === '__none__' ? '#ccc' : colorMap[cid], size: 5, opacity: 0.75 },
+      marker: {
+        color: cid === '__none__' ? '#ccc' : colorMap[cid],
+        size: 6,
+        opacity: 0.82,
+        line: { color: 'rgba(255,255,255,0.55)', width: 0.8 },
+      },
     }))
 
     // Centroids
@@ -76,7 +110,7 @@ export default function UmapModal({ sessionId, onClose }: Props) {
         traces.push({
           type: 'scatter', x: [cx], y: [cy], mode: 'markers',
           showlegend: false, hoverinfo: 'skip',
-          marker: { color: colorMap[cid] ?? '#888', size: 12, symbol: 'circle', line: { color: 'white', width: 2 } },
+          marker: { color: colorMap[cid] ?? '#888', size: 12, symbol: 'circle', line: { color: '#111', width: 1.5 } },
         } as Plotly.Data)
       })
     }
@@ -102,10 +136,17 @@ export default function UmapModal({ sessionId, onClose }: Props) {
       title: { text: title, font: { size: 11, color: '#787868', family: 'ui-monospace' } },
       paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
       margin: { t: 32, r: 16, b: 24, l: 0 },
-      xaxis: { showgrid: false, zeroline: false, showticklabels: false, domain: [0, 0.60] },
+      showlegend: false,
+      xaxis: { showgrid: false, zeroline: false, showticklabels: false },
       yaxis: { showgrid: false, zeroline: false, showticklabels: false, scaleanchor: 'x' },
-      legend: { x: 0.98, xanchor: 'right', y: 0.98, yanchor: 'top', bgcolor: 'rgba(0,0,0,0)', font: { size: 15, family: 'ui-monospace' } },
       hovermode: 'closest',
+      hoverlabel: {
+        bgcolor: '#f5f5f0',
+        bordercolor: '#c8c8b4',
+        font: { family: 'ui-monospace, monospace', size: 12, color: '#2d2d28' },
+        align: 'left',
+        namelength: 0,
+      },
     }, { responsive: true, displayModeBar: false })
   }, [data])
 
@@ -227,8 +268,39 @@ export default function UmapModal({ sessionId, onClose }: Props) {
               )
             })()}
 
-            {/* Plot */}
-            <div ref={plotRef} className="w-full" style={{ height: 520 }} />
+            {/* Plot + Legend */}
+            <div className="flex gap-4" style={{ height: 520 }}>
+              <div ref={plotRef} className="flex-1 min-w-0 overflow-hidden" />
+
+              {/* Custom legend panel */}
+              <div className="flex flex-col w-72 shrink-0 border border-border rounded-sm overflow-hidden"
+                style={{ background: 'var(--color-surface2)' }}>
+                <div className="px-4 py-2.5 border-b border-border shrink-0"
+                  style={{ background: 'var(--color-surface)' }}>
+                  <span className="font-mono text-[11px] font-bold tracking-widest uppercase text-faint">
+                    Clusters · {legendItems.filter(l => l.id !== '__none__').length}
+                  </span>
+                </div>
+                <div className="flex-1 overflow-y-auto scrollbar-thin py-1.5">
+                  {legendItems.map(item => (
+                    <div key={item.id}
+                      className="flex items-start gap-3 px-4 pr-5 py-2 hover:bg-surface transition-colors group">
+                      <div className="shrink-0 mt-[4px] rounded-full" style={{
+                        width: 10, height: 10,
+                        background: item.color,
+                        boxShadow: `0 0 0 2px ${item.color}40`,
+                      }} />
+                      <span className={`font-mono text-[13px] leading-snug flex-1 break-words ${item.id === '__none__' ? 'text-faint italic' : 'text-ink'}`}>
+                        {item.name}
+                      </span>
+                      <span className="font-mono text-[12px] text-faint shrink-0 tabular-nums mt-px opacity-0 group-hover:opacity-100 transition-opacity">
+                        {item.count}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
 
             {/* Reducer info */}
             <p className="font-mono text-[12px] text-faint text-right mt-3">

@@ -12,7 +12,7 @@ function Message({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === 'user'
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} ${isUser ? 'animate-slide-right' : 'animate-slide-left'}`}>
-      <div className={`max-w-[88%] px-5 py-3.5 rounded-sm text-[15px] leading-relaxed ${
+      <div className={`max-w-[88%] px-5 py-3.5 rounded-sm text-[15px] leading-relaxed break-words whitespace-pre-wrap ${
         isUser
           ? 'text-white'
           : 'border border-border text-ink'
