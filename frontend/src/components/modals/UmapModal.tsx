@@ -35,15 +35,14 @@ export default function UmapModal({ sessionId, onClose }: Props) {
   const [error, setError] = useState('')
   const [turnIdx, setTurnIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
-  const [geomAware, setGeomAware] = useState(false)
   const [legendItems, setLegendItems] = useState<LegendItem[]>([])
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const plotRef = useRef<HTMLDivElement>(null)
 
-  async function fetchData(geom: boolean) {
+  async function fetchData() {
     setLoading(true); setError('')
     try {
-      const d = await getUmap(sessionId, geom)
+      const d = await getUmap(sessionId)
       setData(d); setTurnIdx(0)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -52,7 +51,7 @@ export default function UmapModal({ sessionId, onClose }: Props) {
     }
   }
 
-  useEffect(() => { fetchData(false) }, [])
+  useEffect(() => { fetchData() }, [])
 
   const renderTurn = useCallback(async (ti: number) => {
     if (!data || !plotRef.current) return
@@ -163,11 +162,6 @@ export default function UmapModal({ sessionId, onClose }: Props) {
     return () => { if (playRef.current) clearInterval(playRef.current) }
   }, [playing, data])
 
-  async function toggleGeom(v: boolean) {
-    setGeomAware(v)
-    await fetchData(v)
-  }
-
   return (
     <Modal title="UMAP clustering evolution" onClose={onClose} width="max-w-6xl">
       <div className="px-6 py-4 flex flex-col gap-3">
@@ -257,12 +251,6 @@ export default function UmapModal({ sessionId, onClose }: Props) {
                       className="font-mono text-[12px] font-bold tracking-wider uppercase px-3 py-1.5 rounded-sm border border-border text-muted hover:bg-surface2 transition-colors">
                       {playing ? '⏸ pause' : '▶ play'}
                     </button>
-                    {data.geometry_aware && (
-                      <label className="flex items-center gap-1.5 font-mono text-[12px] font-bold tracking-wider uppercase text-faint cursor-pointer">
-                        <input type="checkbox" checked={geomAware} onChange={e => toggleGeom(e.target.checked)} className="accent-accent" />
-                        geom-aware
-                      </label>
-                    )}
                   </div>
                 </div>
               )
