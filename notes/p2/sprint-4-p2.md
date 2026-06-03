@@ -373,6 +373,148 @@ After merging Arianna's full React + TypeScript + Tailwind v4 rewrite
 Build now compiles clean. Dev server: `cd frontend && npm run dev` →
 `http://localhost:5173` (proxies API calls to `:8000`).
 
+### 21. DB migration — `data` JSON blob → flat `text` column
+
+`scripts/migrate_datapoint_text.py` (new, committed `6b4e177`).
+
+A second schema change after the Dataset migration (§18): commit `0eeb6ce`
+("datapoint left with only text value") moved `DataPoint` from a `data` JSON
+blob `{label,title,text}` to a flat `text` column. Any DB seeded before that
+crashes `serve_ui.py` at startup with `no such column: data_points.text` — so
+**every teammate hits it on `git pull`**, not just me.
+
+The script migrates an existing DB in place, non-destructively:
+- **Recreates** `data_points` to match the ORM exactly, dropping the legacy
+  `data` and `dataset_name` columns — `data` was `NOT NULL` with no default, so
+  the new ORM (which never writes it) would fail every INSERT; the same class of
+  constraint trap as `sessions.dataset_name` in §18.
+- Populates `text = clean_text(title, text)`, which **reproduces exactly what
+  was embedded** (title+text for Amazon, body-only for 20NG/IMDB whose titles
+  are empty), so `text` ↔ `embedding` stay consistent for every row.
+- **Preserves all 3900 embeddings** — zero re-embedding.
+- Idempotent (re-run is a no-op); writes a timestamped `.pre_text_migration.bak`
+  first; `*.bak` added to `.gitignore`.
+
+Verified: 3900 rows migrated, all embeddings intact, idempotent re-run no-ops,
+server boots clean, `GET /datasets` serves all three datasets. A first run hit a
+SQLite DDL-autocommit quirk (the "transaction" isn't atomic on Python < 3.12) +
+an index-name clash; recovered from the backup and hardened the script
+(defensive cleanup, `DROP INDEX IF EXISTS`, index recreated after the legacy
+table is dropped).
+
+### 22. Per-turn cost — complete accumulation + full audit logging
+
+`src/harness.py`, `src/logger.py`, `backend/routers/turns.py`, 7 engine files,
+`tests/test_harness_cost_tracking.py` (committed `04f448d`). Builds on §14.
+
+**The pricing was right (§14) but the per-turn total was not.** `turns.py`
+captured only `f_output`'s usage, so any turn that also named clusters
+(merge/split), updated preferences, or ran boundary repair **under-reported**,
+and the clarify-confirm short-circuit always showed **$0** (hard-coded
+`usage={}`).
+
+**Fix — thread-local accumulator hooked into `call_llm`.**
+`begin_turn_tracking()` / `pop_turn_tracking()` / `_accumulate_turn()` in
+`harness.py`: every `call_llm` on the request thread adds its usage+cost to the
+accumulator automatically (priced with `response.model`, so the right table is
+used even when the env model differs). `create_turn` starts tracking at the top
+and drains the full total at the end — no per-caller bookkeeping, and it can't
+miss a call. No async/batch path bypasses `call_llm` (verified), so coverage is
+complete.
+
+Verified live: a merge turn now reports **9476 in / 834 out** vs f_output-only
+**3691 in** — the delta is naming + preferences, previously invisible.
+Cross-turn isolation confirmed (turn 2 = 3742 in, not turn1+turn2). 6 regression
+tests, including **failed-turn-doesn't-contaminate-the-next** (begin resets
+unconditionally).
+
+**Audit-log completeness.** Four functions made LLM calls but never called
+`log_llm_call` — `cluster_naming`, `f_update_preferences`,
+`f_parse_clustering_intent`, `f_semantic_reembed` — so they were **silent** in
+`logs/llm_calls.jsonl`; the three that did log (`f_output`, `f_eval`,
+`f_boundary_repair`) omitted `model`/`turn_number`. Now **every** call site logs
+`model` + `turn_number` (verified live: 0 entries missing model), and
+`log_llm_call` is **best-effort** — an audit-log failure (bad usage payload,
+disk error) can no longer break the clustering call it records (this also fixed
+tests that mock `usage` as a `MagicMock`).
+
+Cross-team: the 6 P3/P4 engine files were edited with Thomas's explicit
+go-ahead.
+
+### 23. Zombie-session fix + backend k≥2 enforcement
+
+`frontend/src/components/modals/NewSessionModal.tsx`, `backend/routers/clusters.py`
+(committed `a095253`).
+
+**Bug (found by Thomas).** Creating a session and running initial clustering are
+two non-atomic API calls. Typing `k=0` (or `1`) past the number-input spinner
+made clustering return 422, but the session row was **already persisted** with no
+clusters — an orphan — and every retry created **another** one. The dev DB had
+**15** such zombies.
+
+**Frontend (P5 file, with go-ahead):** validate `k` client-side (whole number
+2..20; Start button gated; inline hint), and **roll the session back** on any
+clustering failure (`deleteSession` in the catch). Verified: create → fail →
+cleanup leaves the session count unchanged.
+
+**Backend (P1 file):** the API silently accepted `k=1` (`ClusteringRequest`
+`ge=1`; the engine primitive `_fit_kmeans` allows `k≥1`). Enforced **`k≥2` at the
+API boundary** — `ClusteringRequest` field + the oracle-intent `k_min` — which
+closes the direct-API / persona path while leaving the engine primitive
+permissive for the unit tests that legitimately fit `k=1`. Verified: `POST
+/clusters` with `k=1` now returns **422** (was 200).
+
+Cleaned the 15 existing orphans (all 0-cluster / 0-turn — zero data lost).
+
+### 24. Bootstrap CIs + no-dialogue baseline arm (the brief's two open eval gaps)
+
+`src/eval/eval_report.py`, `scripts/run_baseline_eval.py` (new),
+`scripts/run_generalization_stability_eval.py` (fix).
+
+**(a) Bootstrap CIs (`eval_report.py`).** The cross-scenario aggregates were
+mean/median only — the brief asks for ≥1 claim *with a CI*. Added a percentile
+bootstrap (10k resamples, same method as the generalization eval) to every
+aggregate, plus a **convergence claim** (`A2 turns to convergence` with CI).
+`n=1` degrades to an explicit "needs ≥2 scenarios" note. Backward-compatible
+(only `summary.md` changes). Verified on synthetic (n=3), the `n=1` path, and
+end-to-end through `run_scenario_eval`.
+
+**(b) No-dialogue baseline arm (`run_baseline_eval.py`).** The control arm for
+"does dialogue improve clustering?". Measures the **initial k-means clustering
+with no oracle dialogue** with the same A1 (silhouette) + B2 (coherence) metrics
+the live eval uses, with bootstrap CIs. Reads embeddings **read-only** from the
+live DB (no re-embedding) and clusters in a **throwaway in-memory DB** — the live
+DB is never written to (verified: 0 pollution). Sanity: per-point A1 mean ==
+k-means fit silhouette on all three datasets. Real numbers (baseline, no dialogue):
+
+| Dataset | k | A1 silhouette [95% CI] | B2 coherence [95% CI] |
+|---|---|---|---|
+| amazon_reviews | 4 | 0.0385 [0.0358, 0.0414] | 0.788 [0.725, 0.850] |
+| 20_newsgroups | 6 | 0.0555 [0.0528, 0.0581] | 0.525 [0.242, 0.783] |
+| imdb_reviews | 4 | 0.0032 [0.0008, 0.0055] | 0.787 [0.700, 0.875] |
+
+**(c) Fix: generalization eval was broken** by the `data`→`text` migration
+(§21) — it constructed `DataPoint(data={…})` and read `dp.data` (removed field),
+crashing on `TypeError`. Not covered by the test suite, so it went unnoticed.
+Fixed to `dp.text` (mirrors the live endpoint); verified it runs.
+
+**Finding (honest).** At matched k=5 on amazon, conversational B2 (0.69
+[0.58, 0.78], 3 scripted scenarios) ≈ no-dialogue baseline B2 (0.66 [0.33, 0.88])
+— CIs overlap, **no significant intrinsic-quality gain from dialogue** — while B3
+compliance = 1.00. The dialogue serves *oracle preference*, not the automated
+metric: exactly the project's thesis ("the oracle is the objective"). The
+baseline arm makes this measurable.
+
+**Caveats (deep-checked).** (i) The A1 silhouette trend is **not** a clean
+before/after: `split` re-logs the *sub-cluster* silhouette (it calls
+`initial_clustering` on a subset), `merge`/`move`/`rename` don't re-log at all —
+so `silhouette_final` mixes whole-dataset and subset fits. The clean quality
+comparison is **B2**, not an A1 Δ (this caveat is now printed in the summary).
+(ii) n=3 scripted scenarios; "turns to convergence" from scripted runs is the
+script length, not organic convergence — the real convergence-with-CI claim needs
+the LLM-oracle personas (§ pending). (iii) B2 is a single non-deterministic judge
+call per arm; its CI is over clusters, coarse at small k.
+
 ## Results
 
 | Check | Result |
@@ -396,7 +538,16 @@ Build now compiles clean. Dev server: `cd frontend && npm run dev` →
 | DB migration (P1 Dataset model) | non-destructive; 3900 data_points + 9 sessions migrated |
 | LLM-as-oracle | personas fixed; `satisfied_minimalist` → oracle_satisfied in 1 turn |
 | React frontend build | TypeScript errors fixed; `npm run dev` → localhost:5173 |
-| Full test suite | **295 passed**, 0 fail |
+| DB `data`→`text` migration (§21) | 3900 rows, all embeddings preserved, idempotent, server boots |
+| Per-turn cost accumulator (§22) | captures every LLM call in a turn (was f_output only); cross-turn isolated; 6 tests |
+| Complete LLM-call logging (§22) | 4 silent functions now log; model+turn on all sites; best-effort |
+| Zombie-session fix (§23) | client-side k validation + rollback-on-failure; 15 orphans purged |
+| Backend k≥2 enforcement (§23) | `POST /clusters` k=1 → 422 (was 200) |
+| Bootstrap CIs in eval report (§24) | percentile bootstrap on all aggregates + convergence claim; n=1 guarded |
+| No-dialogue baseline arm (§24) | `run_baseline_eval.py`; A1+B2 with CI, read-only, no DB pollution |
+| Baseline vs conversational (§24) | matched-k amazon: B2 0.66 vs 0.69 (overlap) — no intrinsic gain; B3=1.0 |
+| Generalization eval fix (§24) | `data`→`text`; was crashing post-migration, now runs |
+| Full test suite | **306 passed**, 0 fail |
 
 ## Issues opened this sprint
 
@@ -450,8 +601,18 @@ for 20NG — P5), #51 (datasets API record count — P1, merged), #52
 - [x] DB migration — P1 Dataset model aligned; `sessions` table recreated.
 - [x] LLM-as-oracle end-to-end verified; personas dataset names fixed.
 - [x] React frontend bootstrap — TypeScript build fixed; `npm run dev` works.
-- [ ] **Commit pending:** `frontend/tsconfig.app.json` + `frontend/src/plotly.d.ts`
-      (two small build-fix files, awaiting Thomas's ok).
+- [x] **Frontend build-fix files committed** (`tsconfig.app.json` + `plotly.d.ts`,
+      commit `c83dca9`).
+- [x] **DB `data`→`text` migration** (§21) — `migrate_datapoint_text.py`,
+      non-destructive, idempotent, 3900 rows + embeddings preserved. Committed
+      `6b4e177`. Useful for every teammate with a pre-`0eeb6ce` DB.
+- [x] **Per-turn cost accumulator + complete LLM-call logging** (§22) — thread-local
+      accumulator in `call_llm`; all 4 silent functions now log; model+turn on every
+      site; `log_llm_call` best-effort; 6 regression tests. Committed `04f448d`.
+- [x] **Zombie-session fix + backend k≥2** (§23) — client validation +
+      rollback-on-failure; API enforces k≥2; 15 orphans purged. Committed `a095253`.
+- [ ] **Push:** 3 commits above are local on `main` (ahead 3, not pushed) —
+      awaiting Thomas's ok (coordinate a `pull --rebase` first, shared branch).
 - [ ] **Run personas at scale** — produce `reports/` with results.jsonl +
       summary.md across all 3 personas; commit as deliverable for the prof.
 - [ ] **CI on convergence claim** — `eval_report.py` aggregates mean±std but
