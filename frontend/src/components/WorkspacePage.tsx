@@ -29,7 +29,7 @@ export default function WorkspacePage() {
   const totalSize = sess.clusters.reduce((s, c) => s + c.size, 0)
 
   useEffect(() => {
-    getEvalCached(sess.sessionId).then(() => setShowEval(true)).catch(() => {})
+    getEvalCached(sess.sessionId).then((result) => setEvalResult(result)).catch(() => {})
   }, [sess.sessionId])
 
   async function markConverged() {
