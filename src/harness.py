@@ -7,6 +7,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from threading import local
 from typing import Any
 
 from dotenv import load_dotenv
@@ -201,6 +202,55 @@ def _make_dry_run_response(model: str) -> LLMResponse:
 
 
 # ---------------------------------------------------------------------------
+# Per-turn LLM cost accumulator
+# ---------------------------------------------------------------------------
+
+_turn_tracking = local()
+
+
+def begin_turn_tracking() -> None:
+    """Reset the per-turn accumulator at the start of a request turn.
+
+    Call this once at the top of create_turn (or any other entry point that
+    processes one oracle turn).  Every subsequent call_llm on the same thread
+    will add its usage and cost into the accumulator automatically.
+    """
+    _turn_tracking.input_tokens = 0
+    _turn_tracking.output_tokens = 0
+    _turn_tracking.cost = 0.0
+    _turn_tracking.active = True
+
+
+def pop_turn_tracking() -> tuple[dict[str, int], float]:
+    """Return and reset the accumulated (usage, cost_usd) for this turn.
+
+    Returns a usage dict compatible with SystemTurn.token_usage and the total
+    estimated cost in USD, covering *all* call_llm calls made since the last
+    begin_turn_tracking() on this thread (f_output, cluster_naming,
+    f_update_preferences, f_boundary_repair, semantic_clustering, …).
+    """
+    usage = {
+        "input_tokens":  getattr(_turn_tracking, "input_tokens", 0),
+        "output_tokens": getattr(_turn_tracking, "output_tokens", 0),
+    }
+    cost = getattr(_turn_tracking, "cost", 0.0)
+    _turn_tracking.active = False
+    _turn_tracking.input_tokens = 0
+    _turn_tracking.output_tokens = 0
+    _turn_tracking.cost = 0.0
+    return usage, cost
+
+
+def _accumulate_turn(usage: dict[str, int], cost: float) -> None:
+    """Internal — add one call's usage+cost into the active accumulator."""
+    if not getattr(_turn_tracking, "active", False):
+        return
+    _turn_tracking.input_tokens  = getattr(_turn_tracking, "input_tokens",  0) + usage.get("input_tokens",  0)
+    _turn_tracking.output_tokens = getattr(_turn_tracking, "output_tokens", 0) + usage.get("output_tokens", 0)
+    _turn_tracking.cost          = getattr(_turn_tracking, "cost", 0.0)        + cost
+
+
+# ---------------------------------------------------------------------------
 # Cost estimation (provider-agnostic dispatcher)
 # ---------------------------------------------------------------------------
 
@@ -249,17 +299,30 @@ def call_llm(
     system: str,
     max_tokens: int = 8192,
 ) -> LLMResponse:
-    """Call the configured LLM provider. Controlled by LLM_PROVIDER env var."""
+    """Call the configured LLM provider. Controlled by LLM_PROVIDER env var.
+
+    After every successful call the response usage is fed into the per-turn
+    accumulator (if one was started with begin_turn_tracking).  This means
+    ALL LLM calls that happen during a turn — f_output, cluster_naming,
+    f_update_preferences, semantic_clustering, boundary repair, … — are
+    automatically counted without each caller needing to track costs itself.
+    """
     provider = os.environ.get("LLM_PROVIDER", "claude").lower()
     if provider == "openai":
         from src.harness_openai import call_gpt
-        return call_gpt(messages, system, max_tokens=max_tokens)
-    if provider == "openrouter":
+        response = call_gpt(messages, system, max_tokens=max_tokens)
+    elif provider == "openrouter":
         from src.harness_openrouter import call_openrouter
-        return call_openrouter(messages, system, max_tokens=max_tokens)
-    # default: claude
-    from src.harness_claude import call_claude
-    return call_claude(messages, system, max_tokens=max_tokens)
+        response = call_openrouter(messages, system, max_tokens=max_tokens)
+    else:
+        # default: claude
+        from src.harness_claude import call_claude
+        response = call_claude(messages, system, max_tokens=max_tokens)
+    # Accumulate usage into the active per-turn tracker (if any).
+    # Pass response.model explicitly so the correct pricing row is used even
+    # when the active-model env var differs from what the API actually served.
+    _accumulate_turn(response.usage, estimate_cost_usd(response.usage, response.model))
+    return response
 
 
 # ---------------------------------------------------------------------------

@@ -26,7 +26,9 @@ def f_eval(
         prompt_name="f_eval",
         prompt_hash=hash_prompt("f_eval"),
         usage=msg.usage,
-        cost_usd=estimate_cost_usd(msg.usage),
+        cost_usd=estimate_cost_usd(msg.usage, msg.model),
+        turn_number=state.turn_number,
+        model=msg.model,
     )
 
     return json.loads(extract_json_text(msg.text))
@@ -75,7 +77,9 @@ def f_eval_coherence(
         prompt_name="f_eval_coherence",
         prompt_hash=hash_prompt("f_eval_coherence"),
         usage=msg.usage,
-        cost_usd=estimate_cost_usd(msg.usage),
+        cost_usd=estimate_cost_usd(msg.usage, msg.model),
+        turn_number=state.turn_number,
+        model=msg.model,
     )
 
     try:
@@ -129,7 +133,9 @@ def f_eval_compliance(
         prompt_name="f_eval_compliance",
         prompt_hash=hash_prompt("f_eval_compliance"),
         usage=msg.usage,
-        cost_usd=estimate_cost_usd(msg.usage),
+        cost_usd=estimate_cost_usd(msg.usage, msg.model),
+        turn_number=state.turn_number,
+        model=msg.model,
     )
 
     try:
@@ -167,7 +173,9 @@ def f_eval_contradiction(state: ChatSessionState) -> dict:
         prompt_name="f_eval_contradiction",
         prompt_hash=hash_prompt("f_eval_contradiction"),
         usage=msg.usage,
-        cost_usd=estimate_cost_usd(msg.usage),
+        cost_usd=estimate_cost_usd(msg.usage, msg.model),
+        turn_number=state.turn_number,
+        model=msg.model,
     )
 
     try:
@@ -224,7 +232,9 @@ def f_eval_overall(
         prompt_name="f_eval_overall",
         prompt_hash=hash_prompt("f_eval_overall"),
         usage=msg.usage,
-        cost_usd=estimate_cost_usd(msg.usage),
+        cost_usd=estimate_cost_usd(msg.usage, msg.model),
+        turn_number=state.turn_number,
+        model=msg.model,
     )
 
     try:

@@ -16,7 +16,7 @@ from src.engine.f_uncertainty import f_cluster_uncertainty
 from src.engine.f_update_preferences import f_update_preferences
 from src.engine.semantic_clustering import semantic_clustering
 from src.engine.turn_builder import TurnBuilder
-from src.harness import ConversationContext, estimate_cost_usd
+from src.harness import ConversationContext, estimate_cost_usd, begin_turn_tracking, pop_turn_tracking
 from src.models import ChatSession, Cluster as DbCluster, DataPoint, Turn
 from src.schemas import Display, InputOracle, SystemTurn, TurnRead
 
@@ -179,6 +179,10 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
                 detail=f"target_cluster_ids contains unknown cluster(s): {unknown}",
             )
 
+    # Start accumulating costs for ALL LLM calls that happen during this turn
+    # (f_output, cluster_naming, f_update_preferences, boundary repair, …).
+    begin_turn_tracking()
+
     state = build_session_state(db, session)
 
     # Replay stored turns so the LLM sees the full conversation history.
@@ -219,8 +223,6 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
         }
         context.add_oracle_turn(payload.model_dump())
         context.add_system_turn(raw)
-        usage: dict = {}
-        cost: float = 0.0
     else:
         # Normal path: the LLM is the single intent-classification step.
         total_points = (
@@ -259,8 +261,6 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     )
 
     raw_display = raw.get("display") if isinstance(raw, dict) else None
-    turn_usage = usage
-    turn_cost = cost
 
     # ── Clarify action: store pending axis, execute nothing ───────────────────
     # When f_output asks for clarification, save the candidate axis in the
@@ -420,6 +420,11 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     cognitive_load = f_cognitive_load(updated_state, context)
     system_turn = f_next_best_step(updated_state, uncertainty, cognitive_load)
     system_turn.clusters_updated = bool(operations)
+
+    # Collect the accumulated usage+cost for ALL LLM calls that happened in
+    # this turn (f_output, cluster_naming, f_update_preferences, boundary
+    # repair, semantic_clustering, …), not just f_output's alone.
+    turn_usage, turn_cost = pop_turn_tracking()
     system_turn.token_usage = turn_usage
     system_turn.cost_usd = turn_cost
 

@@ -15,8 +15,8 @@ Design choices
 """
 
 from src.schemas import ChatSessionState
-from src.harness import call_llm, render_prompt, loads_llm_json
-from src.logger import log
+from src.harness import call_llm, render_prompt, loads_llm_json, hash_prompt, estimate_cost_usd
+from src.logger import log, log_llm_call
 
 # Don't spend a token budget summarising a single exchange — wait until at
 # least this many oracle turns have accumulated.
@@ -59,6 +59,15 @@ def f_update_preferences(state: ChatSessionState) -> str | None:
         response = call_llm(
             [{"role": "user", "content": "Extract oracle preferences."}],
             system=prompt,
+        )
+        log_llm_call(
+            session_id=state.session_id,
+            prompt_name="f_update_preferences",
+            prompt_hash=hash_prompt("f_update_preferences"),
+            usage=response.usage,
+            cost_usd=estimate_cost_usd(response.usage, response.model),
+            turn_number=state.turn_number,
+            model=response.model,
         )
         parsed = loads_llm_json(response.text)
         preferences = parsed.get("preferences", [])

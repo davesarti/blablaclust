@@ -39,22 +39,34 @@ def log_llm_call(
     prompt_hash: str,
     usage: dict,
     cost_usd: float,
+    *,
+    turn_number: int | None = None,
+    model: str | None = None,
 ) -> None:
-    #Append one line to logs/llm_calls.jsonl for every Claude API call.
-    entry = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "session_id": session_id,
-        "prompt_name": prompt_name,
-        # Hash of the prompt file — lets us verify which version of the prompt was used.
-        "prompt_hash": prompt_hash,
-        "input_tokens": usage.get("input_tokens", 0),
-        "output_tokens": usage.get("output_tokens", 0),
-        "cache_read_tokens": usage.get("cache_read_tokens", 0),
-        "cache_creation_tokens": usage.get("cache_creation_tokens", 0),
-        "cost_usd": cost_usd,
-    }
-    with _llm_log_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(entry) + "\n")
+    #Append one line to logs/llm_calls.jsonl for every LLM call.
+    # Best-effort: an audit-log failure (bad usage payload, disk error, …) must
+    # never propagate and break the LLM call it is recording.
+    try:
+        entry: dict = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "session_id": session_id,
+            "prompt_name": prompt_name,
+            # Hash of the prompt file — lets us verify which version of the prompt was used.
+            "prompt_hash": prompt_hash,
+            "input_tokens": usage.get("input_tokens", 0),
+            "output_tokens": usage.get("output_tokens", 0),
+            "cache_read_tokens": usage.get("cache_read_tokens", 0),
+            "cache_creation_tokens": usage.get("cache_creation_tokens", 0),
+            "cost_usd": cost_usd,
+        }
+        if turn_number is not None:
+            entry["turn_number"] = turn_number
+        if model is not None:
+            entry["model"] = model
+        with _llm_log_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception as exc:  # noqa: BLE001 — audit logging is non-critical
+        log.warning("log_llm_call: failed to record LLM call (%s)", exc)
 
 
 def log_clustering_run(

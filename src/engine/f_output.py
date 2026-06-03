@@ -61,7 +61,9 @@ def f_output(
         prompt_name="f_output",
         prompt_hash=hash_prompt("f_output"),
         usage=msg.usage,
-        cost_usd=estimate_cost_usd(msg.usage),
+        cost_usd=estimate_cost_usd(msg.usage, msg.model),
+        turn_number=state.turn_number,
+        model=msg.model,
     )
 
     raw = loads_llm_json(msg.text)

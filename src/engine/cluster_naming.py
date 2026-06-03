@@ -8,8 +8,8 @@ Mutates the Cluster objects in place.
 import difflib
 import re
 
-from src.harness import call_llm, render_prompt, loads_llm_json
-from src.logger import log
+from src.harness import call_llm, render_prompt, loads_llm_json, hash_prompt, estimate_cost_usd
+from src.logger import log, log_llm_call
 from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoftAssignment
 
 _NAMING_PCT = 0.15   # fraction of hard-assigned points to send to the naming LLM
@@ -130,11 +130,26 @@ def name_clusters(
     last_exc: Exception | None = None
     clusters_by_id = {c.id: c for c in clusters}
 
+    # All clusters in one naming call share a session and creation turn, so the
+    # first cluster carries the right context for the audit log. getattr keeps
+    # this robust to lightweight cluster stubs that omit those attributes.
+    _log_sid = getattr(clusters[0], "session_id", "-") if clusters else "-"
+    _log_turn = getattr(clusters[0], "created_at_turn", None) if clusters else None
+
     for attempt in range(_MAX_ATTEMPTS):
         try:
             response = call_llm(
                 [{"role": "user", "content": "Name all clusters."}],
                 system=prompt,
+            )
+            log_llm_call(
+                session_id=_log_sid,
+                prompt_name="cluster_naming",
+                prompt_hash=hash_prompt("cluster_naming"),
+                usage=response.usage,
+                cost_usd=estimate_cost_usd(response.usage, response.model),
+                turn_number=_log_turn,
+                model=response.model,
             )
             parsed = loads_llm_json(response.text)
 
@@ -200,6 +215,15 @@ def name_clusters(
                 retry_response = call_llm(
                     [{"role": "user", "content": "Name all clusters."}],
                     system=retry_prompt,
+                )
+                log_llm_call(
+                    session_id=_log_sid,
+                    prompt_name="cluster_naming",
+                    prompt_hash=hash_prompt("cluster_naming"),
+                    usage=retry_response.usage,
+                    cost_usd=estimate_cost_usd(retry_response.usage, retry_response.model),
+                    turn_number=_log_turn,
+                    model=retry_response.model,
                 )
                 parsed = loads_llm_json(retry_response.text)
                 parsed_keys = list(parsed.keys())

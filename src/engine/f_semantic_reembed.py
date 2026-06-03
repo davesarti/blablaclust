@@ -23,8 +23,8 @@ axis_weight=0.7 means 70% of clustering signal comes from the axis.
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from src.harness import call_llm, loads_llm_json, render_prompt
-from src.logger import deviation
+from src.harness import call_llm, loads_llm_json, render_prompt, hash_prompt, estimate_cost_usd
+from src.logger import deviation, log_llm_call
 from src.models import DataPoint
 
 # If the cosine scores have variance below this threshold the embedding model
@@ -68,6 +68,14 @@ def _generate_axis_poles(axis_label: str) -> tuple[str, str]:
             [{"role": "user", "content": f"Generate poles for axis: {axis_label}"}],
             system=prompt,
             max_tokens=512,
+        )
+        log_llm_call(
+            session_id="-",
+            prompt_name="semantic_axis_poles",
+            prompt_hash=hash_prompt("semantic_axis_poles"),
+            usage=response.usage,
+            cost_usd=estimate_cost_usd(response.usage, response.model),
+            model=response.model,
         )
         parsed = loads_llm_json(response.text)
         high = str(parsed.get("high", "")).strip()
@@ -138,6 +146,14 @@ def _llm_score_sample(
         messages = [{"role": "user", "content": texts}]
         try:
             response = call_llm(messages, system=prompt)
+            log_llm_call(
+                session_id="-",
+                prompt_name="semantic_reembed",
+                prompt_hash=hash_prompt("semantic_reembed"),
+                usage=response.usage,
+                cost_usd=estimate_cost_usd(response.usage, response.model),
+                model=response.model,
+            )
             raw = loads_llm_json(response.text)
             if isinstance(raw, list) and len(raw) >= len(batch):
                 batch_scores = [float(raw[j]) for j in range(len(batch))]

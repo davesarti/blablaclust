@@ -136,7 +136,9 @@ def f_boundary_repair(
                 prompt_name="f_boundary_repair",
                 prompt_hash=hash_prompt("f_boundary_repair"),
                 usage=msg.usage,
-                cost_usd=estimate_cost_usd(msg.usage),
+                cost_usd=estimate_cost_usd(msg.usage, msg.model),
+                turn_number=builder.turn_number,
+                model=msg.model,
             )
             decisions = loads_llm_json(msg.text).get("decisions", [])
             break  # success

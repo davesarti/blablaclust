@@ -12,8 +12,8 @@ oracle's intent baked in from the start, rather than using an arbitrary default 
 
 import json
 
-from src.harness import call_llm, render_prompt, extract_json_text
-from src.logger import log
+from src.harness import call_llm, render_prompt, extract_json_text, hash_prompt, estimate_cost_usd
+from src.logger import log, log_llm_call
 
 # Safe bounds for k — k-means below 2 is degenerate, above 20 is rarely useful
 K_MIN = 2
@@ -51,6 +51,16 @@ def f_parse_clustering_intent(
         response = call_llm(
             [{"role": "user", "content": oracle_intent}],
             system=prompt,
+        )
+        # Intent parsing runs before a session/turn exists, so there is no
+        # session_id/turn_number to attach — log with a placeholder session.
+        log_llm_call(
+            session_id="-",
+            prompt_name="parse_clustering_intent",
+            prompt_hash=hash_prompt("parse_clustering_intent"),
+            usage=response.usage,
+            cost_usd=estimate_cost_usd(response.usage, response.model),
+            model=response.model,
         )
         parsed = json.loads(extract_json_text(response.text))
 
