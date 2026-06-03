@@ -5,6 +5,13 @@ import json
 import os
 import statistics
 
+import numpy as np
+
+# Percentile-bootstrap resamples for the 95% CIs on the cross-scenario means.
+# Matches scripts/run_generalization_stability_eval.py so CI methodology is
+# consistent across the project's eval reports.
+_BOOTSTRAP_ITERS = 10000
+
 
 def write_report(record: dict, out_dir: str) -> None:
     """Write one eval record to results.jsonl + summary.md in out_dir."""
@@ -18,13 +25,33 @@ def _num(values):
     return [v for v in values if isinstance(v, (int, float))]
 
 
+def _bootstrap_ci(values, iters: int = _BOOTSTRAP_ITERS, seed: int = 0):
+    """Percentile bootstrap 95% CI for the mean of *values*. Returns (lo, hi).
+
+    Returns (nan, nan) when there are fewer than 2 values — a CI over a single
+    scenario is meaningless, so callers print an explicit "n=1" note instead.
+    """
+    arr = np.asarray([v for v in values if isinstance(v, (int, float))], dtype=float)
+    if len(arr) < 2:
+        return (float("nan"), float("nan"))
+    rng = np.random.default_rng(seed)
+    means = rng.choice(arr, size=(iters, len(arr)), replace=True).mean(axis=1)
+    lo, hi = np.percentile(means, [2.5, 97.5])
+    return (float(lo), float(hi))
+
+
 def _agg(label, values):
     if not values:
         return f"- **{label}**: (no data)\n"
-    return (
-        f"- **{label}**: mean={statistics.mean(values):.3f} "
-        f"median={statistics.median(values):.3f} n={len(values)}\n"
-    )
+    mean = statistics.mean(values)
+    median = statistics.median(values)
+    n = len(values)
+    if n >= 2:
+        lo, hi = _bootstrap_ci(values)
+        tail = f" — **95% CI [{lo:.3f}, {hi:.3f}]** (median={median:.3f}, n={n})"
+    else:
+        tail = f" (median={median:.3f}, n=1 — CI needs ≥2 scenarios)"
+    return f"- **{label}**: mean={mean:.3f}{tail}\n"
 
 
 def write_summary(records: list[dict], out_dir: str) -> None:
@@ -51,18 +78,43 @@ def write_summary(records: list[dict], out_dir: str) -> None:
     coherence_mins  = _num(r.get("B2", {}).get("coherence_min") for r in records)
     compliance      = _num(r.get("B3", {}).get("compliance_score") for r in records)
     contradiction   = _num(r.get("B4", {}).get("contradiction_score") for r in records)
+    sil_initials    = _num(r.get("A1", {}).get("silhouette_initial") for r in records)
     sil_finals      = _num(r.get("A1", {}).get("silhouette_final") for r in records)
     cog_means       = _num(r.get("A3", {}).get("mean_cognitive_load") for r in records)
+    turns_vals      = _num(r.get("A2", {}).get("turns") for r in records)
+    weighted_vals   = _num(r.get("A2", {}).get("weighted_turns") for r in records)
     terms           = [r.get("A2", {}).get("termination") for r in records]
 
     lines.append("\n## Aggregates across all scenarios\n")
+    lines.append(
+        "_Means are over scenarios; **95% CI is a percentile bootstrap** "
+        f"({_BOOTSTRAP_ITERS:,} resamples) over the per-scenario values. "
+        "A CI needs ≥2 scenarios to be meaningful._\n\n"
+    )
+    lines.append("**Convergence**\n")
+    lines.append(_agg("A2 turns to convergence", turns_vals))
+    lines.append(_agg("A2 weighted turns  _(global feedback weighted heavier)_", weighted_vals))
+    lines.append("\n**Quality (conversational arm)**\n")
     lines.append(_agg("B1 overall  _(synthesis judge, 0–1)_", overall_scores))
     lines.append(_agg("B2 coherence mean  _(0–1)_", coherence_means))
     lines.append(_agg("B2 coherence min  _(weakest cluster, 0–1)_", coherence_mins))
     lines.append(_agg("B3 compliance  _(0–1)_", compliance))
     lines.append(_agg("B4 contradiction  _(0–1, higher = oracle harder to understand)_", contradiction))
-    lines.append(_agg("A1 silhouette (final)  _(cluster separation)_", sil_finals))
     lines.append(_agg("A3 mean cognitive load  _(1–5)_", cog_means))
+    lines.append("\n**A1 silhouette (geometry)**\n")
+    lines.append(
+        "_`initial` is the turn-0 whole-dataset clustering — a clean **no-dialogue "
+        "baseline**. `last-logged` is the final entry in the clustering log, which "
+        "**mixes whole-dataset fits** (turn 0, semantic re-embed) **with split "
+        "sub-cluster fits** (a split re-runs k-means on one cluster's subset and logs "
+        "that subset's silhouette); merge / move / rename never re-log. So `last-logged` "
+        "is **not** directly comparable to `initial`, and a final−initial Δ is not a "
+        "clean effect-of-dialogue measure. For the quality comparison use **B2 "
+        "coherence**: the no-dialogue baseline from `run_baseline_eval.py` vs the "
+        "conversational B2 above (both measured on the final state, same judge)._\n"
+    )
+    lines.append(_agg("A1 silhouette (turn-0 / no-dialogue baseline)", sil_initials))
+    lines.append(_agg("A1 silhouette (last logged — see caveat)", sil_finals))
 
     # Stop-driver distribution: only scenarios that terminated via
     # cognitive_overload contribute. We read the last element of each
