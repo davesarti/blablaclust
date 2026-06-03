@@ -7,6 +7,8 @@ __pycache__/
 .vscode/
 *.logs/
 *.db
+*.db.*.bak
+*.bak
 notes/PROJECT_CONTEXT.md
 scripts/oracle_smoke.py
 scripts/test_e2e.py
