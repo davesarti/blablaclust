@@ -111,8 +111,11 @@ export default function WorkspacePage() {
                   <h2 className="font-mono text-[14px] font-bold tracking-widest uppercase text-faint">
                     {sess.clusters.length} clusters · {totalSize} points
                   </h2>
-                  {sess.selectedClusterIds.size > 0 && (
-                    <button onClick={() => dispatch({ type: 'CLEAR_CLUSTER_SELECT' })}
+                  {(sess.selectedClusterIds.size > 0 || sess.selectedPoints.size > 0) && (
+                    <button onClick={() => {
+                      dispatch({ type: 'CLEAR_CLUSTER_SELECT' })
+                      dispatch({ type: 'CLEAR_POINT_SELECT' })
+                    }}
                       className="font-mono text-[14px] text-faint hover:text-muted transition-colors">
                       clear selection
                     </button>

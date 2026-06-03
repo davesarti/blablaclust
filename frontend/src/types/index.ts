@@ -117,6 +117,11 @@ export interface ChatMessage {
   turnNumber?: number;
 }
 
+export interface SelectedPoint {
+  text: string;
+  clusterId: string;
+}
+
 export interface AppSessionState {
   sessionId: string;
   session: Session;
@@ -127,5 +132,6 @@ export interface AppSessionState {
   costUsd: number;
   cognitiveLoad: number;
   selectedClusterIds: Set<string>;
+  selectedPoints: Map<string, SelectedPoint>;
   isBusy: boolean;
 }

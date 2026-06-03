@@ -7,8 +7,13 @@ import Modal from './Modal'
 interface Props { clusterId: string; onClose: () => void }
 
 export default function ExpandClusterModal({ clusterId, onClose }: Props) {
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
   const cluster = state.session?.clusters.find(c => c.id === clusterId)
+  const selectedPoints = state.session?.selectedPoints ?? new Map()
+  const pinnedFromThisCluster = useMemo(
+    () => Array.from(selectedPoints.values()).filter(p => p.clusterId === clusterId).length,
+    [selectedPoints, clusterId],
+  )
   const [points, setPoints] = useState<ClusterPoint[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -54,9 +59,23 @@ export default function ExpandClusterModal({ clusterId, onClose }: Props) {
           {cluster?.description && (
             <p className="text-[15px] text-muted leading-relaxed mb-3">{cluster.description}</p>
           )}
-          <span className="font-mono text-[11px] tracking-widest uppercase text-faint">
-            {cluster?.size ?? points.length} pts
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-[11px] tracking-widest uppercase text-faint">
+              {cluster?.size ?? points.length} pts
+            </span>
+            {pinnedFromThisCluster > 0 && (
+              <>
+                <span className="text-faint text-[11px]">·</span>
+                <span className="font-mono text-[11px] tracking-widest uppercase"
+                  style={{ color: 'var(--color-accent)' }}>
+                  {pinnedFromThisCluster} pinned
+                </span>
+              </>
+            )}
+            <span className="ml-auto font-mono text-[11px] text-faint italic">
+              click a point to pin it for move
+            </span>
+          </div>
         </div>
 
         {/* Search */}
@@ -85,10 +104,21 @@ export default function ExpandClusterModal({ clusterId, onClose }: Props) {
               {shown.map((p, idx) => {
                 const text = p.text || p.id
                 const barW = Math.round((p.probability / maxProb) * 100)
+                const isPinned = selectedPoints.has(p.id)
                 return (
-                  <div key={p.id} className="flex items-start gap-4 py-3" style={{ borderBottom: '1px solid var(--color-border)' }}>
-                    <span className="font-mono text-[12px] text-faint shrink-0 w-6 text-right pt-0.5 select-none">
-                      {idx + 1}
+                  <div
+                    key={p.id}
+                    onClick={() => dispatch({ type: 'TOGGLE_POINT_SELECT', pointId: p.id, text, clusterId })}
+                    className="group flex items-start gap-4 py-3 cursor-pointer transition-colors"
+                    style={{
+                      borderBottom: '1px solid var(--color-border)',
+                      background: isPinned ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : undefined,
+                      borderLeft: isPinned ? '3px solid var(--color-accent)' : '3px solid transparent',
+                      paddingLeft: isPinned ? 9 : 12,
+                    }}>
+                    <span className="font-mono text-[12px] shrink-0 w-6 text-right pt-0.5 select-none"
+                      style={{ color: isPinned ? 'var(--color-accent)' : 'var(--color-faint)' }}>
+                      {isPinned ? '●' : idx + 1}
                     </span>
                     <span className="flex-1 text-[14px] text-ink leading-relaxed">
                       {highlight(text)}

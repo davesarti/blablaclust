@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useCallback } from 'react'
-import type { AppSessionState, Cluster, ChatMessage, Session } from '../types'
+import type { AppSessionState, Cluster, ChatMessage, Session, SelectedPoint } from '../types'
 
 type View = 'welcome' | 'workspace'
 
@@ -20,6 +20,8 @@ type Action =
   | { type: 'APPEND_CHAT'; message: ChatMessage }
   | { type: 'TOGGLE_CLUSTER_SELECT'; clusterId: string }
   | { type: 'CLEAR_CLUSTER_SELECT' }
+  | { type: 'TOGGLE_POINT_SELECT'; pointId: string; text: string; clusterId: string }
+  | { type: 'CLEAR_POINT_SELECT' }
   | { type: 'UPDATE_METRICS'; turnNumber: number; tokenInput: number; tokenOutput: number; cost: number; cogLoad: number }
   | { type: 'UPDATE_STATUS'; status: 'active' | 'converged' | 'closed' }
   | { type: 'OPEN_MODAL'; modal: AppState['modal']; clusterId?: string; sessionId?: string }
@@ -49,6 +51,19 @@ function reducer(state: AppState, action: Action): AppState {
     case 'CLEAR_CLUSTER_SELECT':
       if (!state.session) return state
       return { ...state, session: { ...state.session, selectedClusterIds: new Set() } }
+    case 'TOGGLE_POINT_SELECT': {
+      if (!state.session) return state
+      const next = new Map(state.session.selectedPoints)
+      if (next.has(action.pointId)) {
+        next.delete(action.pointId)
+      } else {
+        next.set(action.pointId, { text: action.text, clusterId: action.clusterId })
+      }
+      return { ...state, session: { ...state.session, selectedPoints: next } }
+    }
+    case 'CLEAR_POINT_SELECT':
+      if (!state.session) return state
+      return { ...state, session: { ...state.session, selectedPoints: new Map() } }
     case 'UPDATE_METRICS':
       if (!state.session) return state
       return {
@@ -128,6 +143,7 @@ export function makeSession(session: Session, clusters: Cluster[], turns: import
     costUsd: cost,
     cognitiveLoad: cogLoad,
     selectedClusterIds: new Set(),
+    selectedPoints: new Map<string, SelectedPoint>(),
     isBusy: false,
   }
 }

@@ -59,6 +59,11 @@ export default function ChatPanel() {
     if (!raw || sess.isBusy) return
     setText('')
 
+    const pointIds = [...sess.selectedPoints.keys()]
+    const clusterIds = [...sess.selectedClusterIds]
+    const feedbackType: 'global' | 'cluster' | 'point' =
+      pointIds.length > 0 ? 'point' : clusterIds.length > 0 ? 'cluster' : 'global'
+
     dispatch({ type: 'APPEND_CHAT', message: { role: 'user', text: raw } })
     dispatch({ type: 'SET_BUSY', busy: true })
 
@@ -66,15 +71,16 @@ export default function ChatPanel() {
       const turn = await sendTurn({
         session_id: sess.sessionId,
         raw_text: raw,
-        feedback_type: sess.selectedClusterIds.size > 0 ? 'cluster' : 'global',
-        target_cluster_ids: [...sess.selectedClusterIds],
-        target_point_ids: [],
+        feedback_type: feedbackType,
+        target_cluster_ids: clusterIds,
+        target_point_ids: pointIds,
         metadata: {},
       })
 
       const so = turn.system_output
       dispatch({ type: 'APPEND_CHAT', message: { role: 'system', text: so.display.content, turnNumber: turn.turn_number } })
       dispatch({ type: 'CLEAR_CLUSTER_SELECT' })
+      dispatch({ type: 'CLEAR_POINT_SELECT' })
       dispatch({
         type: 'UPDATE_METRICS',
         turnNumber: turn.turn_number,
@@ -108,6 +114,20 @@ export default function ChatPanel() {
   }
 
   const selectedClusters: Cluster[] = sess.clusters.filter(c => sess.selectedClusterIds.has(c.id))
+  const pinnedPoints = [...sess.selectedPoints.entries()]
+  const hasPoints = pinnedPoints.length > 0
+  const destinationClear = hasPoints && selectedClusters.length === 1
+  const destinationAmbiguous = hasPoints && selectedClusters.length > 1
+  const destinationMissing = hasPoints && selectedClusters.length === 0
+  const destCluster = destinationClear ? selectedClusters[0] : null
+  const inputPlaceholder =
+    sess.session.status !== 'active'
+      ? 'Session closed'
+      : destinationClear
+      ? `Move ${pinnedPoints.length} pinned point${pinnedPoints.length === 1 ? '' : 's'} to "${destCluster!.name.slice(0, 24)}"… (Enter to send)`
+      : destinationMissing
+      ? `Name the destination for ${pinnedPoints.length} pinned point${pinnedPoints.length === 1 ? '' : 's'}, or pin a cluster… (Enter to send)`
+      : 'Describe a change… (Enter to send)'
 
   return (
     <div className="flex flex-col h-full border-l border-border" style={{ background: 'var(--color-surface)' }}>
@@ -136,15 +156,59 @@ export default function ChatPanel() {
 
       {/* Selected cluster chips */}
       {selectedClusters.length > 0 && (
-        <div className="px-6 pb-3 flex flex-wrap gap-2 border-t border-border pt-3">
-          {selectedClusters.map((c, i) => (
-            <span key={c.id} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-sm border border-border text-[13px] font-mono text-muted"
-              style={{ background: 'var(--color-surface2)' }}>
-              #{i + 1} {c.name.slice(0, 22)}
-              <button onClick={() => dispatch({ type: 'TOGGLE_CLUSTER_SELECT', clusterId: c.id })}
-                className="text-faint hover:text-red-600 font-bold">×</button>
+        <div className="px-6 pb-2 flex flex-wrap gap-2 border-t border-border pt-3 items-center">
+          <span className="font-mono text-[11px] font-bold tracking-widest uppercase"
+            style={{ color: destinationClear ? 'var(--color-accent)' : 'var(--color-faint)' }}>
+            {destinationClear ? 'destination →' : `clusters · ${selectedClusters.length}`}
+          </span>
+          {selectedClusters.map((c, i) => {
+            const isDest = destinationClear && c.id === destCluster!.id
+            return (
+              <span key={c.id}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-sm border text-[13px] font-mono"
+                style={{
+                  borderColor: isDest ? 'var(--color-accent)' : 'var(--color-border)',
+                  background: isDest ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'var(--color-surface2)',
+                  color: isDest ? 'var(--color-accent)' : 'var(--color-muted)',
+                }}>
+                #{i + 1} {c.name.slice(0, 22)}
+                <button onClick={() => dispatch({ type: 'TOGGLE_CLUSTER_SELECT', clusterId: c.id })}
+                  className="text-faint hover:text-red-600 font-bold">×</button>
+              </span>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Pinned points chips */}
+      {hasPoints && (
+        <div className={`px-6 pb-2 flex flex-wrap gap-2 items-center ${selectedClusters.length === 0 ? 'border-t border-border pt-3' : 'pt-1'}`}>
+          <span className="font-mono text-[11px] font-bold tracking-widest uppercase"
+            style={{ color: 'var(--color-faint)' }}>
+            points · {pinnedPoints.length}
+          </span>
+          {pinnedPoints.map(([id, p]) => (
+            <span key={id}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-sm border text-[13px] font-mono text-muted max-w-[260px]"
+              style={{ background: 'var(--color-surface2)', borderColor: 'var(--color-accent)' }}
+              title={p.text}>
+              <span className="truncate">{p.text.slice(0, 40)}{p.text.length > 40 ? '…' : ''}</span>
+              <button onClick={() => dispatch({ type: 'TOGGLE_POINT_SELECT', pointId: id, text: p.text, clusterId: p.clusterId })}
+                className="text-faint hover:text-red-600 font-bold shrink-0">×</button>
             </span>
           ))}
+        </div>
+      )}
+
+      {/* Destination guidance */}
+      {(destinationAmbiguous || destinationMissing) && (
+        <div className="px-6 pb-2 flex items-center gap-2 text-[12px] font-mono text-muted">
+          <span>ℹ</span>
+          <span>
+            {destinationAmbiguous
+              ? 'Multiple clusters and points pinned — clarify intentions in your message'
+              : 'No destination cluster pinned — name the destination in your message (e.g. "move to Reviews").'}
+          </span>
         </div>
       )}
 
@@ -157,7 +221,7 @@ export default function ChatPanel() {
             onChange={e => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={sess.isBusy || sess.session.status !== 'active'}
-            placeholder={sess.session.status !== 'active' ? 'Session closed' : 'Describe a change… (Enter to send)'}
+            placeholder={inputPlaceholder}
             rows={3}
             className="flex-1 resize-none rounded-sm border border-border px-4 py-3 text-[15px] leading-relaxed outline-none text-ink placeholder:text-faint disabled:opacity-50 focus:border-borders transition-colors scrollbar-thin"
             style={{ background: 'var(--color-bg)' }}
