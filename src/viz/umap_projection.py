@@ -364,21 +364,67 @@ def project_session(
         if cur is None or r.probability > cur[0]:
             best[r.turn_number][r.data_point_id] = (r.probability, r.cluster_id)
 
-    turns = sorted(best.keys())
-    assignments: dict[str, list[str | None]] = {}
-    # Per-point assignment confidence = the winning soft-probability. Lets the
-    # UI convey the underlying distribution (e.g. how decisively a point sits in
-    # its cluster) instead of only the hard argmax.
-    confidence: dict[str, list[float | None]] = {}
-    for t in turns:
+    all_turns = sorted(best.keys())
+    full_assignments: dict[int, list[str | None]] = {}
+    full_confidence: dict[int, list[float | None]] = {}
+    for t in all_turns:
         arr: list[str | None] = [None] * len(point_ids)
         conf: list[float | None] = [None] * len(point_ids)
         for pid, (prob, cid) in best[t].items():
             if pid in idx:
                 arr[idx[pid]] = cid
                 conf[idx[pid]] = round(float(prob), 4)
-        assignments[str(t)] = arr
-        confidence[str(t)] = conf
+        full_assignments[t] = arr
+        full_confidence[t] = conf
+
+    # Collapse consecutive turns whose hard partition is visually indistinguishable
+    # from the previous kept turn. The user's symptom — "more turns than the ones
+    # effectively occurred in the conversation, which show no changes" — comes
+    # from pre-fix boundary repair writing one snapshot per moved point: each one
+    # differs from its predecessor by a single point-cluster swap, invisible in a
+    # 1000+ point UMAP. We collapse anything within VISUAL_DIFF_THRESHOLD point
+    # changes of the last kept partition. Reembed turns are kept unconditionally
+    # so the axis-arrow / geometry-aware payloads stay reachable even when a
+    # re-embed coincidentally yields the same hard partition.
+    VISUAL_DIFF_THRESHOLD = 1
+    reembed_turn_set: set[int] = set()
+    if all_turns:
+        for row in db.query(Turn).filter(Turn.session_id == session_id).all():
+            ops = ((row.system_output or {}).get("state_snapshot") or {}).get("operations") or []
+            if any(isinstance(op, dict) and op.get("type") == "semantic_reembed" for op in ops):
+                reembed_turn_set.add(row.turn_number)
+
+    def _partition_diff(a: list[str | None], b: list[str | None]) -> int:
+        return sum(1 for x, y in zip(a, b) if x != y)
+
+    # Compare each turn to its IMMEDIATE predecessor (not the last kept turn) —
+    # that lets a long run of single-point boundary-repair moves collapse all
+    # the way through, even though the cumulative diff from the run's start is
+    # large. The slider then jumps from "before repair" to the next genuinely
+    # different partition.
+    turns: list[int] = []
+    prev_arr: list[str | None] | None = None
+    for t in all_turns:
+        arr = full_assignments[t]
+        is_reembed = t in reembed_turn_set
+        keep = (
+            prev_arr is None
+            or is_reembed
+            or _partition_diff(arr, prev_arr) > VISUAL_DIFF_THRESHOLD
+        )
+        if keep:
+            turns.append(t)
+        prev_arr = arr
+
+    assignments: dict[str, list[str | None]] = {
+        str(t): full_assignments[t] for t in turns
+    }
+    # Per-point assignment confidence = the winning soft-probability. Lets the
+    # UI convey the underlying distribution (e.g. how decisively a point sits in
+    # its cluster) instead of only the hard argmax.
+    confidence: dict[str, list[float | None]] = {
+        str(t): full_confidence[t] for t in turns
+    }
 
     points_out = [
         {

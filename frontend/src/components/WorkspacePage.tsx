@@ -12,9 +12,9 @@ import type { EvalResult } from '../types'
 
 const LOAD_COLORS = ['#4a7c59','#7a8a3a','#9a7a30','#8a5030','#8a3030']
 const STATUS_CLS: Record<string, string> = {
-  active:    'bg-green-50 text-green-700 border border-green-200',
-  converged: 'bg-blue-50 text-blue-700 border border-blue-200',
-  closed:    'text-muted border border-border',
+  active:    'text-green-700',
+  converged: 'text-blue-600',
+  closed:    'text-faint',
 }
 
 export default function WorkspacePage() {
@@ -49,12 +49,12 @@ export default function WorkspacePage() {
       {/* ── Header ── */}
       <header className="h-16 shrink-0 flex items-center justify-between px-6 border-b border-border z-50"
         style={{ background: 'var(--color-surface)' }}>
-        <div className="flex items-center">
+        <div className="flex items-baseline">
           <button onClick={goWelcome} disabled={sess.isBusy}
             className="font-mono text-[14px] font-bold tracking-wider uppercase text-faint px-3 py-2 rounded-sm hover:text-muted hover:bg-surface2 transition-colors disabled:opacity-40">
             ← back
           </button>
-          <div className="w-px h-6 mx-5" style={{ background: 'var(--color-borders)' }} />
+          <div className="w-px h-6 mx-5 self-center" style={{ background: 'var(--color-borders)' }} />
           <div className="flex items-baseline gap-3">
             <span className="font-mono text-[13px] font-bold tracking-widest uppercase text-faint">
               {sess.session.dataset_name}
@@ -64,33 +64,43 @@ export default function WorkspacePage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-[14px] text-faint">T{sess.turnNumber}</span>
-          <div className="w-px h-4 bg-border" />
-          <span className="font-mono text-[14px] text-faint">${sess.costUsd.toFixed(4)}</span>
-          <div className="w-px h-4 bg-border" />
-          <div className="flex items-center gap-1">
-            {Array.from({ length: 5 }, (_, i) => (
-              <span key={i} className="w-2.5 h-2.5 rounded-full transition-colors"
-                style={{ background: i < sess.cognitiveLoad ? LOAD_COLORS[i] : 'var(--color-surface3)' }} />
-            ))}
+        <div className="flex items-center">
+          <span className="font-mono text-[13px] text-faint">T{sess.turnNumber}</span>
+          <div className="w-px h-4 mx-3.5 bg-border" />
+          <span className="font-mono text-[13px] text-faint">${sess.costUsd.toFixed(3)}</span>
+          <div className="w-px h-4 mx-3.5 bg-border" />
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[11px] font-semibold tracking-widest uppercase text-faint">load</span>
+            <div className="flex items-center gap-[3px]">
+              {Array.from({ length: 5 }, (_, i) => (
+                <span key={i} className="w-[7px] h-[7px] rounded-full transition-all duration-300"
+                  style={{ background: i < sess.cognitiveLoad ? LOAD_COLORS[i] : 'var(--color-surface3)' }} />
+              ))}
+            </div>
           </div>
-          <div className="w-px h-4 bg-border" />
-          <span className={`font-mono text-[13px] font-bold tracking-widest uppercase px-3 py-1 rounded-sm ${STATUS_CLS[status] ?? ''}`}>
+          <div className="w-px h-4 mx-3.5 bg-border" />
+          <span className={`font-mono text-[12px] font-bold tracking-widest uppercase ${STATUS_CLS[status] ?? ''}`}>
             {status}
           </span>
-          <div className="w-px h-4 bg-border" />
           {status === 'active' && (
-            <button onClick={markConverged} disabled={marking}
-              className="font-mono text-[13px] font-bold tracking-wider uppercase px-3.5 py-2 rounded-sm border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors disabled:opacity-50">
-              {marking ? '…' : '✓ converged'}
-            </button>
-          )}
-          {status === 'active' && (
-            <button onClick={() => setShowStop(true)}
-              className="font-mono text-[13px] font-bold tracking-wider uppercase px-3.5 py-2 rounded-sm border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition-colors">
-              stop
-            </button>
+            <>
+              <div className="w-px h-4 mx-3.5 bg-border" />
+              <button onClick={markConverged} disabled={marking}
+                className="flex items-center gap-1.5 font-mono text-[12px] font-bold tracking-wider uppercase text-blue-600 hover:text-blue-700 px-1.5 py-1 rounded hover:bg-surface2 transition-colors disabled:opacity-50">
+                <svg width="11" height="11" viewBox="0 0 11 11" fill="none" className="shrink-0">
+                  <path d="M1.5 5.5l3 3 5-5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                {marking ? 'saving…' : 'converged'}
+              </button>
+              <div className="w-px h-4 mx-2 bg-border" />
+              <button onClick={() => setShowStop(true)}
+                className="flex items-center gap-1.5 font-mono text-[12px] font-bold tracking-wider uppercase text-red-600 hover:text-red-700 px-1.5 py-1 rounded hover:bg-surface2 transition-colors">
+                <svg width="9" height="9" viewBox="0 0 9 9" fill="none" className="shrink-0">
+                  <rect x="0.5" y="0.5" width="8" height="8" rx="1.5" fill="currentColor"/>
+                </svg>
+                stop
+              </button>
+            </>
           )}
         </div>
       </header>

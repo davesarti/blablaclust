@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend.main import get_db
 from backend.session_state import build_session_state
+from src.engine.cluster_operations import batch_move_points
 from src.engine.f_apply_operations import f_apply_operations
 from src.engine.f_boundary_repair import f_boundary_repair
 from src.engine.f_cognitive_load import f_cognitive_load
@@ -409,11 +410,12 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
                 ) or final_turn
                 repair_turn = latest_snap + 1
                 try:
-                    f_apply_operations(
-                        [{"type": "move",
-                          "point_ids": [m["point_id"]],
-                          "target_cluster_id": m["target_cluster_id"]}
-                         for m in moves],
+                    # One snapshot for the whole repair batch — feeding each move
+                    # through f_apply_operations would burn one snapshot turn per
+                    # point, padding the UMAP slider with N visually-identical
+                    # "one-point-change" entries per repair.
+                    batch_move_points(
+                        [(m["point_id"], m["target_cluster_id"]) for m in moves],
                         session_id=session.id,
                         turn_number=repair_turn,
                         db=db,

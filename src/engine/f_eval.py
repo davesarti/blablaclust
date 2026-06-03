@@ -69,7 +69,7 @@ def f_eval_coherence(
         clusters_block=clusters_block,
     )
 
-    msg = call_llm([{"role": "user", "content": prompt}], system="", max_tokens=4096)
+    msg = call_llm([{"role": "user", "content": prompt}], system="", max_tokens=8192)
     log_llm_call(
         session_id=state.session_id,
         prompt_name="f_eval_coherence",
@@ -78,8 +78,13 @@ def f_eval_coherence(
         cost_usd=estimate_cost_usd(msg.usage),
     )
 
-    parsed = json.loads(extract_json_text(msg.text))
-    by_id = {r.get("cluster_id"): r for r in parsed.get("results", [])}
+    try:
+        parsed = json.loads(extract_json_text(msg.text))
+        by_id = {r.get("cluster_id"): r for r in parsed.get("results", [])}
+    except (json.JSONDecodeError, ValueError):
+        # Truncated or malformed judge output (e.g., hit max_tokens). Don't
+        # crash the whole eval — fall back to neutral scores per cluster.
+        by_id = {}
 
     results = []
     for item in cluster_samples:
@@ -87,6 +92,7 @@ def f_eval_coherence(
         r = by_id.get(cid, {})
         results.append({
             "cluster_id": cid,
+            "cluster_name": item["cluster"].name,
             "coherence": float(r.get("coherence", 0.0)),
             "reasoning": str(r.get("reasoning", "")),
         })
@@ -126,7 +132,10 @@ def f_eval_compliance(
         cost_usd=estimate_cost_usd(msg.usage),
     )
 
-    parsed = json.loads(extract_json_text(msg.text))
+    try:
+        parsed = json.loads(extract_json_text(msg.text))
+    except (json.JSONDecodeError, ValueError):
+        parsed = {}
     return {
         "compliance_score": float(parsed.get("compliance_score", 0.0)),
         "notes": str(parsed.get("notes", "")),
@@ -161,7 +170,10 @@ def f_eval_contradiction(state: ChatSessionState) -> dict:
         cost_usd=estimate_cost_usd(msg.usage),
     )
 
-    parsed = json.loads(extract_json_text(msg.text))
+    try:
+        parsed = json.loads(extract_json_text(msg.text))
+    except (json.JSONDecodeError, ValueError):
+        parsed = {}
     examples = parsed.get("examples") or []
     if not isinstance(examples, list):
         examples = []
@@ -189,7 +201,7 @@ def f_eval_overall(
     Returns {overall_score, notes}.
     """
     coherence_block = "\n".join(
-        f"- {r['cluster_id']}: {r['coherence']:.2f} — {r['reasoning']}"
+        f"- {r.get('cluster_name') or 'unnamed'}: {r['coherence']:.2f} — {r['reasoning']}"
         for r in coherence_results
     ) or "(no clusters)"
 
@@ -215,7 +227,10 @@ def f_eval_overall(
         cost_usd=estimate_cost_usd(msg.usage),
     )
 
-    parsed = json.loads(extract_json_text(msg.text))
+    try:
+        parsed = json.loads(extract_json_text(msg.text))
+    except (json.JSONDecodeError, ValueError):
+        parsed = {}
     return {
         "overall_score": float(parsed.get("overall_score", 0.0)),
         "notes": str(parsed.get("notes", "")),

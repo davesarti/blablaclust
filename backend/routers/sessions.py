@@ -64,6 +64,7 @@ class A3Metrics(BaseModel):
 
 class ClusterCoherence(BaseModel):
     cluster_id: str
+    cluster_name: str = ""
     coherence: float
     reasoning: str
 

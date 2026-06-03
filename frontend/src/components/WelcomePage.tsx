@@ -7,14 +7,14 @@ import DatasetsModal from './modals/DatasetsModal'
 
 const STATUS_LABEL: Record<string, string> = { active: 'ACTIVE', converged: 'CONVERGED', closed: 'CLOSED' }
 const STATUS_CLS: Record<string, string> = {
-  active:    'bg-green-50 text-green-700 border border-green-200',
-  converged: 'bg-blue-50 text-blue-700 border border-blue-200',
-  closed:    'bg-surface2 text-muted border border-border',
+  active:    'text-green-600',
+  converged: 'text-blue-500',
+  closed:    'text-faint',
 }
 
 function StatusBadge({ status }: { status: string }) {
   return (
-    <span className={`font-mono text-[12px] font-bold tracking-widest uppercase px-2 py-0.5 rounded-sm ${STATUS_CLS[status] ?? ''}`}>
+    <span className={`font-mono text-[11px] font-semibold tracking-widest uppercase ${STATUS_CLS[status] ?? ''}`}>
       {STATUS_LABEL[status] ?? status}
     </span>
   )

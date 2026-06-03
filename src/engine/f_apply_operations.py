@@ -27,8 +27,8 @@ import difflib
 from sqlalchemy.orm import Session
 
 from src.engine.cluster_operations import (
+    batch_move_points,
     merge_clusters,
-    move_points,
     rename_cluster,
     split_cluster,
 )
@@ -222,9 +222,11 @@ def f_apply_operations(
 
         elif op_type == "move":
             # Writes a full soft-assignment snapshot → consumes a turn_number.
-            move_points(
-                point_ids=op["point_ids"],
-                target_cluster_id=op["target_cluster_id"],
+            # The op carries one target and N point_ids — fan out to (pid, target)
+            # pairs so the whole batch lands in a single snapshot.
+            target = op["target_cluster_id"]
+            batch_move_points(
+                [(pid, target) for pid in op["point_ids"]],
                 session_id=session_id,
                 turn_number=current_turn,
                 db=db,

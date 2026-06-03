@@ -338,45 +338,56 @@ def split_cluster(
     return new_clusters
 
 
-def move_points(
-    point_ids: list[str],
-    target_cluster_id: str,
+def batch_move_points(
+    moves: list[tuple[str, str]],
     session_id: str,
     turn_number: int,
     db: Session,
-) -> DbCluster:
-    """Reassign specific data points to an existing cluster.
+) -> None:
+    """Reassign specific data points to clusters, written as ONE snapshot.
 
-    Handles point-level oracle feedback ("this review belongs in A, not B") and
-    resolves boundary points surfaced by f_uncertainty. Writes a fresh
-    soft-assignment snapshot at ``turn_number``: moved points get probability
-    1.0 on the target cluster (a hard move — their previous mass is dropped),
-    every other point is carried forward unchanged. Any active cluster left
-    holding no probability mass after the move is dissolved as of this turn.
+    Handles every form of point-level reassignment in the system — oracle
+    feedback ("this review belongs in A, not B"), boundary-repair corrections,
+    and uncertainty resolution. Each moved point collapses to ``{target: 1.0}``
+    in the new snapshot (mass on its previous clusters is dropped), every other
+    point is carried forward unchanged, and any active cluster left without
+    probability mass is dissolved as of this turn.
 
-    Returns the target cluster. Does not commit — the caller owns the transaction.
+    All pairs land at the SAME ``turn_number`` regardless of count, so a batch
+    of N moves consumes one snapshot turn rather than N — that keeps the UMAP
+    turn history aligned with conversation turns instead of one entry per moved
+    point.
+
+    If the same point appears in multiple pairs the last one wins — the caller
+    is expected to dedupe, but the function is robust to it.
 
     Raises:
-        ValueError: empty ``point_ids``; unknown or already-dissolved target
+        ValueError: empty ``moves``; an unknown or already-dissolved target
             cluster; a point id not present in the latest snapshot; no existing
             clustering; or a ``turn_number`` not strictly after the latest
             snapshot.
     """
-    if not point_ids:
-        raise ValueError("move_points needs at least 1 point")
+    if not moves:
+        raise ValueError("batch_move_points needs at least 1 move")
 
-    target = (
+    target_ids = {target for _, target in moves}
+    targets = (
         db.query(DbCluster)
-        .filter(DbCluster.id == target_cluster_id, DbCluster.session_id == session_id)
-        .first()
+        .filter(DbCluster.id.in_(target_ids), DbCluster.session_id == session_id)
+        .all()
     )
-    if target is None:
+    targets_by_id = {c.id: c for c in targets}
+    missing_targets = [tid for tid in target_ids if tid not in targets_by_id]
+    if missing_targets:
         raise ValueError(
-            f"target cluster '{target_cluster_id}' not found in session '{session_id}'"
+            f"target cluster(s) not found in session '{session_id}': {missing_targets}"
         )
-    if target.dissolved_at_turn is not None:
+    dissolved_targets = [
+        tid for tid in target_ids if targets_by_id[tid].dissolved_at_turn is not None
+    ]
+    if dissolved_targets:
         raise ValueError(
-            f"cannot move points into dissolved cluster '{target_cluster_id}'"
+            f"cannot move points into dissolved cluster(s): {dissolved_targets}"
         )
 
     prev_turn, snapshot = _load_latest_snapshot(session_id, db)
@@ -386,17 +397,16 @@ def move_points(
             f"snapshot turn ({prev_turn})"
         )
 
-    move_set = set(point_ids)
-    missing = [pid for pid in move_set if pid not in snapshot]
-    if missing:
-        raise ValueError(f"points not found in current snapshot: {missing}")
+    # Last-write-wins on duplicate point ids.
+    move_map: dict[str, str] = {pid: target for pid, target in moves}
+    missing_points = [pid for pid in move_map if pid not in snapshot]
+    if missing_points:
+        raise ValueError(f"points not found in current snapshot: {missing_points}")
 
-    # Build the new full snapshot: moved points collapse to the target cluster,
-    # everyone else carries forward unchanged.
     new_snapshot: dict[str, dict[str, float]] = {}
     for point_id, distribution in snapshot.items():
-        if point_id in move_set:
-            new_snapshot[point_id] = {target_cluster_id: 1.0}
+        if point_id in move_map:
+            new_snapshot[point_id] = {move_map[point_id]: 1.0}
         else:
             new_snapshot[point_id] = dict(distribution)
 
@@ -411,10 +421,6 @@ def move_points(
                 )
             )
 
-    # Dissolve any active cluster that holds no probability mass after the move.
-    # A hard move drops the source entries entirely, so an emptied cluster
-    # leaves no dangling assignments to carry forward. The target always retains
-    # mass (the moved points), so it never dissolves itself.
     clusters_with_mass = {cid for dist in new_snapshot.values() for cid in dist}
     active_clusters = (
         db.query(DbCluster)
@@ -427,8 +433,6 @@ def move_points(
     for cluster in active_clusters:
         if cluster.id not in clusters_with_mass:
             cluster.dissolved_at_turn = turn_number
-
-    return target
 
 
 def rename_cluster(

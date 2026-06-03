@@ -60,7 +60,7 @@ def db():
     )
     for pid, emb in _EMB.items():
         session.add(
-            DataPoint(id=pid, dataset_id=DATASET, data={"text": f"text {pid}"}, embedding=emb)
+            DataPoint(id=pid, dataset_id=DATASET, text=f"text {pid}", embedding=emb)
         )
 
     # Turn 0: two clusters (c1 = p0..p2, c2 = p3..p5).
@@ -218,6 +218,101 @@ def test_project_session_no_embeddings_raises(db):
     db.commit()
     with pytest.raises(ValueError, match="no embedded points"):
         project_session(db, SESSION_ID, reducer="pca")
+
+
+def test_project_session_collapses_no_change_turns(db):
+    """A snapshot turn with the same hard partition as the previous one is
+    hidden from the slider. Mirrors the boundary-repair pattern where many
+    consecutive snapshots end up argmax-equivalent and read as 'no change.'"""
+    # Add turn 2 = same hard partition as turn 1 (just with different soft
+    # probabilities). The collapse should hide turn 2 because the argmax is
+    # identical to turn 1.
+    turn1 = {"p0": "c3", "p1": "c3", "p2": "c3", "p3": "c3", "p4": "c4", "p5": "c4"}
+    for pid, winner in turn1.items():
+        for cid in ("c3", "c4"):
+            db.add(
+                SoftAssignment(
+                    data_point_id=pid,
+                    cluster_id=cid,
+                    turn_number=2,
+                    probability=0.7 if cid == winner else 0.3,
+                )
+            )
+    db.commit()
+
+    res = project_session(db, SESSION_ID, reducer="pca")
+    # Turn 2 is collapsed away — only the partition-changing turns 0 and 1 stay.
+    assert res["turns"] == [0, 1]
+    assert set(res["assignments"].keys()) == {"0", "1"}
+
+
+def test_project_session_collapses_long_run_of_one_point_moves(db):
+    """A run of N consecutive snapshots that each differ by a single point —
+    the boundary-repair signature — collapses to a single jump from before to
+    after. Each individual transition is visually invisible (1 pt of 6 here);
+    the slider should show the start, not 20 near-duplicate frames.
+    """
+    # Build turns 2..5: each successive turn flips one more point from c3 to c4
+    # (4 single-point moves), then turn 6 makes a bigger jump (2 changes).
+    sequences = [
+        {"p0": "c3", "p1": "c3", "p2": "c4", "p3": "c3", "p4": "c4", "p5": "c4"},  # 2: p2 flipped
+        {"p0": "c4", "p1": "c3", "p2": "c4", "p3": "c3", "p4": "c4", "p5": "c4"},  # 3: p0 flipped
+        {"p0": "c4", "p1": "c4", "p2": "c4", "p3": "c3", "p4": "c4", "p5": "c4"},  # 4: p1 flipped
+        {"p0": "c4", "p1": "c4", "p2": "c4", "p3": "c4", "p4": "c4", "p5": "c4"},  # 5: p3 flipped
+    ]
+    for turn_offset, mapping in enumerate(sequences, start=2):
+        for pid, winner in mapping.items():
+            for cid in ("c3", "c4"):
+                db.add(
+                    SoftAssignment(
+                        data_point_id=pid, cluster_id=cid,
+                        turn_number=turn_offset,
+                        probability=0.7 if cid == winner else 0.3,
+                    )
+                )
+    db.commit()
+
+    res = project_session(db, SESSION_ID, reducer="pca")
+    # Turns 0 and 1 are kept (multi-point repartition). Turns 2..5 each diff by
+    # exactly one point from their predecessor → all collapsed.
+    assert res["turns"] == [0, 1]
+
+
+def test_project_session_keeps_reembed_turn_even_if_partition_unchanged(db):
+    """A semantic_reembed turn must remain in the slider so the axis arrow /
+    geometry-aware view is still reachable, even if its argmax matches the
+    previous turn by coincidence."""
+    # Add turn 2 with the same hard partition as turn 1, but flag it as a
+    # semantic_reembed in the Turn row's system_output.
+    turn1 = {"p0": "c3", "p1": "c3", "p2": "c3", "p3": "c3", "p4": "c4", "p5": "c4"}
+    for pid, winner in turn1.items():
+        for cid in ("c3", "c4"):
+            db.add(
+                SoftAssignment(
+                    data_point_id=pid,
+                    cluster_id=cid,
+                    turn_number=2,
+                    probability=0.7 if cid == winner else 0.3,
+                )
+            )
+    db.add(
+        Turn(
+            session_id=SESSION_ID,
+            turn_number=2,
+            oracle_input={},
+            system_output={
+                "state_snapshot": {
+                    "operations": [
+                        {"type": "semantic_reembed", "axis_label": "tone"}
+                    ]
+                }
+            },
+        )
+    )
+    db.commit()
+
+    res = project_session(db, SESSION_ID, reducer="pca")
+    assert 2 in res["turns"]
 
 
 # ---------------------------------------------------------------------------

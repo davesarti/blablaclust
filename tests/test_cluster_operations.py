@@ -13,8 +13,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from src.engine.cluster_operations import (
+    batch_move_points,
     merge_clusters,
-    move_points,
     rename_cluster,
     split_cluster,
 )
@@ -59,7 +59,7 @@ def db():
     data_points = []
     for point_id, embedding in _POINTS.items():
         dp = DataPoint(
-            id=point_id, dataset_id="ds", data={"text": point_id}, embedding=embedding
+            id=point_id, dataset_id="ds", text=point_id, embedding=embedding
         )
         data_points.append(dp)
         session.add(dp)
@@ -115,7 +115,7 @@ def db_big_cluster():
             DataPoint(
                 id=f"{point_id}-big",
                 dataset_id="ds",
-                data={"text": point_id},
+                text=point_id,
                 embedding=embedding,
             )
         )
@@ -261,7 +261,7 @@ def test_merge_preserves_argmax_on_flat_soft_assignments():
     # Two merged clusters (c4, c5) sum to 0.18+0.17 = 0.35 — would beat c1
     # under the buggy fold.
     flat = {"c1": 0.27, "c2": 0.20, "c3": 0.18, "c4": 0.18, "c5": 0.17}
-    db.add(DataPoint(id="p1", dataset_id="ds", data={"text": "p"}, embedding=[0.0]))
+    db.add(DataPoint(id="p1", dataset_id="ds", text="p", embedding=[0.0]))
     for cid, prob in flat.items():
         db.add(SoftAssignment(data_point_id="p1", cluster_id=cid,
                               turn_number=0, probability=prob))
@@ -343,7 +343,7 @@ def test_split_rejects_cluster_with_one_point(db):
         )
     )
     db.add(
-        DataPoint(id="solo-p", dataset_id="ds", data={"text": "x"}, embedding=[1.0, 1.0])
+        DataPoint(id="solo-p", dataset_id="ds", text="x", embedding=[1.0, 1.0])
     )
     db.add(
         Cluster(
@@ -462,102 +462,132 @@ def test_split_skips_naming_when_auto_name_false(db):
     assert all(" - part " in c.name for c in children)
 
 
-# --- move_points ------------------------------------------------------------
+# --- batch_move_points ------------------------------------------------------
 
 
-def test_move_reassigns_point_to_target(db):
+def test_batch_move_keeps_source_with_residual_soft_mass(db):
+    """Soft assignments leave residual probability on every cluster, so a
+    source that loses all its hard members keeps mass and must NOT dissolve."""
     hard0 = _hard_clusters(db, turn=0)
-    # Pick a point and a different active cluster to move it into.
-    point_id, source = next(iter(hard0.items()))
-    target = next(cid for cid in set(hard0.values()) if cid != source)
-
-    returned = move_points([point_id], target, SESSION_ID, turn_number=1, db=db)
-    db.commit()
-
-    assert returned.id == target
-    hard1 = _hard_clusters(db, turn=1)
-    assert hard1[point_id] == target
-    # The moved point is now 100% in the target cluster.
-    rows = (
-        db.query(SoftAssignment)
-        .filter(
-            SoftAssignment.data_point_id == point_id,
-            SoftAssignment.turn_number == 1,
-        )
-        .all()
-    )
-    assert len(rows) == 1
-    assert rows[0].cluster_id == target
-    assert rows[0].probability == 1.0
-
-
-def test_move_carries_other_points_forward(db):
-    hard0 = _hard_clusters(db, turn=0)
-    point_id, source = next(iter(hard0.items()))
-    target = next(cid for cid in set(hard0.values()) if cid != source)
-    others = {pid for pid in hard0 if pid != point_id}
-
-    move_points([point_id], target, SESSION_ID, turn_number=1, db=db)
-    db.commit()
-
-    hard1 = _hard_clusters(db, turn=1)
-    # Snapshot stays complete and untouched points keep their cluster.
-    assert set(hard1) == set(hard0)
-    for pid in others:
-        assert hard1[pid] == hard0[pid]
-
-
-def test_move_keeps_source_with_residual_soft_mass(db):
-    hard0 = _hard_clusters(db, turn=0)
-    # Take a whole cluster's hard membership and move all of it into another cluster.
     source = next(iter(set(hard0.values())))
     members = [pid for pid, cid in hard0.items() if cid == source]
     target = next(cid for cid in set(hard0.values()) if cid != source)
 
-    move_points(members, target, SESSION_ID, turn_number=1, db=db)
+    batch_move_points(
+        [(pid, target) for pid in members],
+        SESSION_ID,
+        turn_number=1,
+        db=db,
+    )
     db.commit()
 
-    # Soft assignments leave residual probability on every cluster, so even with
-    # no hard members the source still holds mass — it must NOT be dissolved.
     survivor = db.query(Cluster).filter(Cluster.id == source).first()
     assert survivor.dissolved_at_turn is None
     assert source in {c.id for c in _active_clusters(db)}
-    # The source still appears in the turn-1 snapshot via that residual mass.
     turn1 = db.query(SoftAssignment).filter(SoftAssignment.turn_number == 1).all()
     assert any(a.cluster_id == source for a in turn1)
-    # No point is hard-assigned to the source any more — they all moved to target.
     hard1 = _hard_clusters(db, turn=1)
     assert all(cid != source for cid in hard1.values())
-    # The target survives and absorbed the moved points.
     assert target in {c.id for c in _active_clusters(db)}
     for pid in members:
         assert hard1[pid] == target
 
 
-def test_move_rejects_empty_point_list(db):
-    target = _active_clusters(db)[0].id
+def test_batch_move_applies_all_in_one_snapshot(db):
+    """N moves with different targets write exactly ONE snapshot turn."""
+    hard0 = _hard_clusters(db, turn=0)
+    cluster_ids = list(set(hard0.values()))
+    assert len(cluster_ids) >= 2
+
+    # Build (point_id, target) pairs that actually move each point to a
+    # DIFFERENT cluster, so the hard partition really changes.
+    moves: list[tuple[str, str]] = []
+    seen_points: set[str] = set()
+    for cid in cluster_ids:
+        # Pick one point currently in `cid` and send it to a different cluster.
+        for pid, src in hard0.items():
+            if src == cid and pid not in seen_points:
+                target = next(c for c in cluster_ids if c != cid)
+                moves.append((pid, target))
+                seen_points.add(pid)
+                break
+
+    batch_move_points(moves, SESSION_ID, turn_number=1, db=db)
+    db.commit()
+
+    # Exactly one new snapshot turn was created.
+    snapshot_turns = {
+        r.turn_number for r in db.query(SoftAssignment).all()
+    }
+    assert snapshot_turns == {0, 1}
+
+    # Every moved point landed in its new cluster.
+    hard1 = _hard_clusters(db, turn=1)
+    for pid, target in moves:
+        assert hard1[pid] == target
+
+
+def test_batch_move_carries_other_points_forward(db):
+    hard0 = _hard_clusters(db, turn=0)
+    cluster_ids = list(set(hard0.values()))
+    point_id, source = next(iter(hard0.items()))
+    target = next(cid for cid in cluster_ids if cid != source)
+    others = {pid for pid in hard0 if pid != point_id}
+
+    batch_move_points([(point_id, target)], SESSION_ID, turn_number=1, db=db)
+    db.commit()
+
+    hard1 = _hard_clusters(db, turn=1)
+    assert set(hard1) == set(hard0)
+    for pid in others:
+        assert hard1[pid] == hard0[pid]
+
+
+def test_batch_move_rejects_empty_list(db):
     with pytest.raises(ValueError):
-        move_points([], target, SESSION_ID, turn_number=1, db=db)
+        batch_move_points([], SESSION_ID, turn_number=1, db=db)
 
 
-def test_move_rejects_unknown_target(db):
+def test_batch_move_rejects_unknown_target(db):
     point_id = next(iter(_hard_clusters(db, turn=0)))
     with pytest.raises(ValueError):
-        move_points([point_id], "does-not-exist", SESSION_ID, turn_number=1, db=db)
+        batch_move_points(
+            [(point_id, "does-not-exist")], SESSION_ID, turn_number=1, db=db
+        )
 
 
-def test_move_rejects_unknown_point(db):
+def test_batch_move_rejects_unknown_point(db):
     target = _active_clusters(db)[0].id
     with pytest.raises(ValueError):
-        move_points(["does-not-exist"], target, SESSION_ID, turn_number=1, db=db)
+        batch_move_points(
+            [("does-not-exist", target)], SESSION_ID, turn_number=1, db=db
+        )
 
 
-def test_move_rejects_stale_turn_number(db):
+def test_batch_move_rejects_stale_turn_number(db):
     hard0 = _hard_clusters(db, turn=0)
     point_id, source = next(iter(hard0.items()))
     target = next(cid for cid in set(hard0.values()) if cid != source)
     with pytest.raises(ValueError):
-        move_points([point_id], target, SESSION_ID, turn_number=0, db=db)
+        batch_move_points([(point_id, target)], SESSION_ID, turn_number=0, db=db)
+
+
+def test_batch_move_dedupes_duplicate_points(db):
+    """A duplicate point_id with conflicting targets: last write wins."""
+    hard0 = _hard_clusters(db, turn=0)
+    point_id, source = next(iter(hard0.items()))
+    others = [cid for cid in set(hard0.values()) if cid != source]
+    first_target, second_target = others[0], others[-1]
+
+    batch_move_points(
+        [(point_id, first_target), (point_id, second_target)],
+        SESSION_ID,
+        turn_number=1,
+        db=db,
+    )
+    db.commit()
+    hard1 = _hard_clusters(db, turn=1)
+    assert hard1[point_id] == second_target
 
 
 # --- rename_cluster ---------------------------------------------------------

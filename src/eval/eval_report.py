@@ -152,7 +152,8 @@ def write_summary(records: list[dict], out_dir: str) -> None:
             weakest_str = ""
             if per_cluster:
                 w = min(per_cluster, key=lambda r: r.get("coherence", 1.0))
-                weakest_str = (f" — weakest: `{w.get('cluster_id')}` @ {w.get('coherence', 0):.2f} "
+                weakest_name = w.get("cluster_name") or "unnamed"
+                weakest_str = (f" — weakest: `{weakest_name}` @ {w.get('coherence', 0):.2f} "
                                f"({w.get('reasoning', '')})")
             lines.append(f"**B2 — Coherence:** mean {c_mean:.2f}, min {c_min:.2f}{weakest_str}\n\n")
         else:
