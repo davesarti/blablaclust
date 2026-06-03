@@ -1,8 +1,9 @@
-"""Integration tests for semantic_clustering.
+"""Integration tests for semantic_clustering under the builder contract.
 
-Run entirely against an in-memory SQLite database.  SentenceTransformer
-(via _cosine_axis_scores) and name_clusters are patched so no LLM calls or
-model downloads occur, but the real k-means and soft-assignment maths run.
+Each test loads a TurnBuilder for the conv turn, runs semantic_clustering on
+it, then commits the builder so the assertions can inspect persisted rows.
+The cosine-axis path and name_clusters are patched so no LLM calls or model
+downloads occur, but the real k-means and soft-assignment maths run.
 """
 
 import json
@@ -23,12 +24,11 @@ from src.engine.semantic_clustering import (
     _auto_select_k,
     semantic_clustering,
 )
+from src.engine.turn_builder import TurnBuilder
 from src.models import Base, ChatSession, Cluster, DataPoint, SoftAssignment
 
 SESSION_ID = "sess-semantic"
 
-# Six 2-D points: three in group A (near origin), three in group B (near (9,9)).
-# k-means with k=2 reliably separates them — large separation, tight clusters.
 _POINTS = {
     "a1": [0.0, 0.0],
     "a2": [0.1, 0.1],
@@ -39,8 +39,6 @@ _POINTS = {
 }
 
 
-# Mock for _cosine_axis_scores: returns a spread-out array (high variance) so
-# the cosine path is taken and _llm_axis_scores is never called.
 def _fake_cosine(points, pole_pos_text, pole_neg_text):
     return np.linspace(0.0, 1.0, len(points), dtype=np.float64)
 
@@ -55,16 +53,9 @@ PATCH_COSINE = patch(
 PATCH_NAME = patch("src.engine.semantic_clustering.name_clusters")
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture
 def db(tmp_path, monkeypatch):
     """In-memory DB seeded with six points and a k=2 initial clustering at turn 0."""
-    # Redirect clustering log to a tmp file (conftest.py already does this for
-    # _clustering_log_path; we reset it again here for clarity in log tests).
     log_path = tmp_path / "clustering_runs.jsonl"
     monkeypatch.setattr(logger, "_clustering_log_path", log_path)
 
@@ -90,13 +81,12 @@ def db(tmp_path, monkeypatch):
         dp = DataPoint(
             id=point_id,
             dataset_id="ds",
-            data={"text": point_id},
+            text=point_id,
             embedding=embedding,
         )
         data_points.append(dp)
         session.add(dp)
 
-    # Initial k=2 clustering at turn 0 (the pre-oracle state).
     clusters, assignments, _ = initial_clustering(
         data_points=data_points, k=2, session_id=SESSION_ID, turn_number=0
     )
@@ -110,9 +100,8 @@ def db(tmp_path, monkeypatch):
     session.close()
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+def _builder(db, turn_number: int = 1) -> TurnBuilder:
+    return TurnBuilder.load(SESSION_ID, turn_number, db)
 
 
 def _active_clusters(db_session, session_id: str = SESSION_ID) -> list[Cluster]:
@@ -145,15 +134,15 @@ def test_dissolves_all_existing_clusters(db):
     active_before = _active_clusters(db)
     assert len(active_before) == 2
 
+    builder = _builder(db, 1)
     with PATCH_POLES, PATCH_COSINE, PATCH_NAME:
         semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
             auto_name=False,
         )
+    builder.commit()
     db.commit()
 
     for c in active_before:
@@ -162,19 +151,17 @@ def test_dissolves_all_existing_clusters(db):
 
 
 def test_creates_k_new_active_clusters(db):
-    """k new undissolved clusters must be created at turn 1."""
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
-
+    builder = _builder(db, 1)
     with PATCH_POLES, PATCH_COSINE, PATCH_NAME:
-        new_clusters, _ = semantic_clustering(
+        new_clusters = semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
             k=3,
             auto_name=False,
         )
+    builder.commit()
     db.commit()
 
     assert len(new_clusters) == 3
@@ -185,9 +172,8 @@ def test_creates_k_new_active_clusters(db):
 
 
 def test_auto_k_called_when_k_is_none(db):
-    """When k is not provided, _auto_select_k is called and its result is used."""
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
-
+    builder = _builder(db, 1)
     with (
         PATCH_POLES,
         PATCH_COSINE,
@@ -196,14 +182,13 @@ def test_auto_k_called_when_k_is_none(db):
             "src.engine.semantic_clustering._auto_select_k", return_value=2
         ) as mock_auto,
     ):
-        new_clusters, _ = semantic_clustering(
+        new_clusters = semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
             auto_name=False,
         )
+    builder.commit()
     db.commit()
 
     mock_auto.assert_called_once()
@@ -211,24 +196,22 @@ def test_auto_k_called_when_k_is_none(db):
 
 
 def test_explicit_k_bypasses_auto_selection(db):
-    """When k is passed explicitly, _auto_select_k is never called."""
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
-
+    builder = _builder(db, 1)
     with (
         PATCH_POLES,
         PATCH_COSINE,
         PATCH_NAME,
         patch("src.engine.semantic_clustering._auto_select_k") as mock_auto,
     ):
-        new_clusters, _ = semantic_clustering(
+        new_clusters = semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
             k=3,
             auto_name=False,
         )
+    builder.commit()
     db.commit()
 
     mock_auto.assert_not_called()
@@ -236,59 +219,55 @@ def test_explicit_k_bypasses_auto_selection(db):
 
 
 def test_auto_k_result_is_in_valid_range(db):
-    """With real silhouette selection, auto-k is always in [K_AUTO_MIN, K_AUTO_MAX]."""
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
-
+    builder = _builder(db, 1)
     with PATCH_POLES, PATCH_COSINE, PATCH_NAME:
-        new_clusters, _ = semantic_clustering(
+        new_clusters = semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
             auto_name=False,
         )
+    builder.commit()
     db.commit()
-
     assert K_AUTO_MIN <= len(new_clusters) <= K_AUTO_MAX
 
 
 def test_writes_full_snapshot_at_turn_1_all_points_covered(db):
-    """Every data point must appear in the turn-1 soft assignments."""
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
     all_point_ids = {dp.id for dp in data_points}
 
+    builder = _builder(db, 1)
     with PATCH_POLES, PATCH_COSINE, PATCH_NAME:
-        _, new_assignments = semantic_clustering(
+        semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
             auto_name=False,
         )
+    builder.commit()
+    db.commit()
 
-    assigned_ids = {a.data_point_id for a in new_assignments}
+    assigned_ids = {a.data_point_id for a in _soft_assignments_at(db, turn=1)}
     assert assigned_ids == all_point_ids
 
 
 def test_soft_assignments_sum_to_one_per_point(db):
-    """Probabilities at turn 1 must sum to 1.0 for every data point."""
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
-
+    builder = _builder(db, 1)
     with PATCH_POLES, PATCH_COSINE, PATCH_NAME:
-        _, new_assignments = semantic_clustering(
+        semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
             k=2,
             auto_name=False,
         )
+    builder.commit()
+    db.commit()
 
     sums: dict[str, float] = {}
-    for a in new_assignments:
+    for a in _soft_assignments_at(db, turn=1):
         sums[a.data_point_id] = sums.get(a.data_point_id, 0.0) + a.probability
 
     for pid, total in sums.items():
@@ -297,63 +276,61 @@ def test_soft_assignments_sum_to_one_per_point(db):
 
 def test_all_assignments_have_correct_turn_number(db):
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
-
+    builder = _builder(db, 1)
     with PATCH_POLES, PATCH_COSINE, PATCH_NAME:
-        _, new_assignments = semantic_clustering(
+        semantic_clustering(
             data_points=data_points,
             axis_hint="sentiment",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
             auto_name=False,
         )
+    builder.commit()
+    db.commit()
 
-    assert all(a.turn_number == 1 for a in new_assignments)
+    assert all(a.turn_number == 1 for a in _soft_assignments_at(db, turn=1))
 
 
 def test_probabilities_are_in_0_1(db):
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
-
+    builder = _builder(db, 1)
     with PATCH_POLES, PATCH_COSINE, PATCH_NAME:
-        _, new_assignments = semantic_clustering(
+        semantic_clustering(
             data_points=data_points,
             axis_hint="quality",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
             k=2,
             auto_name=False,
         )
+    builder.commit()
+    db.commit()
 
-    for a in new_assignments:
+    for a in _soft_assignments_at(db, turn=1):
         assert 0.0 <= a.probability <= 1.0
 
 
 def test_well_separated_clusters_get_distinct_hard_assignments(db):
-    """The six well-separated points should end up in two distinct clusters."""
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
-
+    builder = _builder(db, 1)
     with PATCH_POLES, PATCH_COSINE, PATCH_NAME:
-        new_clusters, new_assignments = semantic_clustering(
+        new_clusters = semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
             k=2,
             auto_name=False,
         )
+    builder.commit()
+    db.commit()
 
     cluster_ids = {c.id for c in new_clusters}
     distributions: dict[str, dict[str, float]] = {}
-    for a in new_assignments:
+    for a in _soft_assignments_at(db, turn=1):
         distributions.setdefault(a.data_point_id, {})[a.cluster_id] = a.probability
 
     hard_assignments = {
         pid: max(dist, key=dist.get) for pid, dist in distributions.items()
     }
 
-    # All six points assigned, two non-empty clusters
     assert len(hard_assignments) == 6
     used_clusters = set(hard_assignments.values())
     assert used_clusters == cluster_ids
@@ -366,53 +343,52 @@ def test_well_separated_clusters_get_distinct_hard_assignments(db):
 
 
 def test_raises_on_turn_number_zero(db):
+    # turn 0 is unreachable through the builder (existing snapshot at turn 0
+    # would block ``load``); we exercise the engine guard directly with an
+    # ad-hoc zero-turn builder.
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
+    builder = TurnBuilder(session_id=SESSION_ID, turn_number=0, db=db)
     with pytest.raises(ValueError, match="turn_number > 0"):
         semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=0,
-            db=db,
+            builder=builder,
         )
 
 
 def test_raises_on_negative_turn_number(db):
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
+    builder = TurnBuilder(session_id=SESSION_ID, turn_number=-1, db=db)
     with pytest.raises(ValueError, match="turn_number > 0"):
         semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=-1,
-            db=db,
+            builder=builder,
         )
 
 
 def test_raises_on_k_less_than_1(db):
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
+    builder = _builder(db, 1)
     with PATCH_POLES, PATCH_COSINE, PATCH_NAME:
         with pytest.raises(ValueError, match="k must be"):
             semantic_clustering(
                 data_points=data_points,
                 axis_hint="angry",
-                session_id=SESSION_ID,
-                turn_number=1,
-                db=db,
+                builder=builder,
                 k=0,
             )
 
 
 def test_raises_on_k_exceeds_point_count(db):
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
+    builder = _builder(db, 1)
     with PATCH_POLES, PATCH_COSINE:
         with pytest.raises(ValueError, match="exceeds number of embedded points"):
             semantic_clustering(
                 data_points=data_points,
                 axis_hint="angry",
-                session_id=SESSION_ID,
-                turn_number=1,
-                db=db,
+                builder=builder,
                 k=999,
             )
 
@@ -423,13 +399,12 @@ def test_raises_on_no_active_clusters(db):
     db.commit()
 
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
+    builder = _builder(db, 1)
     with pytest.raises(ValueError, match="no active clusters"):
         semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
         )
 
 
@@ -439,13 +414,12 @@ def test_raises_on_no_embedded_points(db):
     db.commit()
 
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
+    builder = _builder(db, 1)
     with pytest.raises(ValueError, match="no data points have embeddings"):
         semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
         )
 
 
@@ -459,21 +433,18 @@ def test_logs_semantic_backend(db, tmp_path, monkeypatch):
     monkeypatch.setattr(logger, "_clustering_log_path", log_path)
 
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
+    builder = _builder(db, 1)
 
     with PATCH_POLES, PATCH_COSINE, PATCH_NAME:
         semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
             k=2,
             auto_name=False,
         )
 
     entries = [json.loads(line) for line in log_path.read_text().splitlines() if line]
-    # Exactly one entry (from semantic_clustering — the initial_clustering in the
-    # fixture wrote to a different log_path before the monkeypatch above took effect).
     assert len(entries) == 1
     e = entries[0]
     assert e["session_id"] == SESSION_ID
@@ -489,14 +460,13 @@ def test_logs_silhouette_for_k_ge_2(db, tmp_path, monkeypatch):
     monkeypatch.setattr(logger, "_clustering_log_path", log_path)
 
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
+    builder = _builder(db, 1)
 
     with PATCH_POLES, PATCH_COSINE, PATCH_NAME:
         semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
             k=2,
             auto_name=False,
         )
@@ -511,14 +481,13 @@ def test_logs_none_silhouette_for_k1(db, tmp_path, monkeypatch):
     monkeypatch.setattr(logger, "_clustering_log_path", log_path)
 
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
+    builder = _builder(db, 1)
 
     with PATCH_POLES, PATCH_COSINE, PATCH_NAME:
         semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
             k=1,
             auto_name=False,
         )
@@ -534,14 +503,13 @@ def test_logs_none_silhouette_for_k1(db, tmp_path, monkeypatch):
 
 def test_auto_name_true_calls_name_clusters(db):
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
+    builder = _builder(db, 1)
 
     with PATCH_POLES, PATCH_COSINE, PATCH_NAME as mock_name:
         semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
             auto_name=True,
         )
 
@@ -550,14 +518,13 @@ def test_auto_name_true_calls_name_clusters(db):
 
 def test_auto_name_false_skips_naming_and_keeps_placeholders(db):
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
+    builder = _builder(db, 1)
 
     with PATCH_POLES, PATCH_COSINE, PATCH_NAME as mock_name:
-        new_clusters, _ = semantic_clustering(
+        new_clusters = semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
             auto_name=False,
         )
 
@@ -567,6 +534,7 @@ def test_auto_name_false_skips_naming_and_keeps_placeholders(db):
 
 def test_auto_name_receives_new_clusters_and_assignments(db):
     data_points = db.query(DataPoint).filter(DataPoint.dataset_id == "ds").all()
+    builder = _builder(db, 1)
     captured = {}
 
     def fake_name(clusters, assignments, points, **kwargs):
@@ -578,17 +546,17 @@ def test_auto_name_receives_new_clusters_and_assignments(db):
         PATCH_COSINE,
         patch("src.engine.semantic_clustering.name_clusters", side_effect=fake_name),
     ):
-        new_clusters, new_assignments = semantic_clustering(
+        new_clusters = semantic_clustering(
             data_points=data_points,
             axis_hint="angry",
-            session_id=SESSION_ID,
-            turn_number=1,
-            db=db,
+            builder=builder,
             auto_name=True,
         )
 
     assert captured["clusters"] is new_clusters
-    assert captured["assignments"] is new_assignments
+    # Naming gets transient SoftAssignment carriers, one per (point, cluster).
+    expected = len(data_points) * len(new_clusters)
+    assert len(captured["assignments"]) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -597,22 +565,17 @@ def test_auto_name_receives_new_clusters_and_assignments(db):
 
 
 class TestAutoSelectK:
-    """Unit tests for the silhouette-based automatic k selector."""
-
     def test_returns_kmin_when_kmax_less_than_kmin(self):
-        """Edge case: k_max < k_min returns k_min without running k-means."""
         X = np.zeros((5, 3), dtype=np.float32)
         assert _auto_select_k(X, k_min=3, k_max=1) == 3
 
     def test_selects_k2_for_clearly_bimodal_data(self):
-        """Two tight well-separated clusters → silhouette peaks at k=2."""
         group_a = np.tile([0.0, 0.0, 0.0], (20, 1))
         group_b = np.tile([100.0, 100.0, 100.0], (20, 1))
         X = np.vstack([group_a, group_b]).astype(np.float32)
         assert _auto_select_k(X, k_min=2, k_max=5) == 2
 
     def test_result_is_always_in_range(self):
-        """Auto-k always returns a value in [k_min, k_max]."""
         rng = np.random.default_rng(42)
         X = rng.standard_normal((30, 4)).astype(np.float32)
         k = _auto_select_k(X, k_min=2, k_max=4)

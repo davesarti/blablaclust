@@ -44,8 +44,8 @@ def client():
             status="closed",
         )
     )
-    db.add(DataPoint(id="p1", dataset_id="ds", data={"text": "a"}, embedding=[0.1]))
-    db.add(DataPoint(id="p2", dataset_id="ds", data={"text": "b"}, embedding=[0.2]))
+    db.add(DataPoint(id="p1", dataset_id="ds", text="a", embedding=[0.1]))
+    db.add(DataPoint(id="p2", dataset_id="ds", text="b", embedding=[0.2]))
     db.add(
         Cluster(id="c1", session_id="sess-1", name="C1", description="d", created_at_turn=1)
     )

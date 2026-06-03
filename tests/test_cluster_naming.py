@@ -26,7 +26,9 @@ def _cluster(id: str, name: str = "Cluster N", description: str = "") -> SimpleN
 
 
 def _dp(id: str, title: str = "", text: str = "") -> SimpleNamespace:
-    return SimpleNamespace(id=id, data={"title": title, "text": text})
+    # title is unused by cluster_naming — kept as a kwarg for caller readability.
+    del title
+    return SimpleNamespace(id=id, text=text)
 
 
 def _assignment(dp_id: str, cluster_id: str, prob: float) -> SimpleNamespace:

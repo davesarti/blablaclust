@@ -98,6 +98,21 @@ def db():
             for cid in clusters:
                 soft(pid, cid, turn, 0.8 if cid == winner else 0.2)
 
+    # Conversation turn 1 caused the snapshot-1 repartition. With the builder
+    # contract, conv_turn == snap_turn, so the viewer reads snapshot 1 directly.
+    session.add(
+        Turn(
+            session_id=SESSION_ID,
+            turn_number=1,
+            oracle_input={},
+            system_output={
+                "state_snapshot": {
+                    "operations": [{"type": "split", "cluster_id": "c1"}],
+                }
+            },
+        )
+    )
+
     session.commit()
     yield session
     session.close()
@@ -220,72 +235,72 @@ def test_project_session_no_embeddings_raises(db):
         project_session(db, SESSION_ID, reducer="pca")
 
 
-def test_project_session_collapses_no_change_turns(db):
-    """A snapshot turn with the same hard partition as the previous one is
-    hidden from the slider. Mirrors the boundary-repair pattern where many
-    consecutive snapshots end up argmax-equivalent and read as 'no change.'"""
-    # Add turn 2 = same hard partition as turn 1 (just with different soft
-    # probabilities). The collapse should hide turn 2 because the argmax is
-    # identical to turn 1.
-    turn1 = {"p0": "c3", "p1": "c3", "p2": "c3", "p3": "c3", "p4": "c4", "p5": "c4"}
-    for pid, winner in turn1.items():
+def test_project_session_frame_count_matches_conv_turns(db):
+    """One UMAP frame per conversation turn, plus frame 0 for initial state."""
+    # The fixture has one Turn row. With the initial state that's 2 frames.
+    res = project_session(db, SESSION_ID, reducer="pca")
+    n_conv = db.query(Turn).filter(Turn.session_id == SESSION_ID).count()
+    assert len(res["turns"]) == n_conv + 1
+    assert res["turns"] == [0, 1]
+
+
+def test_project_session_noop_conv_turn_inherits_prev_partition(db):
+    """A conversation turn with no snapshot-writing ops still appears in the
+    slider — the partition is the previous frame's, so the user sees the conv
+    turn happened but the clustering did not change."""
+    # Add conv turn 2 with no ops (no `final_snapshot_turn` either).
+    db.add(
+        Turn(
+            session_id=SESSION_ID,
+            turn_number=2,
+            oracle_input={},
+            system_output={"state_snapshot": {"operations": []}},
+        )
+    )
+    db.commit()
+
+    res = project_session(db, SESSION_ID, reducer="pca")
+    assert res["turns"] == [0, 1, 2]
+    # Conv turn 2 inherits conv turn 1's partition.
+    assert res["assignments"]["2"] == res["assignments"]["1"]
+
+
+def test_project_session_snapshot_turn_equals_conv_turn(db):
+    """Under the builder contract, conv turn N writes its snapshot at
+    turn_number=N. The viewer reads it directly — no bridge lookup."""
+    # Add a snapshot at turn 2 + a conv turn 2 row.
+    turn2 = {"p0": "c4", "p1": "c4", "p2": "c4", "p3": "c4", "p4": "c4", "p5": "c4"}
+    for pid, winner in turn2.items():
         for cid in ("c3", "c4"):
             db.add(
                 SoftAssignment(
-                    data_point_id=pid,
-                    cluster_id=cid,
+                    data_point_id=pid, cluster_id=cid,
                     turn_number=2,
                     probability=0.7 if cid == winner else 0.3,
                 )
             )
+    db.add(
+        Turn(
+            session_id=SESSION_ID,
+            turn_number=2,
+            oracle_input={},
+            system_output={"state_snapshot": {"operations": [{"type": "move"}]}},
+        )
+    )
     db.commit()
 
     res = project_session(db, SESSION_ID, reducer="pca")
-    # Turn 2 is collapsed away — only the partition-changing turns 0 and 1 stay.
-    assert res["turns"] == [0, 1]
-    assert set(res["assignments"].keys()) == {"0", "1"}
+    assert res["turns"] == [0, 1, 2]
+    order = [p["id"] for p in res["points"]]
+    t2 = dict(zip(order, res["assignments"]["2"]))
+    assert all(cid == "c4" for cid in t2.values())
 
 
-def test_project_session_collapses_long_run_of_one_point_moves(db):
-    """A run of N consecutive snapshots that each differ by a single point —
-    the boundary-repair signature — collapses to a single jump from before to
-    after. Each individual transition is visually invisible (1 pt of 6 here);
-    the slider should show the start, not 20 near-duplicate frames.
-    """
-    # Build turns 2..5: each successive turn flips one more point from c3 to c4
-    # (4 single-point moves), then turn 6 makes a bigger jump (2 changes).
-    sequences = [
-        {"p0": "c3", "p1": "c3", "p2": "c4", "p3": "c3", "p4": "c4", "p5": "c4"},  # 2: p2 flipped
-        {"p0": "c4", "p1": "c3", "p2": "c4", "p3": "c3", "p4": "c4", "p5": "c4"},  # 3: p0 flipped
-        {"p0": "c4", "p1": "c4", "p2": "c4", "p3": "c3", "p4": "c4", "p5": "c4"},  # 4: p1 flipped
-        {"p0": "c4", "p1": "c4", "p2": "c4", "p3": "c4", "p4": "c4", "p5": "c4"},  # 5: p3 flipped
-    ]
-    for turn_offset, mapping in enumerate(sequences, start=2):
-        for pid, winner in mapping.items():
-            for cid in ("c3", "c4"):
-                db.add(
-                    SoftAssignment(
-                        data_point_id=pid, cluster_id=cid,
-                        turn_number=turn_offset,
-                        probability=0.7 if cid == winner else 0.3,
-                    )
-                )
-    db.commit()
-
-    res = project_session(db, SESSION_ID, reducer="pca")
-    # Turns 0 and 1 are kept (multi-point repartition). Turns 2..5 each diff by
-    # exactly one point from their predecessor → all collapsed.
-    assert res["turns"] == [0, 1]
-
-
-def test_project_session_keeps_reembed_turn_even_if_partition_unchanged(db):
-    """A semantic_reembed turn must remain in the slider so the axis arrow /
-    geometry-aware view is still reachable, even if its argmax matches the
-    previous turn by coincidence."""
-    # Add turn 2 with the same hard partition as turn 1, but flag it as a
-    # semantic_reembed in the Turn row's system_output.
-    turn1 = {"p0": "c3", "p1": "c3", "p2": "c3", "p3": "c3", "p4": "c4", "p5": "c4"}
-    for pid, winner in turn1.items():
+def test_project_session_reembed_frame_is_conv_turn_number(db):
+    """A semantic_reembed conv turn appears in the slider as its conv-turn
+    number (not its snapshot id) and is listed in reembed_turns."""
+    turn2 = {"p0": "c3", "p1": "c3", "p2": "c3", "p3": "c3", "p4": "c4", "p5": "c4"}
+    for pid, winner in turn2.items():
         for cid in ("c3", "c4"):
             db.add(
                 SoftAssignment(
@@ -304,7 +319,7 @@ def test_project_session_keeps_reembed_turn_even_if_partition_unchanged(db):
                 "state_snapshot": {
                     "operations": [
                         {"type": "semantic_reembed", "axis_label": "tone"}
-                    ]
+                    ],
                 }
             },
         )
@@ -313,6 +328,7 @@ def test_project_session_keeps_reembed_turn_even_if_partition_unchanged(db):
 
     res = project_session(db, SESSION_ID, reducer="pca")
     assert 2 in res["turns"]
+    assert 2 in res["reembed_turns"]
 
 
 # ---------------------------------------------------------------------------
@@ -340,26 +356,23 @@ def _make_dummy_encoder(dim: int):
 
 
 def _seed_reembed_turn(db, axis_label: str = "positive sentiment") -> None:
-    """Add the Turn row for turn 1 so `_axis_label_at_turn` finds the axis.
-
-    The fixture's turn 1 already dissolves c1/c2 and creates c3/c4, which the
-    reembed-detection heuristic (≥2 dissolved + ≥2 created at same turn) picks
-    up. The Turn row supplies the axis_label in its system_output snapshot.
+    """Rewrite the fixture's turn 1 with a semantic_reembed op so the reembed
+    code path activates.  The fixture seeds a split-op Turn row; this helper
+    upgrades it in place to a semantic_reembed for the geometry-aware tests.
     """
-    db.add(
-        Turn(
-            session_id=SESSION_ID,
-            turn_number=1,
-            oracle_input={"raw_text": "split by sentiment", "feedback_type": "global"},
-            system_output={
-                "state_snapshot": {
-                    "operations": [
-                        {"type": "semantic_reembed", "axis_label": axis_label}
-                    ]
-                }
-            },
-        )
+    row = (
+        db.query(Turn)
+        .filter(Turn.session_id == SESSION_ID, Turn.turn_number == 1)
+        .one()
     )
+    row.oracle_input = {"raw_text": "split by sentiment", "feedback_type": "global"}
+    row.system_output = {
+        "state_snapshot": {
+            "operations": [
+                {"type": "semantic_reembed", "axis_label": axis_label}
+            ],
+        }
+    }
     db.commit()
 
 

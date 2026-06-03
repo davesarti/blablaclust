@@ -82,11 +82,6 @@ def test_validate_headers_raises_on_missing():
         _validate_headers(["label", "title"])  # no "text"
 
 
-def test_validate_headers_lists_all_missing_sorted():
-    with pytest.raises(ValueError, match="text, title"):
-        _validate_headers(["label"])  # missing both "text" and "title"
-
-
 def test_validate_headers_none_raises():
     with pytest.raises(ValueError, match="Missing headers"):
         _validate_headers(None)
@@ -110,8 +105,7 @@ def test_ingest_inserts_valid_rows(tmp_path, db):
     assert skipped == 0
     rows = db.query(DataPoint).filter(DataPoint.dataset_id == "ds1").all()
     assert len(rows) == 2
-    assert rows[0].data["label"] in (0, 1)
-    assert rows[0].data["text"]  # cleaned, non-empty
+    assert all(row.text for row in rows)  # cleaned, non-empty
 
 
 def test_ingest_skips_empty_text_rows(tmp_path, db):
@@ -120,29 +114,6 @@ def test_ingest_skips_empty_text_rows(tmp_path, db):
     path = _write_csv(tmp_path, csv)
 
     inserted, skipped = ingest_csv_path(path, "ds2", db)
-    db.commit()
-
-    assert inserted == 1
-    assert skipped == 1
-
-
-def test_ingest_skips_non_int_labels(tmp_path, db):
-    csv = "label,title,text\nnot_a_number,Good,Real text\n2,Ok,Other text\n"
-    path = _write_csv(tmp_path, csv)
-
-    inserted, skipped = ingest_csv_path(path, "ds3", db)
-    db.commit()
-
-    assert inserted == 1   # only the row with label=2
-    assert skipped == 1    # the "not_a_number" row
-
-
-def test_ingest_skips_missing_label(tmp_path, db):
-    # Empty label cell → None → skipped.
-    csv = "label,title,text\n,Good,Real text\n1,Ok,Other text\n"
-    path = _write_csv(tmp_path, csv)
-
-    inserted, skipped = ingest_csv_path(path, "ds4", db)
     db.commit()
 
     assert inserted == 1
@@ -159,8 +130,7 @@ def test_ingest_cleans_fields_on_insert(tmp_path, db):
     db.commit()
 
     dp = db.query(DataPoint).filter(DataPoint.dataset_id == "ds5").first()
-    assert dp.data["title"] == "Greaaat"
-    assert dp.data["text"] == "Works perfectly!!!"
+    assert dp.text == "Works perfectly!!!"
 
 
 def test_ingest_raises_on_missing_headers(tmp_path, db):

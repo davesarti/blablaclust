@@ -8,17 +8,16 @@ whether they belong where they are, and returns move operations for any
 misplaced ones.
 
 One LLM call per turn regardless of how many merge/split ops ran.
-Out-of-band from the oracle — applied transparently before the turn is
-finalised.
+Out-of-band from the oracle — applied transparently as part of the same
+in-memory turn builder, so the repair's moves are folded into the single
+snapshot the turn writes.
 """
 
 from __future__ import annotations
 
 import json
 
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-
+from src.engine.turn_builder import TurnBuilder
 from src.harness import (
     call_llm,
     estimate_cost_usd,
@@ -27,57 +26,27 @@ from src.harness import (
     render_prompt,
 )
 from src.logger import log, log_llm_call
-from src.models import Cluster as DbCluster, DataPoint
-from src.models import SoftAssignment as DbSoftAssignment
+from src.models import DataPoint
 
 BOUNDARY_POINTS_PER_CLUSTER = 10
 
 
 def _boundary_points(
     affected_ids: list[str],
-    session_id: str,
-    db: Session,
+    builder: TurnBuilder,
 ) -> dict[str, list[dict]]:
     """Return the N most uncertain hard-assigned points per affected cluster.
 
-    Uncertainty = smallest margin between top-2 soft-assignment probabilities.
-    Returns {cluster_id: [{point_id, text, margin}, ...]}.
+    Uncertainty = smallest margin between top-2 soft-assignment probabilities,
+    read from the builder's in-memory snapshot. Returns
+    ``{cluster_id: [{point_id, text, margin}, ...]}``.
     """
-    active_ids = [
-        row.id
-        for row in db.query(DbCluster.id)
-        .filter(DbCluster.session_id == session_id, DbCluster.dissolved_at_turn.is_(None))
-        .all()
-    ]
-    if not active_ids:
-        return {}
-
-    latest_turn = (
-        db.query(func.max(DbSoftAssignment.turn_number))
-        .filter(DbSoftAssignment.cluster_id.in_(active_ids))
-        .scalar()
-    )
-    if latest_turn is None:
-        return {}
-
-    assignments = (
-        db.query(DbSoftAssignment)
-        .filter(
-            DbSoftAssignment.cluster_id.in_(active_ids),
-            DbSoftAssignment.turn_number == latest_turn,
-        )
-        .all()
-    )
-
-    # Group by point: {point_id: {cluster_id: prob}}
-    by_point: dict[str, dict[str, float]] = {}
-    for a in assignments:
-        by_point.setdefault(a.data_point_id, {})[a.cluster_id] = a.probability
-
     affected_set = set(affected_ids)
     candidates: dict[str, list[tuple[str, float]]] = {cid: [] for cid in affected_ids}
 
-    for point_id, dist in by_point.items():
+    for point_id, dist in builder.snapshot.items():
+        if not dist:
+            continue
         hard = max(dist, key=dist.get)
         if hard not in affected_set:
             continue
@@ -96,7 +65,7 @@ def _boundary_points(
         return {}
 
     text_by_id: dict[str, str] = {}
-    for dp in db.query(DataPoint).filter(DataPoint.id.in_(all_point_ids)).all():
+    for dp in builder.db.query(DataPoint).filter(DataPoint.id.in_(all_point_ids)).all():
         text_by_id[dp.id] = dp.text or ""
 
     result: dict[str, list[dict]] = {}
@@ -110,25 +79,25 @@ def _boundary_points(
 
 
 def f_boundary_repair(
-    session_id: str,
+    builder: TurnBuilder,
     affected_cluster_ids: list[str],
     oracle_text: str,
-    db: Session,
 ) -> list[dict]:
     """Sample boundary points from affected clusters and ask the LLM to validate.
 
-    Returns a list of {point_id, target_cluster_id} dicts for points that
-    should move. Empty list when nothing needs to change or on any error
-    (repair is best-effort and must never abort the turn).
+    Reads the candidate uncertainty distribution from the builder's in-memory
+    snapshot (so the merge/split that just ran is already visible without any
+    DB flush), and returns a list of ``{point_id, target_cluster_id}`` dicts
+    for points that should move. Empty list when nothing needs to change or
+    on any error (repair is best-effort and must never abort the turn).
     """
     if not affected_cluster_ids:
         return []
 
-    boundary = _boundary_points(affected_cluster_ids, session_id, db)
+    boundary = _boundary_points(affected_cluster_ids, builder)
     if not boundary:
         return []
 
-    # Build a flat list of all candidates so the LLM sees them together.
     all_candidates: list[dict] = []
     for cid, pts in boundary.items():
         for p in pts:
@@ -137,12 +106,7 @@ def f_boundary_repair(
     if not all_candidates:
         return []
 
-    # Active clusters for context.
-    active_clusters = (
-        db.query(DbCluster)
-        .filter(DbCluster.session_id == session_id, DbCluster.dissolved_at_turn.is_(None))
-        .all()
-    )
+    active_clusters = builder.active_clusters()
     clusters_block = "\n".join(
         f"[{i}] id={c.id}  name={json.dumps(c.name)}  description: {c.description or ''}"
         for i, c in enumerate(active_clusters, 1)
@@ -168,7 +132,7 @@ def f_boundary_repair(
         try:
             msg = call_llm([{"role": "user", "content": prompt}], system="")
             log_llm_call(
-                session_id=session_id,
+                session_id=builder.session_id,
                 prompt_name="f_boundary_repair",
                 prompt_hash=hash_prompt("f_boundary_repair"),
                 usage=msg.usage,

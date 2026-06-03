@@ -54,10 +54,10 @@ def _soft(point_id, cluster_id, probability, turn_number=1):
     return a
 
 
-def _dp(id_, title="", text=""):
+def _dp(id_, text=""):
     dp = MagicMock()
     dp.id = id_
-    dp.data = {"title": title, "text": text}
+    dp.text = text
     return dp
 
 
@@ -131,7 +131,7 @@ def test_cluster_scores_dict_populated():
 
 def test_text_preview_populated():
     assignments = [_soft("A", "c1", 0.5), _soft("A", "c2", 0.5)]
-    dp_a = _dp("A", title="Hello", text="world")
+    dp_a = _dp("A", text="Hello world")
     db = _make_db(["c1", "c2"], assignments, data_points=[dp_a])
     results = f_uncertainty("session-1", db)
     assert results[0].text_preview == "Hello world"

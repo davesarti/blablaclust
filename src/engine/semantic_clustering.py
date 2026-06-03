@@ -21,7 +21,6 @@ Design decisions vs. alternatives:
 import uuid
 
 import numpy as np
-from sqlalchemy.orm import Session
 
 from src.engine.cluster_naming import name_clusters
 from src.engine.f_semantic_reembed import reembed_for_axis
@@ -30,6 +29,7 @@ from src.engine.initial_clustering import (
     _fit_kmeans,
     _softmax,
 )
+from src.engine.turn_builder import TurnBuilder
 from src.logger import log_clustering_run
 from src.models import (
     Cluster as DbCluster,
@@ -77,64 +77,49 @@ def _auto_select_k(X: np.ndarray, k_min: int, k_max: int) -> int:
 def semantic_clustering(
     data_points: list[DataPoint],
     axis_hint: str,
-    session_id: str,
-    turn_number: int,
-    db: Session,
+    builder: TurnBuilder,
     k: int | None = None,
     axis_weight: float = 0.7,
     auto_name: bool = True,
-) -> tuple[list[DbCluster], list[DbSoftAssignment]]:
+) -> list[DbCluster]:
     """Re-cluster the dataset in a hybrid embedding space oriented by axis_hint.
 
-    Dissolves all currently active clusters for the session and creates k fresh
-    ones. Soft assignment probabilities are derived from softmax over negative
-    squared distances in the hybrid space, exactly as in initial_clustering.
+    Stages all currently active clusters (in DB and within this turn) as
+    dissolved and creates k fresh ones. Soft assignment probabilities are
+    derived from softmax over negative squared distances in the hybrid space,
+    exactly as in initial_clustering. The builder's snapshot is REPLACED — a
+    semantic re-embed is a wholesale re-clustering, not an incremental update.
 
     Args:
         data_points: All DataPoint rows for the session's dataset. Rows without
             embeddings are silently skipped.
         axis_hint: The semantic axis extracted from the oracle's intent
             (e.g. "angry", "battery life", "positive sentiment").
-        session_id: The ChatSession to re-cluster.
-        turn_number: Turn at which the new snapshot is written. Must be > 0
-            (turn 0 is reserved for the pre-oracle initial clustering).
-        db: SQLAlchemy session. Changes are staged but not committed.
+        builder: The conversation turn's in-memory staging area.
         k: Number of clusters to produce. When None (default), selected
             automatically via silhouette score over k=K_AUTO_MIN..K_AUTO_MAX.
-            Pass explicitly to override.
         axis_weight: Fraction [0, 1] of k-means distance signal attributed to
-            the semantic axis (default 0.7). The remaining 1-axis_weight comes
-            from the original embeddings. 0.7 means 70% axis, 30% topic.
+            the semantic axis (default 0.7).
         auto_name: When True (default), new clusters are named by the LLM via
-            name_clusters. When False the generic "Cluster N" placeholders are
-            kept. Naming is best-effort — a failed LLM call leaves the
-            placeholder and never aborts the clustering.
+            ``name_clusters``. Naming is best-effort — a failed LLM call
+            leaves placeholders and never aborts the clustering.
 
     Returns:
-        (new_clusters, new_assignments) — not yet staged on the DB session.
-        The caller must db.add() each object and then commit.
+        The list of new clusters (also added to ``builder.new_clusters``).
 
     Raises:
-        ValueError: no active clusters; k < 1; no embedded points; k > number
-            of embedded points; or turn_number <= 0.
+        ValueError: no active clusters; k < 1; no embedded points; or
+            k > number of embedded points.
     """
-    if turn_number <= 0:
+    if builder.turn_number <= 0:
         raise ValueError(
-            f"semantic_clustering requires turn_number > 0, got {turn_number}"
+            f"semantic_clustering requires turn_number > 0, got {builder.turn_number}"
         )
 
-    # Load existing active clusters — we will dissolve them as part of this operation.
-    existing = (
-        db.query(DbCluster)
-        .filter(
-            DbCluster.session_id == session_id,
-            DbCluster.dissolved_at_turn.is_(None),
-        )
-        .all()
-    )
+    existing = builder.active_clusters()
     if not existing:
         raise ValueError(
-            f"session '{session_id}' has no active clusters — "
+            f"session '{builder.session_id}' has no active clusters — "
             "run initial clustering first"
         )
 
@@ -146,8 +131,8 @@ def semantic_clustering(
         raise ValueError("no data points have embeddings")
 
     print(
-        f"[semantic-clustering] session={session_id}  axis='{axis_hint}'  "
-        f"n_embedded={len(valid)}  turn={turn_number}",
+        f"[semantic-clustering] session={builder.session_id}  axis='{axis_hint}'  "
+        f"n_embedded={len(valid)}  turn={builder.turn_number}",
         flush=True,
     )
 
@@ -168,22 +153,20 @@ def semantic_clustering(
         flush=True,
     )
 
-    # Run k-means in the hybrid space.
     model = _fit_kmeans(X, k)
 
-    # Dissolve all existing active clusters as of this turn.
+    # Stage all existing active clusters as dissolved.
     for cluster in existing:
-        cluster.dissolved_at_turn = turn_number
+        builder.dissolve(cluster.id)
 
-    # Build k fresh cluster objects.
     cluster_ids = [str(uuid.uuid4()) for _ in range(k)]
     new_clusters = [
         DbCluster(
             id=cluster_ids[i],
-            session_id=session_id,
+            session_id=builder.session_id,
             name=f"Cluster {i + 1}",
             description="",
-            created_at_turn=turn_number,
+            created_at_turn=builder.turn_number,
         )
         for i in range(k)
     ]
@@ -195,16 +178,29 @@ def semantic_clustering(
     sq_dists = np.sum(diffs**2, axis=2)  # (N, k)
     probs = _softmax(-sq_dists, axis=1)  # (N, k), sums to 1 per row
 
-    new_assignments = [
-        DbSoftAssignment(
-            data_point_id=valid[i].id,
-            cluster_id=cluster_ids[j],
-            turn_number=turn_number,
-            probability=float(probs[i, j]),
-        )
-        for i in range(len(valid))
-        for j in range(k)
-    ]
+    # Replace the builder's snapshot wholesale — every point now has fresh
+    # probabilities over the new clusters; old clusters fall away with their
+    # dissolution.
+    new_snapshot: dict[str, dict[str, float]] = {}
+    naming_assignments: list[DbSoftAssignment] = []
+    for i, dp in enumerate(valid):
+        dist: dict[str, float] = {}
+        for j in range(k):
+            p = float(probs[i, j])
+            dist[cluster_ids[j]] = p
+            naming_assignments.append(
+                DbSoftAssignment(
+                    data_point_id=dp.id,
+                    cluster_id=cluster_ids[j],
+                    turn_number=builder.turn_number,
+                    probability=p,
+                )
+            )
+        new_snapshot[dp.id] = dist
+    builder.snapshot = new_snapshot
+
+    for cluster in new_clusters:
+        builder.add_cluster(cluster)
 
     # Log hard-assignment sizes so we can see if k-means split the data sensibly.
     hard_labels = model.labels_
@@ -215,24 +211,22 @@ def semantic_clustering(
         flush=True,
     )
 
-    # Name the new clusters via LLM — best-effort, a failure leaves placeholders.
     if auto_name:
-        name_clusters(new_clusters, new_assignments, valid, axis_hint=axis_hint)
+        name_clusters(new_clusters, naming_assignments, valid, axis_hint=axis_hint)
 
-    # Log the run so it appears in clustering_runs.jsonl alongside all other runs.
     silhouette: float | None = None
     if 2 <= k < len(valid):
         from sklearn.metrics import silhouette_score
         silhouette = float(silhouette_score(X, model.labels_))
 
     log_clustering_run(
-        session_id=session_id,
+        session_id=builder.session_id,
         k=k,
         backend=SEMANTIC_BACKEND,
         seed=KMEANS_RANDOM_STATE,
         n_points=len(valid),
         silhouette=silhouette,
-        turn_number=turn_number,
+        turn_number=builder.turn_number,
     )
 
     sil_str = f"{silhouette:.3f}" if silhouette is not None else "N/A (k=1)"
@@ -243,4 +237,4 @@ def semantic_clustering(
         flush=True,
     )
 
-    return new_clusters, new_assignments
+    return new_clusters

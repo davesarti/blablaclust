@@ -2,86 +2,36 @@
 
 When the oracle gives feedback ("merge A and B", "split C", "call this cluster
 X"), P3's ``f_apply_operations`` decides *which* operation to run; the functions
-here perform the actual data-point reassignment with k-means and persist the
-result. They are the executor half of the conversational loop, on the
-clustering side.
+here perform the actual data-point reassignment with k-means and stage the
+result on a :class:`~src.engine.turn_builder.TurnBuilder`. The executor half
+of the conversational loop, on the clustering side.
 
-Transaction ownership
----------------------
-Every function stages its changes on the passed ``db`` session (adds new rows,
-mutates existing clusters) but never calls ``commit()`` — the caller owns the
-transaction, so a turn that applies several operations stays atomic. This
-mirrors ``initial_clustering``: the engine builds the objects, the caller
-commits. Validation always runs before any mutation, so a failed operation
-leaves the session untouched.
+Builder model
+-------------
+Every function in this module mutates the passed ``builder`` rather than the
+DB session: snapshot updates go into ``builder.snapshot``, new clusters into
+``builder.new_clusters``, dissolutions into ``builder.dissolved_ids``. The
+caller (``f_apply_operations``) commits the builder ONCE at the end of the
+conversation turn. That keeps ``Cluster.created_at_turn``,
+``Cluster.dissolved_at_turn``, ``SoftAssignment.turn_number``, and
+``Turn.turn_number`` in lockstep — no more snapshot-axis vs conv-axis drift.
 
 Snapshot model
 --------------
-``SoftAssignment.turn_number`` identifies a *complete* snapshot of the
-clustering: at any turn every data point has a probability for each cluster it
-belongs to, and ``f_uncertainty`` / ``hard_cluster_stats`` read
-``max(turn_number)`` expecting it to be complete. An operation at turn N
-therefore writes a full snapshot at N — the points it reassigns get fresh
-probabilities, every other point is carried forward from the previous snapshot.
-Because of this the target ``turn_number`` must be strictly greater than the
-latest existing snapshot turn, otherwise carried-forward rows would collide on
-the ``(data_point_id, cluster_id, turn_number)`` primary key.
+``builder.snapshot`` represents the *complete* clustering at this turn: every
+data point has a probability for each cluster it belongs to. The builder is
+preloaded with the previous turn's snapshot and each op mutates it forward.
+Ops that touch a subset of points (merge, split, batch_move_points) update
+only that subset and leave the rest carried-forward; ``semantic_clustering``
+replaces the snapshot wholesale.
 """
 
 import uuid
 
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-
 from src.engine.cluster_naming import name_clusters
 from src.engine.initial_clustering import initial_clustering
+from src.engine.turn_builder import TurnBuilder
 from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoftAssignment
-
-
-def _load_latest_snapshot(
-    session_id: str, db: Session
-) -> tuple[int, dict[str, dict[str, float]]]:
-    """Return ``(turn, snapshot)`` for the session's most recent clustering.
-
-    ``snapshot`` maps ``data_point_id -> {cluster_id: probability}``.
-
-    Raises:
-        ValueError: the session has no clusters or no soft assignments yet.
-    """
-    cluster_ids = [
-        cid
-        for (cid,) in db.query(DbCluster.id)
-        .filter(DbCluster.session_id == session_id)
-        .all()
-    ]
-    if not cluster_ids:
-        raise ValueError(
-            f"session '{session_id}' has no clusters — run initial clustering first"
-        )
-
-    latest_turn = (
-        db.query(func.max(DbSoftAssignment.turn_number))
-        .filter(DbSoftAssignment.cluster_id.in_(cluster_ids))
-        .scalar()
-    )
-    if latest_turn is None:
-        raise ValueError(
-            f"session '{session_id}' has no soft assignments — "
-            "run initial clustering first"
-        )
-
-    rows = (
-        db.query(DbSoftAssignment)
-        .filter(
-            DbSoftAssignment.cluster_id.in_(cluster_ids),
-            DbSoftAssignment.turn_number == latest_turn,
-        )
-        .all()
-    )
-    snapshot: dict[str, dict[str, float]] = {}
-    for row in rows:
-        snapshot.setdefault(row.data_point_id, {})[row.cluster_id] = row.probability
-    return latest_turn, snapshot
 
 
 def _hard_cluster(distribution: dict[str, float]) -> str:
@@ -91,196 +41,163 @@ def _hard_cluster(distribution: dict[str, float]) -> str:
 
 def merge_clusters(
     cluster_ids: list[str],
-    session_id: str,
-    turn_number: int,
-    db: Session,
+    builder: TurnBuilder,
     auto_name: bool = True,
     axis_hint: str | None = None,
 ) -> DbCluster:
     """Merge two or more clusters into one.
 
-    Pools every data point belonging to ``cluster_ids``, dissolves those
-    clusters, creates a single new cluster, and writes a fresh soft-assignment
-    snapshot at ``turn_number``: pooled points are assigned to the new cluster
-    with probability 1.0, every other point is carried forward (its probability
-    mass on the merged clusters is folded into the new cluster).
+    Pools every data point belonging to ``cluster_ids``, stages the source
+    clusters as dissolved, adds a single new cluster to the builder, and
+    updates the in-memory snapshot: pooled points are assigned to the new
+    cluster with probability 1.0, every other point is carried forward (its
+    probability mass on the merged clusters is dropped).
 
     Args:
         cluster_ids: IDs of the clusters to merge (at least 2 distinct).
-        session_id: Session that owns the clusters.
-        turn_number: Turn at which the merge is recorded. Must be strictly
-            greater than the latest existing snapshot turn.
-        db: SQLAlchemy session (changes staged but not committed).
+        builder: The conversation turn's in-memory staging area.
         auto_name: When True (default), the merged cluster is labelled by the
-            LLM (via ``name_clusters``) from its pooled points, so it is named
-            at the moment of creation. When False the cluster keeps the generic
-            ``"Merge of A + B"`` placeholder. Naming is best-effort — a failed
-            LLM call leaves the placeholder and never aborts the merge.
+            LLM from its pooled points. Naming is best-effort — a failed LLM
+            call leaves the placeholder and never aborts the merge.
+        axis_hint: When provided, forwarded to ``name_clusters`` so the merged
+            cluster reflects the session's semantic axis.
 
     Returns:
-        The new cluster.
+        The new cluster (also added to ``builder.new_clusters``).
 
     Raises:
         ValueError: fewer than 2 distinct clusters; an unknown or
-            already-dissolved cluster; no existing clustering; or a
-            ``turn_number`` that is not strictly after the latest snapshot.
+            already-dissolved cluster; or an empty prior snapshot.
     """
     merge_ids = list(dict.fromkeys(cluster_ids))  # dedupe, preserve order
     if len(merge_ids) < 2:
         raise ValueError("merge_clusters needs at least 2 distinct clusters")
 
-    clusters = (
-        db.query(DbCluster)
-        .filter(DbCluster.id.in_(merge_ids), DbCluster.session_id == session_id)
-        .all()
-    )
-    by_id = {c.id: c for c in clusters}
-    missing = [cid for cid in merge_ids if cid not in by_id]
+    by_id: dict[str, DbCluster] = {}
+    missing: list[str] = []
+    for cid in merge_ids:
+        cluster = builder.get_cluster(cid)
+        if cluster is None:
+            missing.append(cid)
+        else:
+            by_id[cid] = cluster
     if missing:
-        raise ValueError(f"clusters not found in session '{session_id}': {missing}")
-    dissolved = [cid for cid in merge_ids if by_id[cid].dissolved_at_turn is not None]
+        raise ValueError(
+            f"clusters not found in session '{builder.session_id}': {missing}"
+        )
+    dissolved = [cid for cid in merge_ids if builder.is_dissolved(cid)]
     if dissolved:
         raise ValueError(f"cannot merge already-dissolved clusters: {dissolved}")
 
-    prev_turn, snapshot = _load_latest_snapshot(session_id, db)
-    if turn_number <= prev_turn:
+    if not builder.snapshot:
         raise ValueError(
-            f"turn_number ({turn_number}) must be greater than the latest "
-            f"snapshot turn ({prev_turn})"
+            f"session '{builder.session_id}' has no soft assignments — "
+            "run initial clustering first"
         )
 
     merge_set = set(merge_ids)
     new_cluster = DbCluster(
         id=str(uuid.uuid4()),
-        session_id=session_id,
+        session_id=builder.session_id,
         name=("Merge of " + " + ".join(by_id[cid].name for cid in merge_ids))[:255],
         description="",
-        created_at_turn=turn_number,
+        created_at_turn=builder.turn_number,
     )
 
-    # Dissolve the merged clusters as of this turn.
-    for cid in merge_ids:
-        by_id[cid].dissolved_at_turn = turn_number
-
-    # Write the full snapshot at turn_number.
-    new_assignments: list[DbSoftAssignment] = []
-    for point_id, distribution in snapshot.items():
+    # Update the in-memory snapshot.
+    #
+    # We deliberately DROP the probability mass that the merged clusters used
+    # to hold for unpooled points. Folding it into the new cluster
+    # (`merged_mass = sum(p[cid] for cid in merge_set)`) sounds symmetric but
+    # breaks the hard partition: soft assignments in high-dim sentence-
+    # transformer space are very flat (e.g. 5 clusters → ~0.20 each), so the
+    # sum of two merged probabilities routinely exceeds the un-merged argmax
+    # and the entire dataset would collapse into the merged cluster after a
+    # single merge op. Dropping the mass preserves each un-pooled point's
+    # original hard cluster. Probabilities for these points no longer sum to
+    # 1, but the snapshot stays internally consistent (pooled points are 1.0
+    # on the new cluster) and the argmax is what downstream UI reads.
+    for point_id, distribution in list(builder.snapshot.items()):
         if _hard_cluster(distribution) in merge_set:
-            # Pooled point — now belongs entirely to the merged cluster.
-            new_assignments.append(
-                DbSoftAssignment(
-                    data_point_id=point_id,
-                    cluster_id=new_cluster.id,
-                    turn_number=turn_number,
-                    probability=1.0,
-                )
-            )
+            builder.snapshot[point_id] = {new_cluster.id: 1.0}
         else:
-            # Untouched point — carry forward only the non-merged-cluster mass.
-            #
-            # We deliberately DROP the probability mass that the merged clusters
-            # used to hold for this point. Folding it into the new cluster
-            # (`merged_mass = sum(prob[cid] for cid in merge_set)`) sounds
-            # symmetric but breaks the hard partition: k-means soft assignments
-            # in high-dim sentence-transformer space are very flat (e.g. 5
-            # clusters → ~0.20 each), so the sum of two merged probabilities
-            # routinely exceeds the un-merged argmax and the entire dataset
-            # collapses into the merged cluster after a single merge op.
-            # Dropping the mass preserves each un-pooled point's original hard
-            # cluster. Probabilities for these points no longer sum to 1, but
-            # the snapshot stays internally consistent (pooled points are 1.0
-            # on the new cluster) and the argmax is what downstream UI reads.
-            for cid, prob in distribution.items():
-                if cid in merge_set:
-                    continue
-                new_assignments.append(
-                    DbSoftAssignment(
-                        data_point_id=point_id,
-                        cluster_id=cid,
-                        turn_number=turn_number,
-                        probability=prob,
-                    )
-                )
+            builder.snapshot[point_id] = {
+                cid: prob
+                for cid, prob in distribution.items()
+                if cid not in merge_set
+            }
 
-    db.add(new_cluster)
-    for assignment in new_assignments:
-        db.add(assignment)
+    for cid in merge_ids:
+        builder.dissolve(cid)
+    builder.add_cluster(new_cluster)
 
-    # Name the merged cluster at creation time so naming is propagated by the
-    # operation itself, not bolted on afterwards by the caller.
     if auto_name:
         merged_point_ids = [
-            a.data_point_id for a in new_assignments if a.cluster_id == new_cluster.id
+            pid
+            for pid, dist in builder.snapshot.items()
+            if _hard_cluster(dist) == new_cluster.id
         ]
         merged_points = (
-            db.query(DataPoint).filter(DataPoint.id.in_(merged_point_ids)).all()
+            builder.db.query(DataPoint).filter(DataPoint.id.in_(merged_point_ids)).all()
         )
-        name_clusters([new_cluster], new_assignments, merged_points, axis_hint=axis_hint)
+        # name_clusters reads .probability / .data_point_id / .cluster_id off
+        # SoftAssignment objects; transient instances work as data carriers
+        # without being added to the DB session.
+        naming_assignments = [
+            DbSoftAssignment(
+                data_point_id=pid,
+                cluster_id=new_cluster.id,
+                turn_number=builder.turn_number,
+                probability=1.0,
+            )
+            for pid in merged_point_ids
+        ]
+        name_clusters(
+            [new_cluster], naming_assignments, merged_points, axis_hint=axis_hint
+        )
 
     return new_cluster
 
 
 def split_cluster(
     cluster_id: str,
-    session_id: str,
-    turn_number: int,
-    db: Session,
+    builder: TurnBuilder,
     k: int = 2,
     auto_name: bool = True,
     axis_hint: str | None = None,
 ) -> list[DbCluster]:
     """Split one cluster into ``k`` sub-clusters using k-means on its members.
 
-    Takes the data points whose hard assignment is ``cluster_id``, dissolves
-    that cluster, runs real k-means with the requested ``k`` on the subset,
-    and writes a fresh soft-assignment snapshot at ``turn_number``: subset
-    points get the new k-means probabilities, every other point is carried
-    forward (re-normalised after dropping the dissolved cluster).
-
-    Args:
-        cluster_id: ID of the cluster to split.
-        session_id: Session that owns the cluster.
-        turn_number: Turn at which the split is recorded. Must be strictly
-            greater than the latest existing snapshot turn.
-        db: SQLAlchemy session (changes staged but not committed).
-        k: Number of sub-clusters to produce. Must be >= 2 (default: 2).
-        auto_name: When True (default), the child clusters are labelled by the
-            LLM (via ``name_clusters``) from their representative points, so
-            they are named at the moment of creation. When False the children
-            keep the generic ``"<parent> - part N"`` placeholder. Naming is
-            best-effort — a failed LLM call leaves the placeholders and never
-            aborts the split.
-
-    Returns:
-        The ``k`` newly created child clusters.
+    Takes the data points whose hard assignment is ``cluster_id``, stages the
+    cluster as dissolved, runs real k-means with the requested ``k`` on the
+    subset, and updates the in-memory snapshot: subset points get the new
+    k-means probabilities, every other point is carried forward (re-normalised
+    after dropping the dissolved cluster).
 
     Raises:
         ValueError: ``k`` is less than 2; unknown or already-dissolved
-            cluster; fewer than ``k`` points assigned to it; no existing
-            clustering; or a ``turn_number`` that is not strictly after the
-            latest snapshot.
+            cluster; fewer than ``k`` points assigned to it; or an empty
+            prior snapshot.
     """
     if k < 2:
         raise ValueError(f"k must be at least 2, got {k}")
-    cluster = (
-        db.query(DbCluster)
-        .filter(DbCluster.id == cluster_id, DbCluster.session_id == session_id)
-        .first()
-    )
+    cluster = builder.get_cluster(cluster_id)
     if cluster is None:
-        raise ValueError(f"cluster '{cluster_id}' not found in session '{session_id}'")
-    if cluster.dissolved_at_turn is not None:
-        raise ValueError(f"cannot split already-dissolved cluster '{cluster_id}'")
-
-    prev_turn, snapshot = _load_latest_snapshot(session_id, db)
-    if turn_number <= prev_turn:
         raise ValueError(
-            f"turn_number ({turn_number}) must be greater than the latest "
-            f"snapshot turn ({prev_turn})"
+            f"cluster '{cluster_id}' not found in session '{builder.session_id}'"
+        )
+    if builder.is_dissolved(cluster_id):
+        raise ValueError(f"cannot split already-dissolved cluster '{cluster_id}'")
+    if not builder.snapshot:
+        raise ValueError(
+            f"session '{builder.session_id}' has no soft assignments — "
+            "run initial clustering first"
         )
 
     subset_ids = [
-        pid for pid, dist in snapshot.items() if _hard_cluster(dist) == cluster_id
+        pid
+        for pid, dist in builder.snapshot.items()
+        if _hard_cluster(dist) == cluster_id
     ]
     if len(subset_ids) < k:
         raise ValueError(
@@ -288,168 +205,128 @@ def split_cluster(
             f"assigned to it (need at least {k})"
         )
 
-    subset_points = db.query(DataPoint).filter(DataPoint.id.in_(subset_ids)).all()
+    subset_points = (
+        builder.db.query(DataPoint).filter(DataPoint.id.in_(subset_ids)).all()
+    )
 
-    # Real k-means on the subset — initial_clustering builds the k new
-    # clusters and their soft assignments at turn_number. The split path does
-    # not surface a silhouette, so we ignore the third return value.
+    # Real k-means on the subset. initial_clustering builds the k new clusters
+    # and their soft assignments at builder.turn_number; we then merge those
+    # subset assignments into our in-memory snapshot.
     new_clusters, subset_assignments, _ = initial_clustering(
         data_points=subset_points,
         k=k,
-        session_id=session_id,
-        turn_number=turn_number,
+        session_id=builder.session_id,
+        turn_number=builder.turn_number,
     )
     for index, child in enumerate(new_clusters, start=1):
         child.name = f"{cluster.name} - part {index}"[:255]
 
-    # Name the children at creation time so naming is propagated by the
-    # operation itself; the "part N" labels above are the fallback if the LLM
-    # call fails. subset_assignments / subset_points are already in memory.
     if auto_name:
         name_clusters(new_clusters, subset_assignments, subset_points, axis_hint=axis_hint)
 
-    # Dissolve the parent cluster as of this turn.
-    cluster.dissolved_at_turn = turn_number
+    # Subset distributions from k-means
+    subset_dist: dict[str, dict[str, float]] = {}
+    for a in subset_assignments:
+        subset_dist.setdefault(a.data_point_id, {})[a.cluster_id] = a.probability
 
-    # Full snapshot: subset points handled by initial_clustering; carry the rest forward.
-    new_assignments: list[DbSoftAssignment] = list(subset_assignments)
-    subset_set = set(subset_ids)
-    for point_id, distribution in snapshot.items():
-        if point_id in subset_set:
-            continue
-        kept = {cid: p for cid, p in distribution.items() if cid != cluster_id}
-        total = sum(kept.values())
-        if total <= 0.0:
-            continue  # point had mass only on the split cluster (already in subset)
-        for cid, prob in kept.items():
-            new_assignments.append(
-                DbSoftAssignment(
-                    data_point_id=point_id,
-                    cluster_id=cid,
-                    turn_number=turn_number,
-                    probability=prob / total,
-                )
-            )
+    # Update the snapshot: subset points get fresh distributions; others have
+    # any residual mass on the dissolved parent dropped.
+    for point_id, distribution in list(builder.snapshot.items()):
+        if point_id in subset_dist:
+            builder.snapshot[point_id] = subset_dist[point_id]
+        else:
+            builder.snapshot[point_id] = {
+                cid: prob for cid, prob in distribution.items() if cid != cluster_id
+            }
 
+    builder.dissolve(cluster_id)
     for child in new_clusters:
-        db.add(child)
-    for assignment in new_assignments:
-        db.add(assignment)
+        builder.add_cluster(child)
+
     return new_clusters
 
 
 def batch_move_points(
     moves: list[tuple[str, str]],
-    session_id: str,
-    turn_number: int,
-    db: Session,
+    builder: TurnBuilder,
 ) -> None:
-    """Reassign specific data points to clusters, written as ONE snapshot.
+    """Reassign specific data points to clusters in a single batch.
 
-    Handles every form of point-level reassignment in the system — oracle
-    feedback ("this review belongs in A, not B"), boundary-repair corrections,
-    and uncertainty resolution. Each moved point collapses to ``{target: 1.0}``
-    in the new snapshot (mass on its previous clusters is dropped), every other
-    point is carried forward unchanged, and any active cluster left without
-    probability mass is dissolved as of this turn.
+    Handles every form of point-level reassignment — oracle feedback ("this
+    review belongs in A, not B"), boundary-repair corrections, uncertainty
+    resolution. Each moved point collapses to ``{target: 1.0}`` in the
+    in-memory snapshot (its previous mass is dropped), every other point is
+    carried forward unchanged, and any active cluster left without probability
+    mass is staged as dissolved.
 
-    All pairs land at the SAME ``turn_number`` regardless of count, so a batch
-    of N moves consumes one snapshot turn rather than N — that keeps the UMAP
-    turn history aligned with conversation turns instead of one entry per moved
-    point.
-
-    If the same point appears in multiple pairs the last one wins — the caller
-    is expected to dedupe, but the function is robust to it.
+    If the same point appears in multiple pairs the last one wins.
 
     Raises:
         ValueError: empty ``moves``; an unknown or already-dissolved target
-            cluster; a point id not present in the latest snapshot; no existing
-            clustering; or a ``turn_number`` not strictly after the latest
-            snapshot.
+            cluster; a point id not present in the current snapshot; or an
+            empty prior snapshot.
     """
     if not moves:
         raise ValueError("batch_move_points needs at least 1 move")
+    if not builder.snapshot:
+        raise ValueError(
+            f"session '{builder.session_id}' has no soft assignments — "
+            "run initial clustering first"
+        )
 
     target_ids = {target for _, target in moves}
-    targets = (
-        db.query(DbCluster)
-        .filter(DbCluster.id.in_(target_ids), DbCluster.session_id == session_id)
-        .all()
-    )
-    targets_by_id = {c.id: c for c in targets}
-    missing_targets = [tid for tid in target_ids if tid not in targets_by_id]
-    if missing_targets:
+    missing: list[str] = []
+    dissolved: list[str] = []
+    for tid in target_ids:
+        cluster = builder.get_cluster(tid)
+        if cluster is None:
+            missing.append(tid)
+        elif builder.is_dissolved(tid):
+            dissolved.append(tid)
+    if missing:
         raise ValueError(
-            f"target cluster(s) not found in session '{session_id}': {missing_targets}"
+            f"target cluster(s) not found in session '{builder.session_id}': {missing}"
         )
-    dissolved_targets = [
-        tid for tid in target_ids if targets_by_id[tid].dissolved_at_turn is not None
-    ]
-    if dissolved_targets:
+    if dissolved:
         raise ValueError(
-            f"cannot move points into dissolved cluster(s): {dissolved_targets}"
+            f"cannot move points into dissolved cluster(s): {dissolved}"
         )
 
-    prev_turn, snapshot = _load_latest_snapshot(session_id, db)
-    if turn_number <= prev_turn:
-        raise ValueError(
-            f"turn_number ({turn_number}) must be greater than the latest "
-            f"snapshot turn ({prev_turn})"
-        )
-
-    # Last-write-wins on duplicate point ids.
     move_map: dict[str, str] = {pid: target for pid, target in moves}
-    missing_points = [pid for pid in move_map if pid not in snapshot]
-    if missing_points:
-        raise ValueError(f"points not found in current snapshot: {missing_points}")
+    not_in_snapshot = [pid for pid in move_map if pid not in builder.snapshot]
+    if not_in_snapshot:
+        raise ValueError(f"points not found in current snapshot: {not_in_snapshot}")
 
-    new_snapshot: dict[str, dict[str, float]] = {}
-    for point_id, distribution in snapshot.items():
-        if point_id in move_map:
-            new_snapshot[point_id] = {move_map[point_id]: 1.0}
-        else:
-            new_snapshot[point_id] = dict(distribution)
+    for point_id, target in move_map.items():
+        builder.snapshot[point_id] = {target: 1.0}
 
-    for point_id, distribution in new_snapshot.items():
-        for cid, prob in distribution.items():
-            db.add(
-                DbSoftAssignment(
-                    data_point_id=point_id,
-                    cluster_id=cid,
-                    turn_number=turn_number,
-                    probability=prob,
-                )
-            )
-
-    clusters_with_mass = {cid for dist in new_snapshot.values() for cid in dist}
-    active_clusters = (
-        db.query(DbCluster)
-        .filter(
-            DbCluster.session_id == session_id,
-            DbCluster.dissolved_at_turn.is_(None),
-        )
-        .all()
-    )
-    for cluster in active_clusters:
+    # Dissolve any active cluster that holds no mass after the move. The
+    # target always retains mass (the moved points), so it never dissolves
+    # itself.
+    clusters_with_mass = {
+        cid for dist in builder.snapshot.values() for cid in dist
+    }
+    for cluster in builder.active_clusters():
         if cluster.id not in clusters_with_mass:
-            cluster.dissolved_at_turn = turn_number
+            builder.dissolve(cluster.id)
 
 
 def rename_cluster(
     cluster_id: str,
     new_name: str,
     new_description: str,
-    db: Session,
+    builder: TurnBuilder,
 ) -> DbCluster:
     """Rename a cluster — updates name and description only.
 
-    No k-means, no soft-assignment changes. Does not commit — the caller owns
-    the transaction.
+    No k-means, no snapshot changes. Mutates the cluster object directly
+    (whether it's already in DB or staged in the builder); the builder commit
+    flushes the mutation when the rest of the turn does.
 
     Raises:
         ValueError: the cluster does not exist.
     """
-    cluster = db.query(DbCluster).filter(DbCluster.id == cluster_id).first()
+    cluster = builder.get_cluster(cluster_id)
     if cluster is None:
         raise ValueError(f"cluster '{cluster_id}' not found")
     cluster.name = new_name[:255]

@@ -38,8 +38,8 @@ def client():
             id="s1", dataset_id="ds", embedding_model="default", status="active"
         )
     )
-    db.add(DataPoint(id="p1", dataset_id="ds", data={"text": "a"}, embedding=[0.1, 0.2]))
-    db.add(DataPoint(id="p2", dataset_id="ds", data={"text": "b"}, embedding=[0.3, 0.4]))
+    db.add(DataPoint(id="p1", dataset_id="ds", text="a", embedding=[0.1, 0.2]))
+    db.add(DataPoint(id="p2", dataset_id="ds", text="b", embedding=[0.3, 0.4]))
     db.add(
         Cluster(id="c1", session_id="s1", name="C1", description="d", created_at_turn=0)
     )
@@ -85,7 +85,7 @@ def test_semantic_reembed_op_triggers_clustering_pipeline(client):
         _f_output_returns([fake_op], display="re-embedding along battery life"),
     ), patch(
         "backend.routers.turns.semantic_clustering",
-        return_value=([], []),
+        return_value=[],
     ) as mock_sc:
         resp = client.post("/turns", json=_payload("battery life"))
 
@@ -93,7 +93,8 @@ def test_semantic_reembed_op_triggers_clustering_pipeline(client):
     assert mock_sc.called, "semantic_clustering should have been invoked"
     kwargs = mock_sc.call_args.kwargs
     assert kwargs["axis_hint"] == "battery life"
-    assert kwargs["session_id"] == "s1"
+    # The builder carries session id + turn number now; no more session_id kwarg.
+    assert kwargs["builder"].session_id == "s1"
 
 
 def test_semantic_reembed_op_works_on_a_later_turn(client):
@@ -115,7 +116,7 @@ def test_semantic_reembed_op_works_on_a_later_turn(client):
         "backend.routers.turns.f_output",
         _f_output_returns([fake_op], display="re-embedding along tone"),
     ), patch(
-        "backend.routers.turns.semantic_clustering", return_value=([], [])
+        "backend.routers.turns.semantic_clustering", return_value=[]
     ) as mock_sc_turn2:
         resp2 = client.post("/turns", json=_payload("tone"))
 

@@ -377,53 +377,44 @@ def project_session(
         full_assignments[t] = arr
         full_confidence[t] = conf
 
-    # Collapse consecutive turns whose hard partition is visually indistinguishable
-    # from the previous kept turn. The user's symptom — "more turns than the ones
-    # effectively occurred in the conversation, which show no changes" — comes
-    # from pre-fix boundary repair writing one snapshot per moved point: each one
-    # differs from its predecessor by a single point-cluster swap, invisible in a
-    # 1000+ point UMAP. We collapse anything within VISUAL_DIFF_THRESHOLD point
-    # changes of the last kept partition. Reembed turns are kept unconditionally
-    # so the axis-arrow / geometry-aware payloads stay reachable even when a
-    # re-embed coincidentally yields the same hard partition.
-    VISUAL_DIFF_THRESHOLD = 1
-    reembed_turn_set: set[int] = set()
-    if all_turns:
-        for row in db.query(Turn).filter(Turn.session_id == session_id).all():
-            ops = ((row.system_output or {}).get("state_snapshot") or {}).get("operations") or []
-            if any(isinstance(op, dict) and op.get("type") == "semantic_reembed" for op in ops):
-                reembed_turn_set.add(row.turn_number)
+    # One slider frame per conversation turn. The engine commits each conv
+    # turn's changes as a single snapshot at turn_number == conv turn number,
+    # so ``Turn.turn_number`` is also the snapshot key in ``full_assignments``.
+    # Frame 0 is the initial clustering (pre-conversation); conv turns with no
+    # snapshot-writing ops inherit the previous frame's partition so the slider
+    # stays 1:1 with the conversation.
+    conv_rows = sorted(
+        db.query(Turn).filter(Turn.session_id == session_id).all(),
+        key=lambda r: r.turn_number,
+    )
 
-    def _partition_diff(a: list[str | None], b: list[str | None]) -> int:
-        return sum(1 for x, y in zip(a, b) if x != y)
-
-    # Compare each turn to its IMMEDIATE predecessor (not the last kept turn) —
-    # that lets a long run of single-point boundary-repair moves collapse all
-    # the way through, even though the cumulative diff from the run's start is
-    # large. The slider then jumps from "before repair" to the next genuinely
-    # different partition.
+    snapshot_for_frame: dict[int, int] = {}
     turns: list[int] = []
-    prev_arr: list[str | None] | None = None
-    for t in all_turns:
-        arr = full_assignments[t]
-        is_reembed = t in reembed_turn_set
-        keep = (
-            prev_arr is None
-            or is_reembed
-            or _partition_diff(arr, prev_arr) > VISUAL_DIFF_THRESHOLD
-        )
-        if keep:
-            turns.append(t)
-        prev_arr = arr
+    prev_snap: int | None = None
+    if 0 in full_assignments:
+        turns.append(0)
+        snapshot_for_frame[0] = 0
+        prev_snap = 0
+
+    for row in conv_rows:
+        N = row.turn_number
+        snap = N if N in full_assignments else prev_snap
+        if snap is None:
+            continue
+        turns.append(N)
+        snapshot_for_frame[N] = snap
+        prev_snap = snap
 
     assignments: dict[str, list[str | None]] = {
-        str(t): full_assignments[t] for t in turns
+        str(frame): full_assignments[snap]
+        for frame, snap in snapshot_for_frame.items()
     }
     # Per-point assignment confidence = the winning soft-probability. Lets the
     # UI convey the underlying distribution (e.g. how decisively a point sits in
     # its cluster) instead of only the hard argmax.
     confidence: dict[str, list[float | None]] = {
-        str(t): full_confidence[t] for t in turns
+        str(frame): full_confidence[snap]
+        for frame, snap in snapshot_for_frame.items()
     }
 
     points_out = [
@@ -436,41 +427,35 @@ def project_session(
         for i, p in enumerate(points)
     ]
 
-    # ── Centroids per turn in 2-D UMAP space ─────────────────────────────────
+    # ── Centroids per frame in 2-D UMAP space ───────────────────────────────
     centroids_by_turn: dict[str, dict[str, list[float]]] = {}
-    for t in turns:
+    for frame, snap in snapshot_for_frame.items():
         cluster_point_idxs: dict[str, list[int]] = defaultdict(list)
-        for pid, (_, cid) in best[t].items():
+        for pid, (_, cid) in best[snap].items():
             if pid in idx:
                 cluster_point_idxs[cid].append(idx[pid])
-        centroids_by_turn[str(t)] = {
+        centroids_by_turn[str(frame)] = {
             cid: [float(np.mean(coords[idxs, 0])), float(np.mean(coords[idxs, 1]))]
             for cid, idxs in cluster_point_idxs.items()
         }
 
-    # ── Semantic re-embed turns: read DIRECTLY from persisted ops ──────────────
-    # The previous "≥2 clusters dissolved AND ≥2 created same turn" heuristic
-    # missed real re-embeds where the engine dissolved 1 cluster and created
-    # many (or vice-versa). The truth is the `semantic_reembed` op stored in
-    # the turn's system_output — use it as the single source.
+    # ── Semantic re-embed frames: read from persisted ops ────────────────────
     axis_labels: dict[int, str] = {}
-    turn_rows = (
-        db.query(Turn)
-        .filter(Turn.session_id == session_id)
-        .all()
-    )
-    for row in turn_rows:
+    for row in conv_rows:
         ops = ((row.system_output or {}).get("state_snapshot") or {}).get("operations") or []
         for op in ops:
             if isinstance(op, dict) and op.get("type") == "semantic_reembed":
                 label = op.get("axis_label") or op.get("axis_hint") or ""
                 axis_labels[row.turn_number] = str(label)
-    reembed_turns = sorted(axis_labels.keys())
+    reembed_frames = sorted(f for f in axis_labels if f in snapshot_for_frame)
 
     axis_arrows: dict[str, dict] = {}
-    for t in reembed_turns:
-        created = [cid for cid, m in clusters_meta.items() if m["created_at_turn"] == t]
-        cents_dict = centroids_by_turn.get(str(t), {})
+    for frame in reembed_frames:
+        snap = snapshot_for_frame[frame]
+        # Created clusters are keyed by SNAPSHOT turn in the cluster table, not
+        # conv turn — match against the resolved snapshot.
+        created = [cid for cid, m in clusters_meta.items() if m["created_at_turn"] == snap]
+        cents_dict = centroids_by_turn.get(str(frame), {})
         pts_2d = np.array([cents_dict[cid] for cid in created if cid in cents_dict])
         if len(pts_2d) < 2:
             continue
@@ -480,28 +465,26 @@ def project_session(
         _, _, vt = np.linalg.svd(centered, full_matrices=False)
         direction = vt[0]
         span = float(np.max(np.abs(centered @ direction))) * 1.2
-        axis_arrows[str(t)] = {
+        axis_arrows[str(frame)] = {
             "from":  (mean_2d - span * direction).tolist(),
             "to":    (mean_2d + span * direction).tolist(),
-            "label": axis_labels.get(t, ""),
+            "label": axis_labels.get(frame, ""),
         }
 
-    # ── Phase 2: geometry-aware projection for semantic_reembed turns ────────
-    # Opt-in (geometry_aware=True). For each reembed_turn we fit a SECOND UMAP
+    # ── Phase 2: geometry-aware projection for semantic_reembed frames ───────
+    # Opt-in (geometry_aware=True). For each reembed frame we fit a SECOND UMAP
     # on the hybrid (D+1) space the engine clustered in at that turn, so the
     # partition is shown in the re-oriented geometry instead of cutting across
     # the original topic layout. Deterministic (abstract-phrase poles, no LLM).
     geometry_aware_payload: dict[str, dict[str, Any]] = {}
-    if geometry_aware and reembed_turns:
-        # Re-materialise the original embedding matrix only when we actually
-        # need it (the baseline path uses a coords cache, so X may not be in
-        # scope yet). Same row order as ``points``.
+    if geometry_aware and reembed_frames:
         X_orig = np.array([p.embedding for p in points], dtype=np.float32)
-        for t in reembed_turns:
+        for frame in reembed_frames:
+            snap = snapshot_for_frame[frame]
             res = compute_geometry_aware_coords(
                 db,
                 session_id=session_id,
-                turn_number=t,
+                turn_number=frame,
                 embeddings=X_orig,
                 point_ids=point_ids,
                 reducer=reducer,
@@ -512,16 +495,16 @@ def project_session(
             ga_coords, ga_reducer, axis_label_t = res
             ga_centroids: dict[str, list[float]] = {}
             for cid, idxs in {
-                cid: [idx[pid] for pid, (_, cid_p) in best[t].items()
+                cid: [idx[pid] for pid, (_, cid_p) in best[snap].items()
                       if cid_p == cid and pid in idx]
-                for cid in {c for _, c in best[t].values()}
+                for cid in {c for _, c in best[snap].values()}
             }.items():
                 if idxs:
                     ga_centroids[cid] = [
                         float(np.mean(ga_coords[idxs, 0])),
                         float(np.mean(ga_coords[idxs, 1])),
                     ]
-            geometry_aware_payload[str(t)] = {
+            geometry_aware_payload[str(frame)] = {
                 "axis_label": axis_label_t,
                 "reducer": ga_reducer,
                 "points": [
@@ -531,6 +514,15 @@ def project_session(
                 ],
                 "centroids": ga_centroids,
             }
+
+    # Silhouette: stored against snapshot turns in the clustering log; re-key
+    # to the slider's frame numbers so the UI overlay lines up.
+    sil_by_snap = _silhouette_by_turn(session_id)
+    silhouette_by_frame: dict[str, float | None] = {}
+    for frame, snap in snapshot_for_frame.items():
+        val = sil_by_snap.get(str(snap))
+        if val is not None:
+            silhouette_by_frame[str(frame)] = val
 
     return {
         "session_id": session_id,
@@ -543,9 +535,9 @@ def project_session(
         "assignments": assignments,
         "confidence": confidence,
         "clusters": clusters_meta,
-        "silhouette_by_turn": _silhouette_by_turn(session_id),
+        "silhouette_by_turn": silhouette_by_frame,
         "centroids_by_turn": centroids_by_turn,
-        "reembed_turns": reembed_turns,
+        "reembed_turns": reembed_frames,
         "axis_arrows": axis_arrows,
         "geometry_aware": geometry_aware_payload,
     }

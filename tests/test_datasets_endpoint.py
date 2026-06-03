@@ -30,10 +30,10 @@ def client():
     # inserted without the embedding= kwarg (SQL NULL). Explicitly passing
     # embedding=None would store a JSON null literal instead, which
     # COUNT(embedding) treats as non-null — not what production sees.
-    db.add(DataPoint(id="a1", dataset_id="alpha", data={"text": "x"}, embedding=[0.1]))
-    db.add(DataPoint(id="a2", dataset_id="alpha", data={"text": "y"}, embedding=[0.2]))
-    db.add(DataPoint(id="a3", dataset_id="alpha", data={"text": "z"}))
-    db.add(DataPoint(id="b1", dataset_id="beta", data={"text": "q"}))
+    db.add(DataPoint(id="a1", dataset_id="alpha", text="x", embedding=[0.1]))
+    db.add(DataPoint(id="a2", dataset_id="alpha", text="y", embedding=[0.2]))
+    db.add(DataPoint(id="a3", dataset_id="alpha", text="z"))
+    db.add(DataPoint(id="b1", dataset_id="beta", text="q"))
     db.commit()
     db.close()
 

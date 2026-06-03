@@ -1,8 +1,10 @@
-"""Unit tests for cluster operations: merge / split / rename.
+"""Unit tests for cluster operations: merge / split / batch_move / rename.
 
 These run entirely against an in-memory SQLite database — no LLM calls — so the
 clustering maths (k-means via initial_clustering) and the DB persistence are
-both exercised for real.
+both exercised for real. Each op is invoked through a TurnBuilder; the builder
+is committed once per test so the resulting snapshot lives at the configured
+turn number, mirroring how the router orchestrates a real conv turn.
 """
 
 from unittest.mock import patch
@@ -19,6 +21,7 @@ from src.engine.cluster_operations import (
     split_cluster,
 )
 from src.engine.initial_clustering import initial_clustering
+from src.engine.turn_builder import TurnBuilder
 from src.models import Base, ChatSession, Cluster, DataPoint, SoftAssignment
 
 SESSION_ID = "sess-ops"
@@ -133,6 +136,11 @@ def db_big_cluster():
     session.close()
 
 
+def _builder(db, turn_number: int, session_id: str = SESSION_ID) -> TurnBuilder:
+    """Convenience: load a builder for the given conv turn."""
+    return TurnBuilder.load(session_id, turn_number, db)
+
+
 def _hard_clusters(db, turn: int) -> dict[str, str]:
     """Map point_id -> hard cluster_id from the soft assignments at `turn`."""
     rows = db.query(SoftAssignment).filter(SoftAssignment.turn_number == turn).all()
@@ -158,17 +166,15 @@ def test_merge_dissolves_old_and_creates_new(db):
     assert len(cluster_ids) == 3
     merge_ids = cluster_ids[:2]
 
-    new_cluster = merge_clusters(
-        merge_ids, SESSION_ID, turn_number=1, db=db, auto_name=False
-    )
+    builder = _builder(db, turn_number=1)
+    new_cluster = merge_clusters(merge_ids, builder, auto_name=False)
+    builder.commit()
     db.commit()
 
-    # the two merged clusters are dissolved as of the operation's turn
     for cid in merge_ids:
         merged = db.query(Cluster).filter(Cluster.id == cid).first()
         assert merged.dissolved_at_turn == 1
 
-    # exactly one fresh active cluster was created at turn 1
     assert new_cluster.created_at_turn == 1
     assert new_cluster.dissolved_at_turn is None
     active = _active_clusters(db)
@@ -181,17 +187,15 @@ def test_merge_creates_full_snapshot_at_turn(db):
     merge_ids = cluster_ids[:2]
     hard_before = _hard_clusters(db, turn=0)
 
-    new_cluster = merge_clusters(
-        merge_ids, SESSION_ID, turn_number=1, db=db, auto_name=False
-    )
+    builder = _builder(db, turn_number=1)
+    new_cluster = merge_clusters(merge_ids, builder, auto_name=False)
+    builder.commit()
     db.commit()
 
-    # every point present at turn 0 still has assignments at turn 1 (complete snapshot)
     assert set(_hard_clusters(db, turn=1)) == set(hard_before)
 
-    # pooled points are now 100% in the new cluster
     pooled = [pid for pid, cid in hard_before.items() if cid in set(merge_ids)]
-    assert pooled  # sanity: the merge actually pooled points
+    assert pooled
     for point_id in pooled:
         rows = (
             db.query(SoftAssignment)
@@ -205,43 +209,33 @@ def test_merge_creates_full_snapshot_at_turn(db):
         assert rows[0].cluster_id == new_cluster.id
         assert rows[0].probability == 1.0
 
-    # no turn-1 assignment references a dissolved cluster
     turn1 = db.query(SoftAssignment).filter(SoftAssignment.turn_number == 1).all()
     assert all(a.cluster_id not in set(merge_ids) for a in turn1)
 
 
 def test_merge_rejects_single_cluster(db):
     cluster_ids = [c.id for c in _active_clusters(db)]
+    builder = _builder(db, turn_number=1)
     with pytest.raises(ValueError):
-        merge_clusters(cluster_ids[:1], SESSION_ID, turn_number=1, db=db)
+        merge_clusters(cluster_ids[:1], builder)
 
 
 def test_merge_rejects_unknown_cluster(db):
     cluster_ids = [c.id for c in _active_clusters(db)]
+    builder = _builder(db, turn_number=1)
     with pytest.raises(ValueError):
-        merge_clusters(
-            [cluster_ids[0], "does-not-exist"], SESSION_ID, turn_number=1, db=db
-        )
+        merge_clusters([cluster_ids[0], "does-not-exist"], builder)
 
 
 def test_merge_rejects_stale_turn_number(db):
-    cluster_ids = [c.id for c in _active_clusters(db)]
-    # a snapshot already exists at turn 0 → turn_number must be > 0
+    # a snapshot already exists at turn 0 → builder must load at turn > 0
     with pytest.raises(ValueError):
-        merge_clusters(cluster_ids[:2], SESSION_ID, turn_number=0, db=db)
+        _builder(db, turn_number=0)
 
 
 def test_merge_preserves_argmax_on_flat_soft_assignments():
     """Regression: a merge over flat soft assignments must NOT pull every
     un-pooled point into the new cluster.
-
-    Repro from the live bug report: 5 k-means clusters, oracle merges 2 small
-    ones. With high-dim sentence-transformer embeddings the per-point softmax
-    is very flat (e.g. each cluster ~0.20). Old code folded the merged mass
-    back onto the new cluster (`merged_mass = sum(p[cid] for cid in merge_set)`),
-    which routinely exceeded any single un-merged cluster's prob → the new
-    cluster became the argmax for the entire dataset and un-merged clusters
-    dropped to 0 points.
     """
     engine = create_engine(
         "sqlite://",
@@ -257,9 +251,6 @@ def test_merge_preserves_argmax_on_flat_soft_assignments():
     for i, cid in enumerate(["c1", "c2", "c3", "c4", "c5"]):
         db.add(Cluster(id=cid, session_id=sid, name=f"C{i+1}", description="",
                        created_at_turn=0))
-    # One point with a flat 5-way distribution. Hard cluster is c1 (0.27).
-    # Two merged clusters (c4, c5) sum to 0.18+0.17 = 0.35 — would beat c1
-    # under the buggy fold.
     flat = {"c1": 0.27, "c2": 0.20, "c3": 0.18, "c4": 0.18, "c5": 0.17}
     db.add(DataPoint(id="p1", dataset_id="ds", text="p", embedding=[0.0]))
     for cid, prob in flat.items():
@@ -267,10 +258,11 @@ def test_merge_preserves_argmax_on_flat_soft_assignments():
                               turn_number=0, probability=prob))
     db.commit()
 
-    merge_clusters(["c4", "c5"], sid, turn_number=1, db=db, auto_name=False)
+    builder = TurnBuilder.load(sid, 1, db)
+    merge_clusters(["c4", "c5"], builder, auto_name=False)
+    builder.commit()
     db.commit()
 
-    # The hard cluster of p1 must STILL be c1, not the merged cluster.
     hard = _hard_clusters(db, turn=1)
     assert hard["p1"] == "c1", (
         f"p1 should stay in c1; got {hard['p1']} — merge folded mass back, bug regressed."
@@ -294,7 +286,9 @@ def _target_with_two_points(db) -> tuple[str, set[str]]:
 def test_split_creates_two_clusters_with_real_kmeans(db):
     target, subset = _target_with_two_points(db)
 
-    children = split_cluster(target, SESSION_ID, turn_number=1, db=db, auto_name=False)
+    builder = _builder(db, turn_number=1)
+    children = split_cluster(target, builder, auto_name=False)
+    builder.commit()
     db.commit()
 
     assert len(children) == 2
@@ -304,12 +298,11 @@ def test_split_creates_two_clusters_with_real_kmeans(db):
         assert child.created_at_turn == 1
         assert child.dissolved_at_turn is None
 
-    # subset points are reassigned to the two children and genuinely partitioned
     hard1 = _hard_clusters(db, turn=1)
     child_ids = {c.id for c in children}
     for point_id in subset:
         assert hard1[point_id] in child_ids
-    assert {hard1[pid] for pid in subset} == child_ids  # real k-means uses both
+    assert {hard1[pid] for pid in subset} == child_ids
 
 
 def test_split_carries_other_points_forward(db):
@@ -317,26 +310,26 @@ def test_split_carries_other_points_forward(db):
     hard0 = _hard_clusters(db, turn=0)
     others = {pid for pid in hard0 if pid not in subset}
 
-    split_cluster(target, SESSION_ID, turn_number=1, db=db, auto_name=False)
+    builder = _builder(db, turn_number=1)
+    split_cluster(target, builder, auto_name=False)
+    builder.commit()
     db.commit()
 
     hard1 = _hard_clusters(db, turn=1)
-    # untouched points keep their cluster, snapshot stays complete
     assert set(hard1) == set(hard0)
     for point_id in others:
         assert hard1[point_id] == hard0[point_id]
-    # nothing at turn 1 still points at the dissolved cluster
     turn1 = db.query(SoftAssignment).filter(SoftAssignment.turn_number == 1).all()
     assert all(a.cluster_id != target for a in turn1)
 
 
 def test_split_rejects_unknown_cluster(db):
+    builder = _builder(db, turn_number=1)
     with pytest.raises(ValueError):
-        split_cluster("does-not-exist", SESSION_ID, turn_number=1, db=db)
+        split_cluster("does-not-exist", builder)
 
 
 def test_split_rejects_cluster_with_one_point(db):
-    # a separate session whose single cluster holds just one point
     db.add(
         ChatSession(
             id="solo", dataset_id="ds", embedding_model="default", status="active"
@@ -357,21 +350,23 @@ def test_split_rejects_cluster_with_one_point(db):
     )
     db.commit()
 
+    builder = TurnBuilder.load("solo", 1, db)
     with pytest.raises(ValueError):
-        split_cluster("solo-c", "solo", turn_number=1, db=db)
+        split_cluster("solo-c", builder)
 
 
 def test_split_rejects_k_less_than_2(db):
     cluster_id = _active_clusters(db)[0].id
+    builder = _builder(db, turn_number=1)
     with pytest.raises(ValueError, match="k must be at least 2"):
-        split_cluster(cluster_id, SESSION_ID, turn_number=1, db=db, k=1)
+        split_cluster(cluster_id, builder, k=1)
 
 
 def test_split_k3_creates_three_children(db_big_cluster):
     db = db_big_cluster
-    children = split_cluster(
-        "big-c", SESSION_BIG, turn_number=1, db=db, k=3, auto_name=False
-    )
+    builder = TurnBuilder.load(SESSION_BIG, 1, db)
+    children = split_cluster("big-c", builder, k=3, auto_name=False)
+    builder.commit()
     db.commit()
 
     assert len(children) == 3
@@ -381,24 +376,19 @@ def test_split_k3_creates_three_children(db_big_cluster):
         assert child.created_at_turn == 1
         assert child.dissolved_at_turn is None
 
-    # All six points are reassigned; every child cluster actually gets members.
     hard1 = _hard_clusters(db, turn=1)
     child_ids = {c.id for c in children}
     assert set(hard1.values()) == child_ids
 
 
 def test_split_rejects_k_exceeds_point_count(db):
-    # Each cluster in the default fixture has exactly 2 points; k=3 requires ≥ 3.
     target, _ = _target_with_two_points(db)
+    builder = _builder(db, turn_number=1)
     with pytest.raises(ValueError, match="need at least 3"):
-        split_cluster(target, SESSION_ID, turn_number=1, db=db, k=3)
+        split_cluster(target, builder, k=3)
 
 
 # --- naming propagation -----------------------------------------------------
-#
-# merge_clusters / split_cluster name the clusters they create via name_clusters.
-# These tests patch name_clusters (its own behaviour is covered by
-# test_cluster_naming.py) and only check that the operations wire it correctly.
 
 
 def test_merge_names_cluster_by_default(db):
@@ -410,13 +400,13 @@ def test_merge_names_cluster_by_default(db):
             c.description = "LLM description"
         return clusters
 
+    builder = _builder(db, turn_number=1)
     with patch(
         "src.engine.cluster_operations.name_clusters", side_effect=fake_name
     ) as mock_name:
-        new_cluster = merge_clusters(cluster_ids[:2], SESSION_ID, turn_number=1, db=db)
+        new_cluster = merge_clusters(cluster_ids[:2], builder)
 
     mock_name.assert_called_once()
-    # the merged cluster is the one handed to the namer
     named = mock_name.call_args.args[0]
     assert len(named) == 1 and named[0] is new_cluster
     assert new_cluster.name == "Named by LLM"
@@ -425,12 +415,11 @@ def test_merge_names_cluster_by_default(db):
 
 def test_merge_skips_naming_when_auto_name_false(db):
     cluster_ids = [c.id for c in _active_clusters(db)]
+    builder = _builder(db, turn_number=1)
     with patch("src.engine.cluster_operations.name_clusters") as mock_name:
-        new_cluster = merge_clusters(
-            cluster_ids[:2], SESSION_ID, turn_number=1, db=db, auto_name=False
-        )
+        new_cluster = merge_clusters(cluster_ids[:2], builder, auto_name=False)
     mock_name.assert_not_called()
-    assert new_cluster.name.startswith("Merge of")  # generic placeholder kept
+    assert new_cluster.name.startswith("Merge of")
 
 
 def test_split_names_children_by_default(db):
@@ -441,10 +430,11 @@ def test_split_names_children_by_default(db):
             c.name = f"Named child {i}"
         return clusters
 
+    builder = _builder(db, turn_number=1)
     with patch(
         "src.engine.cluster_operations.name_clusters", side_effect=fake_name
     ) as mock_name:
-        children = split_cluster(target, SESSION_ID, turn_number=1, db=db)
+        children = split_cluster(target, builder)
 
     mock_name.assert_called_once()
     assert mock_name.call_args.args[0] is children
@@ -453,12 +443,10 @@ def test_split_names_children_by_default(db):
 
 def test_split_skips_naming_when_auto_name_false(db):
     target, _ = _target_with_two_points(db)
+    builder = _builder(db, turn_number=1)
     with patch("src.engine.cluster_operations.name_clusters") as mock_name:
-        children = split_cluster(
-            target, SESSION_ID, turn_number=1, db=db, auto_name=False
-        )
+        children = split_cluster(target, builder, auto_name=False)
     mock_name.assert_not_called()
-    # children keep the generic "<parent> - part N" placeholder
     assert all(" - part " in c.name for c in children)
 
 
@@ -473,12 +461,9 @@ def test_batch_move_keeps_source_with_residual_soft_mass(db):
     members = [pid for pid, cid in hard0.items() if cid == source]
     target = next(cid for cid in set(hard0.values()) if cid != source)
 
-    batch_move_points(
-        [(pid, target) for pid in members],
-        SESSION_ID,
-        turn_number=1,
-        db=db,
-    )
+    builder = _builder(db, turn_number=1)
+    batch_move_points([(pid, target) for pid in members], builder)
+    builder.commit()
     db.commit()
 
     survivor = db.query(Cluster).filter(Cluster.id == source).first()
@@ -499,12 +484,9 @@ def test_batch_move_applies_all_in_one_snapshot(db):
     cluster_ids = list(set(hard0.values()))
     assert len(cluster_ids) >= 2
 
-    # Build (point_id, target) pairs that actually move each point to a
-    # DIFFERENT cluster, so the hard partition really changes.
     moves: list[tuple[str, str]] = []
     seen_points: set[str] = set()
     for cid in cluster_ids:
-        # Pick one point currently in `cid` and send it to a different cluster.
         for pid, src in hard0.items():
             if src == cid and pid not in seen_points:
                 target = next(c for c in cluster_ids if c != cid)
@@ -512,16 +494,16 @@ def test_batch_move_applies_all_in_one_snapshot(db):
                 seen_points.add(pid)
                 break
 
-    batch_move_points(moves, SESSION_ID, turn_number=1, db=db)
+    builder = _builder(db, turn_number=1)
+    batch_move_points(moves, builder)
+    builder.commit()
     db.commit()
 
-    # Exactly one new snapshot turn was created.
     snapshot_turns = {
         r.turn_number for r in db.query(SoftAssignment).all()
     }
     assert snapshot_turns == {0, 1}
 
-    # Every moved point landed in its new cluster.
     hard1 = _hard_clusters(db, turn=1)
     for pid, target in moves:
         assert hard1[pid] == target
@@ -534,7 +516,9 @@ def test_batch_move_carries_other_points_forward(db):
     target = next(cid for cid in cluster_ids if cid != source)
     others = {pid for pid in hard0 if pid != point_id}
 
-    batch_move_points([(point_id, target)], SESSION_ID, turn_number=1, db=db)
+    builder = _builder(db, turn_number=1)
+    batch_move_points([(point_id, target)], builder)
+    builder.commit()
     db.commit()
 
     hard1 = _hard_clusters(db, turn=1)
@@ -544,32 +528,23 @@ def test_batch_move_carries_other_points_forward(db):
 
 
 def test_batch_move_rejects_empty_list(db):
+    builder = _builder(db, turn_number=1)
     with pytest.raises(ValueError):
-        batch_move_points([], SESSION_ID, turn_number=1, db=db)
+        batch_move_points([], builder)
 
 
 def test_batch_move_rejects_unknown_target(db):
     point_id = next(iter(_hard_clusters(db, turn=0)))
+    builder = _builder(db, turn_number=1)
     with pytest.raises(ValueError):
-        batch_move_points(
-            [(point_id, "does-not-exist")], SESSION_ID, turn_number=1, db=db
-        )
+        batch_move_points([(point_id, "does-not-exist")], builder)
 
 
 def test_batch_move_rejects_unknown_point(db):
     target = _active_clusters(db)[0].id
+    builder = _builder(db, turn_number=1)
     with pytest.raises(ValueError):
-        batch_move_points(
-            [("does-not-exist", target)], SESSION_ID, turn_number=1, db=db
-        )
-
-
-def test_batch_move_rejects_stale_turn_number(db):
-    hard0 = _hard_clusters(db, turn=0)
-    point_id, source = next(iter(hard0.items()))
-    target = next(cid for cid in set(hard0.values()) if cid != source)
-    with pytest.raises(ValueError):
-        batch_move_points([(point_id, target)], SESSION_ID, turn_number=0, db=db)
+        batch_move_points([("does-not-exist", target)], builder)
 
 
 def test_batch_move_dedupes_duplicate_points(db):
@@ -579,12 +554,12 @@ def test_batch_move_dedupes_duplicate_points(db):
     others = [cid for cid in set(hard0.values()) if cid != source]
     first_target, second_target = others[0], others[-1]
 
+    builder = _builder(db, turn_number=1)
     batch_move_points(
         [(point_id, first_target), (point_id, second_target)],
-        SESSION_ID,
-        turn_number=1,
-        db=db,
+        builder,
     )
+    builder.commit()
     db.commit()
     hard1 = _hard_clusters(db, turn=1)
     assert hard1[point_id] == second_target
@@ -598,20 +573,24 @@ def test_rename_updates_name_and_description(db):
     soft_assignments_before = db.query(SoftAssignment).count()
     clusters_before = db.query(Cluster).count()
 
+    builder = _builder(db, turn_number=1)
     renamed = rename_cluster(
-        cluster.id, "Positive reviews", "Mostly 5-star feedback", db
+        cluster.id, "Positive reviews", "Mostly 5-star feedback", builder
     )
+    # rename does not require a snapshot write; do NOT commit the builder
+    # (that would write a duplicate snapshot at turn 1). The name mutation is
+    # on the existing DB row and flushes with the next db.commit().
     db.commit()
 
     assert renamed.id == cluster.id
     assert renamed.name == "Positive reviews"
     assert renamed.description == "Mostly 5-star feedback"
-    # nothing else changed: not dissolved, no clusters or assignments added/removed
     assert renamed.dissolved_at_turn is None
     assert db.query(SoftAssignment).count() == soft_assignments_before
     assert db.query(Cluster).count() == clusters_before
 
 
 def test_rename_rejects_unknown_cluster(db):
+    builder = _builder(db, turn_number=1)
     with pytest.raises(ValueError):
-        rename_cluster("does-not-exist", "X", "Y", db)
+        rename_cluster("does-not-exist", "X", "Y", builder)

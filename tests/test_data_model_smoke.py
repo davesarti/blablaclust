@@ -57,7 +57,7 @@ def _seed_full_graph(db: Session) -> None:
     session = ChatSession(
         id="sess-1", dataset_id="ds", embedding_model="default", status="active"
     )
-    point = DataPoint(id="dp-1", dataset_id="ds", data={"text": "hi"}, embedding=[0.1, 0.2])
+    point = DataPoint(id="dp-1", dataset_id="ds", text="hi", embedding=[0.1, 0.2])
     cluster = Cluster(
         id="cl-1",
         session_id="sess-1",
@@ -90,8 +90,8 @@ def test_full_graph_persists_and_round_trips(db):
     assert cluster.session is session
     assert cluster.soft_assignments[0].probability == 1.0
     assert cluster.soft_assignments[0].data_point.id == "dp-1"
-    # JSON columns round-trip as dict / list.
-    assert db.query(DataPoint).one().data == {"text": "hi"}
+    # Text/JSON columns round-trip.
+    assert db.query(DataPoint).one().text == "hi"
     assert db.query(Turn).one().oracle_input == {"text": "merge these"}
 
 

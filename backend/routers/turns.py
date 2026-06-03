@@ -1,7 +1,6 @@
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.main import get_db
@@ -16,8 +15,9 @@ from src.engine.f_semantic_reembed import AxisNotDiscriminativeError
 from src.engine.f_uncertainty import f_cluster_uncertainty
 from src.engine.f_update_preferences import f_update_preferences
 from src.engine.semantic_clustering import semantic_clustering
+from src.engine.turn_builder import TurnBuilder
 from src.harness import ConversationContext, estimate_cost_usd
-from src.models import ChatSession, Cluster as DbCluster, DataPoint, SoftAssignment, Turn
+from src.models import ChatSession, Cluster as DbCluster, DataPoint, Turn
 from src.schemas import Display, InputOracle, SystemTurn, TurnRead
 
 router = APIRouter(prefix="/turns", tags=["turns"])
@@ -67,26 +67,23 @@ def _pending_clarify_axis(prior_turns: list[Turn]) -> str | None:
 def _run_semantic_reembed(
     session: ChatSession,
     axis_label: str,
-    turn_number: int,
-    db: Session,
+    builder: TurnBuilder,
 ):
-    """Re-cluster all dataset points along axis_label. Returns (clusters, assigns)."""
+    """Re-cluster all dataset points along axis_label, staging on the builder."""
     print(
         f"[turns] semantic-reembed  session={session.id}  "
-        f"axis_label='{axis_label}'  turn={turn_number}",
+        f"axis_label='{axis_label}'  turn={builder.turn_number}",
         flush=True,
     )
     all_data_points = (
-        db.query(DataPoint)
+        builder.db.query(DataPoint)
         .filter(DataPoint.dataset_id == session.dataset_id)
         .all()
     )
     return semantic_clustering(
         data_points=all_data_points,
         axis_hint=axis_label,
-        session_id=session.id,
-        turn_number=turn_number,
-        db=db,
+        builder=builder,
     )
 
 
@@ -280,14 +277,27 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
             )
         operations = []  # no clustering changes this turn
 
-    # ── Re-embedding op routes to the semantic_clustering pipeline ────────────
-    # The prompt declares semantic_reembed exclusive; if the LLM accidentally
-    # mixes it with structural ops we take the re-embed (it would dissolve the
-    # other ops' target clusters anyway) and log a warning.
+    # ── Run the conv turn's clustering changes on an in-memory builder ───────
+    # The builder accumulates merge/split/move/reembed mutations plus boundary
+    # repair, and commits ONCE so the snapshot writes at exactly turn=new_turn_number.
+    # That keeps Turn.turn_number, SoftAssignment.turn_number, and
+    # Cluster.created_at_turn / dissolved_at_turn in lockstep — no separate
+    # snapshot axis.
     reembed_op = next(
         (op for op in operations if op.get("type") == "semantic_reembed"), None
     )
+    if operations:
+        try:
+            builder = TurnBuilder.load(session.id, new_turn_number, db)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=409, detail=f"Cannot start turn: {exc}"
+            )
+
     if reembed_op is not None:
+        # The prompt declares semantic_reembed exclusive; if the LLM accidentally
+        # mixes it with structural ops we take the re-embed (it would dissolve the
+        # other ops' target clusters anyway) and log a warning.
         if len(operations) > 1:
             print(
                 f"[turns] semantic_reembed mixed with other ops — taking re-embed only  "
@@ -302,13 +312,15 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
                 detail="semantic_reembed operation requires a non-empty axis_label",
             )
         try:
-            new_clusters, new_assignments = _run_semantic_reembed(
+            new_clusters = _run_semantic_reembed(
                 session=session,
                 axis_label=axis_label,
-                turn_number=new_turn_number,
-                db=db,
+                builder=builder,
             )
+            builder.commit()
+            db.commit()
         except AxisNotDiscriminativeError:
+            db.rollback()
             return TurnRead(
                 session_id=session.id,
                 turn_number=new_turn_number - 1,  # don't advance — let oracle retry
@@ -331,16 +343,12 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
                 ),
             )
         except (ValueError, RuntimeError) as exc:
+            db.rollback()
             raise HTTPException(
                 status_code=422,
                 detail=f"Semantic re-embedding failed: {exc}",
             )
 
-        for cluster in new_clusters:
-            db.add(cluster)
-        for assignment in new_assignments:
-            db.add(assignment)
-        db.commit()
         # Normalize the persisted op shape — keep the axis under axis_label so
         # _active_axis_from_history can find it on the next turn.
         operations = [
@@ -351,26 +359,14 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
             }
         ]
 
-    # ── Structural ops route to f_apply_operations ────────────────────────────
     elif operations:
-        latest_snapshot_turn = (
-            db.query(func.max(SoftAssignment.turn_number))
-            .filter(SoftAssignment.cluster_id.in_([c.id for c in clusters]))
-            .scalar()
-        )
-        start_turn = new_turn_number
-        if latest_snapshot_turn is not None and latest_snapshot_turn >= start_turn:
-            start_turn = latest_snapshot_turn + 1
-
+        # ── Structural ops + (optional) boundary repair on the same builder ──
         try:
-            final_turn = f_apply_operations(
+            f_apply_operations(
                 operations,
-                session_id=session.id,
-                turn_number=start_turn,
-                db=db,
+                builder=builder,
                 axis_hint=session_axis_hint,
             )
-            db.commit()
         except (ValueError, KeyError) as exc:
             db.rollback()
             raise HTTPException(
@@ -378,58 +374,45 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
                 detail=f"Engine produced an invalid operation: {exc}",
             )
 
-        # ── Boundary repair: LLM validates uncertain points after merge/split ──
         structural_types = {op.get("type") for op in operations}
         if structural_types & {"merge", "split"}:
+            # Boundary repair targets the clusters created during THIS turn —
+            # those are the ones whose k-means placement might have boundary
+            # mistakes the LLM can correct.
             affected_clusters = [
                 c.id
-                for c in db.query(DbCluster.id)
-                .filter(
-                    DbCluster.session_id == session.id,
-                    DbCluster.created_at_turn >= start_turn,
-                    DbCluster.dissolved_at_turn.is_(None),
-                )
-                .all()
+                for c in builder.new_clusters.values()
+                if c.id not in builder.dissolved_ids
             ]
             moves = f_boundary_repair(
-                session_id=session.id,
+                builder=builder,
                 affected_cluster_ids=affected_clusters,
                 oracle_text=payload.raw_text,
-                db=db,
             )
             if moves:
-                latest_snap = (
-                    db.query(func.max(SoftAssignment.turn_number))
-                    .filter(SoftAssignment.cluster_id.in_([
-                        c.id for c in db.query(DbCluster.id)
-                        .filter(DbCluster.session_id == session.id,
-                                DbCluster.dissolved_at_turn.is_(None))
-                        .all()
-                    ]))
-                    .scalar()
-                ) or final_turn
-                repair_turn = latest_snap + 1
                 try:
-                    # One snapshot for the whole repair batch — feeding each move
-                    # through f_apply_operations would burn one snapshot turn per
-                    # point, padding the UMAP slider with N visually-identical
-                    # "one-point-change" entries per repair.
                     batch_move_points(
                         [(m["point_id"], m["target_cluster_id"]) for m in moves],
-                        session_id=session.id,
-                        turn_number=repair_turn,
-                        db=db,
+                        builder=builder,
                     )
-                    db.commit()
                     print(
                         f"[turns] boundary-repair  session={session.id}  "
                         f"moved={len(moves)}",
                         flush=True,
                     )
                 except Exception as exc:
-                    db.rollback()
                     log_repair_skip = f"boundary repair moves failed ({exc}), skipping"
                     print(f"[turns] {log_repair_skip}", flush=True)
+
+        try:
+            builder.commit()
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to commit turn: {exc}",
+            )
 
     # ── Common path: planner + persist turn ───────────────────────────────────
     updated_state = build_session_state(db, session)
