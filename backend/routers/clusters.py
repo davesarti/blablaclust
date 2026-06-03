@@ -15,7 +15,10 @@ router = APIRouter(prefix="/clusters", tags=["clusters"])
 
 
 class ClusteringRequest(BaseModel):
-    k: int = Field(default=5, ge=1, le=50)
+    # Conversational clustering needs at least 2 clusters to be meaningful —
+    # k=1 is "no clustering". Enforced here at the API boundary (the engine
+    # primitive stays permissive at k>=1 for direct unit-test use).
+    k: int = Field(default=5, ge=2, le=50)
     generate_names: bool = Field(
         default=True,
         description="Ask the LLM to name each cluster (set false to skip LLM calls)",
@@ -73,7 +76,7 @@ def run_initial_clustering(
     if payload.oracle_intent:
         parsed = f_parse_clustering_intent(
             payload.oracle_intent,
-            k_min=1,
+            k_min=2,
             k_max=min(50, len(data_points)),
         )
         k = parsed["k"]
