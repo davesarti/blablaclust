@@ -6,6 +6,7 @@ Mutates the Cluster objects in place.
 """
 
 import difflib
+import re
 
 from src.harness import call_llm, render_prompt, loads_llm_json
 from src.logger import log
@@ -13,6 +14,7 @@ from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoft
 
 _NAMING_PCT = 0.15   # fraction of hard-assigned points to send to the naming LLM
 _NAMING_CAP = 30     # upper bound regardless of cluster size
+_PLACEHOLDER_RE = re.compile(r"^Cluster \d+$")
 
 
 def _point_text(dp: DataPoint) -> str:
@@ -70,6 +72,7 @@ def name_clusters(
     # Build one text block per cluster and remember which clusters have data.
     cluster_blocks: list[str] = []
     nameable_ids: list[str] = []
+    block_by_id: dict[str, str] = {}
 
     for cluster in clusters:
         cluster_assignments = assignments_by_cluster.get(cluster.id, [])
@@ -85,8 +88,10 @@ def name_clusters(
             continue  # empty cluster — keep placeholder name
 
         reviews_block = "\n".join(f"- {t}" for t in sample_texts)
-        cluster_blocks.append(f"[Cluster id: {cluster.id}]\n{reviews_block}")
+        block = f"[Cluster id: {cluster.id}]\n{reviews_block}"
+        cluster_blocks.append(block)
         nameable_ids.append(cluster.id)
+        block_by_id[cluster.id] = block
 
     if not cluster_blocks:
         return clusters  # nothing to name
@@ -121,6 +126,7 @@ def name_clusters(
     _MAX_ATTEMPTS = 3
     response = None
     last_exc: Exception | None = None
+    clusters_by_id = {c.id: c for c in clusters}
 
     for attempt in range(_MAX_ATTEMPTS):
         try:
@@ -130,7 +136,6 @@ def name_clusters(
             )
             parsed = loads_llm_json(response.text)
 
-            clusters_by_id = {c.id: c for c in clusters}
             parsed_keys = list(parsed.keys())
             for cluster_id in nameable_ids:
                 entry = parsed.get(cluster_id)
@@ -167,5 +172,66 @@ def name_clusters(
                     "Last error: %s. Last response: %s",
                     _MAX_ATTEMPTS, e, snippet,
                 )
+
+    # Detect clusters that still have a placeholder name after the main call
+    # (e.g. because the LLM UUID typo exceeded the fuzzy-match cutoff) and
+    # retry with a smaller, targeted prompt containing only those clusters.
+    still_placeholder = [
+        cid for cid in nameable_ids
+        if _PLACEHOLDER_RE.match(clusters_by_id[cid].name)
+    ]
+    if still_placeholder:
+        log.info(
+            "cluster_naming: %d cluster(s) still have placeholder names, "
+            "issuing targeted retry: %s",
+            len(still_placeholder), still_placeholder,
+        )
+        retry_blocks = "\n\n".join(block_by_id[cid] for cid in still_placeholder)
+        retry_prompt = render_prompt(
+            "cluster_naming",
+            clusters_block=retry_blocks,
+            axis_context=axis_context,
+        )
+        retry_response = None
+        for attempt in range(_MAX_ATTEMPTS):
+            try:
+                retry_response = call_llm(
+                    [{"role": "user", "content": "Name all clusters."}],
+                    system=retry_prompt,
+                )
+                parsed = loads_llm_json(retry_response.text)
+                parsed_keys = list(parsed.keys())
+                for cluster_id in still_placeholder:
+                    entry = parsed.get(cluster_id)
+                    if not isinstance(entry, dict):
+                        matches = difflib.get_close_matches(cluster_id, parsed_keys, n=1, cutoff=0.9)
+                        if matches:
+                            log.warning(
+                                "cluster_naming retry: LLM mistyped cluster_id %s -> %s, "
+                                "recovering via fuzzy match",
+                                cluster_id, matches[0],
+                            )
+                            entry = parsed.get(matches[0])
+                    if not isinstance(entry, dict):
+                        continue
+                    cluster = clusters_by_id[cluster_id]
+                    if name := entry.get("name"):
+                        cluster.name = str(name)[:255]
+                    if description := entry.get("description"):
+                        cluster.description = str(description)
+                break
+            except Exception as e:
+                snippet = repr(retry_response.text[:200]) if retry_response is not None else "<no response>"
+                if attempt < _MAX_ATTEMPTS - 1:
+                    log.warning(
+                        "cluster_naming retry: attempt %d/%d failed (%s), retrying. Response: %s",
+                        attempt + 1, _MAX_ATTEMPTS, e, snippet,
+                    )
+                else:
+                    log.warning(
+                        "cluster_naming retry: all %d attempts failed for placeholder clusters. "
+                        "Last error: %s. Last response: %s",
+                        _MAX_ATTEMPTS, e, snippet,
+                    )
 
     return clusters
