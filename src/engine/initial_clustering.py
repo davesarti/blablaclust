@@ -1,31 +1,37 @@
-"""Initial k-means clustering on stored embeddings.
+"""Initial clustering on stored embeddings using GMM (primary) or k-means (fallback).
 
 `initial_clustering` returns DB model objects ready to be persisted — callers
 own the transaction. `silhouette_for_k` / `sweep_k` are diagnostics that help
 the oracle pick a sensible number of clusters.
 """
 
+import logging
 import uuid
+import warnings
 
 import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
+from sklearn.mixture import GaussianMixture
 
 from src.logger import log_clustering_run
 from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoftAssignment
 
-# Random seed used by k-means. Logged with every clustering run for
-# reproducibility — change this and runs become non-comparable.
+log = logging.getLogger(__name__)
+
+# Toggle: True → try GMM first, fall back to k-means on convergence failure.
+# False → always use k-means (original behaviour).
+USE_GMM = True
+
+# Random seed used by both backends. Logged with every run for reproducibility.
 KMEANS_RANDOM_STATE = 42
+
+# Backward-compatible alias — some tests / callers import KMEANS_BACKEND.
+# The actual backend used per-run is determined at runtime (gmm or kmeans).
 KMEANS_BACKEND = "kmeans"
 
-# Temperature for the soft-assignment softmax, expressed as a fraction of the
-# mean squared distance to centroids. softmax(-d²) with no temperature (i.e. a
-# fixed 1.0) is nearly uniform for unit-norm embeddings — every point's distances
-# are O(1) and similar, so each cluster gets ~1/k and no point looks more certain
-# than any other. Dividing distances by a fraction of their own mean sharpens the
-# split and stays scale-invariant if the embedding model changes. 0.1 chosen
-# empirically: core points reach ~0.9 max-probability, boundary points ~0.4.
+# Temperature for the soft-assignment softmax used in the k-means fallback path.
+# See the original module docstring for the design rationale.
 SOFTMAX_TEMPERATURE_FRACTION = 0.1
 
 
@@ -49,15 +55,58 @@ def _fit_kmeans(X: np.ndarray, k: int, seed: int = KMEANS_RANDOM_STATE) -> KMean
         raise ValueError("k must be >= 1")
     if k > len(X):
         raise ValueError(f"k={k} exceeds number of embedded points ({len(X)})")
-    # n_init=20 runs 20 independent k-means++ initialisations and keeps the best
-    # (lowest inertia). This substantially reduces the chance of a bad local
-    # minimum — particularly important for k >= 5 where topic embeddings can be
-    # geometrically close and a single init sometimes merges two categories into
-    # one cluster. 20 is the value recommended by the sklearn docs for production
-    # use; the default "auto" (10 restarts) is not enough for k=6 on 1200 points.
     model = KMeans(n_clusters=k, random_state=seed, n_init=20)
     model.fit(X)
     return model
+
+
+def _kmeans_probs(X: np.ndarray, model: KMeans, k: int) -> np.ndarray:
+    """Compute soft-assignment probabilities from k-means centroids via softmax."""
+    centroids = model.cluster_centers_
+    diffs = X[:, np.newaxis, :] - centroids[np.newaxis, :, :]  # (n, k, dim)
+    sq_dists = np.sum(diffs ** 2, axis=2)  # (n, k)
+    min_sq_dists = sq_dists.min(axis=1)  # (n,) — distance to nearest centroid
+    temperature = max(SOFTMAX_TEMPERATURE_FRACTION * float(min_sq_dists.mean()), 1e-12)
+    return _softmax(-sq_dists / temperature, axis=1)  # (n, k)
+
+
+def _fit_gmm(X: np.ndarray, k: int, seed: int = KMEANS_RANDOM_STATE) -> tuple[GaussianMixture, np.ndarray]:
+    """Fit a diagonal-covariance GMM and return (model, probs).
+
+    Uses diag covariance: the best balance between expressiveness and numerical
+    stability for 384-dimensional embeddings.  Full covariance would require
+    ~384² = 147 456 parameters per component — more than any reasonably-sized
+    cluster has data points, leading to a singular covariance matrix.
+
+    Raises ConvergenceWarning (re-raised as an exception via warnings filter) if
+    the EM algorithm does not converge; the caller catches this and falls back
+    to k-means.
+    """
+    if k < 1:
+        raise ValueError("k must be >= 1")
+    if k > len(X):
+        raise ValueError(f"k={k} exceeds number of embedded points ({len(X)})")
+
+    gmm = GaussianMixture(
+        n_components=k,
+        covariance_type="diag",
+        n_init=5,
+        max_iter=200,
+        random_state=seed,
+        reg_covar=1e-4,  # regularise diagonal to prevent near-zero variances
+    )
+
+    # Convert ConvergenceWarning to an exception so the caller can catch it.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error", category=UserWarning)
+        gmm.fit(X)
+
+    probs = gmm.predict_proba(X)  # (n, k) — native posteriors, sums to 1 per row
+    # Guard against NaN/Inf that can arise when a component collapses.
+    if not np.all(np.isfinite(probs)):
+        raise ValueError("GMM produced non-finite probabilities — falling back")
+
+    return gmm, probs
 
 
 def initial_clustering(
@@ -67,10 +116,11 @@ def initial_clustering(
     turn_number: int = 0,
     seed: int = KMEANS_RANDOM_STATE,
 ) -> tuple[list[DbCluster], list[DbSoftAssignment], float | None]:
-    """Run k-means on the embedding matrix and compute soft assignments.
+    """Run GMM (or k-means fallback) on the embedding matrix and compute soft assignments.
 
-    Soft probabilities are derived from negative squared distances to centroids
-    passed through softmax, so every point's probabilities sum to 1.
+    With GMM, soft probabilities are the native posterior probabilities from the
+    EM algorithm — no softmax hack needed.  The k-means fallback uses the
+    temperature-scaled softmax of negative squared distances.
 
     Args:
         data_points: DataPoint rows that must already have embeddings.
@@ -78,22 +128,45 @@ def initial_clustering(
         session_id: The ChatSession this clustering belongs to.
         turn_number: Turn at which the clustering is recorded (default 0 —
             the pre-oracle state; oracle turns start at 1).
-        seed: Random seed for k-means (default ``KMEANS_RANDOM_STATE = 42``).
-            Override only for robustness / multi-seed eval; production callers
-            should leave this at the default so all logged runs stay comparable.
+        seed: Random seed (default ``KMEANS_RANDOM_STATE = 42``).
 
     Returns:
         (db_clusters, db_assignments, silhouette) — not yet added to any DB
-        session. ``silhouette`` is the mean silhouette score of this exact
-        k-means fit, or ``None`` when it is undefined (``k < 2`` or
-        ``k >= n_points``). Returning it lets callers reuse the value that was
-        already computed for the structured log instead of re-fitting k-means.
+        session.  ``silhouette`` is computed from hard-assignment labels.
 
     Raises:
         ValueError: if k < 1, no points have embeddings, or k > number of points.
     """
     points, X = _embedding_matrix(data_points)
-    model = _fit_kmeans(X, k, seed=seed)
+
+    probs: np.ndarray
+    hard_labels: np.ndarray
+    backend: str
+
+    if USE_GMM and k >= 2:
+        try:
+            gmm_model, probs = _fit_gmm(X, k, seed=seed)
+            hard_labels = gmm_model.predict(X)
+            backend = "gmm"
+            log.info("GMM fit succeeded (k=%d, n=%d)", k, len(points))
+        except Exception as exc:
+            log.warning(
+                "GMM fit failed (k=%d, n=%d, reason=%s) — falling back to k-means",
+                k, len(points), exc,
+            )
+            km = _fit_kmeans(X, k, seed=seed)
+            probs = _kmeans_probs(X, km, k)
+            hard_labels = km.labels_
+            backend = "kmeans"
+    else:
+        # k=1 or GMM disabled: always use k-means.
+        km = _fit_kmeans(X, k, seed=seed)
+        if k == 1:
+            probs = np.ones((len(points), 1), dtype=np.float64)
+        else:
+            probs = _kmeans_probs(X, km, k)
+        hard_labels = km.labels_
+        backend = "kmeans"
 
     cluster_ids = [str(uuid.uuid4()) for _ in range(k)]
     db_clusters = [
@@ -107,24 +180,6 @@ def initial_clustering(
         for i in range(k)
     ]
 
-    # Squared Euclidean distance from each point to each centroid: (n, k)
-    centroids = model.cluster_centers_
-    diffs = X[:, np.newaxis, :] - centroids[np.newaxis, :, :]  # (n, k, dim)
-    sq_dists = np.sum(diffs ** 2, axis=2)  # (n, k)
-
-    # Temperature is scaled to the mean WITHIN-CLUSTER distance (each point's
-    # distance to its nearest centroid), not the mean over all centroids.
-    # Using the full mean inflates the scale when clusters are well-separated
-    # (far centroids dominate the average), which softens the distribution
-    # unnecessarily. Within-cluster distance is the right reference: it reflects
-    # how tight the clusters actually are, giving sharper probabilities for
-    # well-placed points and gracefully flat ones for genuinely ambiguous points.
-    min_sq_dists = sq_dists.min(axis=1)  # (n,) — distance to nearest centroid
-    temperature = max(SOFTMAX_TEMPERATURE_FRACTION * float(min_sq_dists.mean()), 1e-12)
-
-    # Softmax of negative scaled distances → probabilities in (0, 1) summing to 1 per point
-    probs = _softmax(-sq_dists / temperature, axis=1)  # (n, k)
-
     db_assignments = [
         DbSoftAssignment(
             data_point_id=dp.id,
@@ -136,22 +191,17 @@ def initial_clustering(
         for j in range(k)
     ]
 
-    # Structured log of this run. Silhouette is undefined for k < 2 or
-    # k >= n_points; we record None in those cases rather than crashing.
-    # silhouette_score can also raise ValueError on degenerate input (e.g.
-    # all embeddings identical → a single distinct label). The score is a
-    # best-effort diagnostic — it must never abort an otherwise-valid
-    # clustering run, so we swallow any failure and fall back to None.
     silhouette: float | None = None
     if 2 <= k < len(points):
         try:
-            silhouette = float(silhouette_score(X, model.labels_))
+            silhouette = float(silhouette_score(X, hard_labels))
         except Exception:
             silhouette = None
+
     log_clustering_run(
         session_id=session_id,
         k=k,
-        backend=KMEANS_BACKEND,
+        backend=backend,
         seed=seed,
         n_points=len(points),
         silhouette=silhouette,
@@ -162,7 +212,7 @@ def initial_clustering(
 
 
 def silhouette_for_k(data_points: list[DataPoint], k: int) -> float:
-    """Mean silhouette score for a k-means clustering with k clusters.
+    """Mean silhouette score for a clustering with k clusters.
 
     Ranges from -1 (overlapping clusters) to 1 (dense, well-separated clusters).
     Requires 2 <= k < number of embedded points.

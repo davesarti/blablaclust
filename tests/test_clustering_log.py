@@ -13,6 +13,7 @@ import src.logger as logger
 from src.engine.initial_clustering import (
     KMEANS_BACKEND,
     KMEANS_RANDOM_STATE,
+    USE_GMM,
     initial_clustering,
 )
 from src.models import DataPoint
@@ -131,7 +132,9 @@ def test_initial_clustering_logs_run(log_path):
     e = entries[0]
     assert e["session_id"] == "sess-int"
     assert e["k"] == 3
-    assert e["backend"] == KMEANS_BACKEND
+    # Backend is "gmm" when USE_GMM=True (default), "kmeans" otherwise.
+    expected_backend = "gmm" if USE_GMM else KMEANS_BACKEND
+    assert e["backend"] == expected_backend
     assert e["seed"] == KMEANS_RANDOM_STATE
     assert e["n_points"] == 30
     assert e["turn_number"] == 0
