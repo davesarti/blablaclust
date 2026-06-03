@@ -13,6 +13,7 @@ from src.logger import log
 from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoftAssignment
 
 _NAMING_PCT = 0.15   # fraction of hard-assigned points to send to the naming LLM
+_NAMING_MIN = 5      # floor on sample size — clamped to actual membership when smaller
 _NAMING_CAP = 30     # upper bound regardless of cluster size
 _PLACEHOLDER_RE = re.compile(r"^Cluster \d+$")
 
@@ -32,8 +33,9 @@ def name_clusters(
     All clusters are described together in one prompt, which produces more
     consistent names and reduces latency compared to one call per cluster.
 
-    For each cluster, 15% of its hard-assigned points (capped at 30), ranked
-    by soft-assignment probability, are used as representative examples. This
+    For each cluster, 15% of its hard-assigned points (floored at 5 and capped
+    at 30, clamped down when the cluster has fewer members), ranked by
+    soft-assignment probability, are used as representative examples. This
     gives the naming LLM a broad enough view to avoid names that over-fit the
     single densest sub-theme. Clusters with no usable texts are silently
     skipped (placeholder name kept).
@@ -78,7 +80,7 @@ def name_clusters(
         cluster_assignments = assignments_by_cluster.get(cluster.id, [])
         cluster_assignments.sort(key=lambda a: a.probability, reverse=True)
         cluster_size = hard_sizes.get(cluster.id, 0) or len(cluster_assignments)
-        n = min(max(1, int(cluster_size * _NAMING_PCT)), _NAMING_CAP)
+        n = min(max(_NAMING_MIN, int(cluster_size * _NAMING_PCT)), _NAMING_CAP)
         sample_texts = [
             text_by_id.get(a.data_point_id, "")
             for a in cluster_assignments[:n]

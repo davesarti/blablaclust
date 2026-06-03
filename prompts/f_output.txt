@@ -129,7 +129,8 @@ Respond with a single valid JSON object. No markdown fences, no commentary outsi
     {{
       "type": "rename",
       "cluster_id": "<existing cluster id>",
-      "new_name": "<short label, max 40 chars>"
+      "new_name": "<optional — short label, max 40 chars; omit to auto-generate>",
+      "new_description": "<optional — one sentence; omit to keep current>"
     }},
     {{
       "type": "move",
@@ -161,6 +162,7 @@ CONSTRAINTS
 - For "split", "k" is the number of sub-clusters to create (integer >= 2, default 2). Set k > 2 only when the oracle explicitly asks to split into a specific number of groups (e.g. "split into 3", "divide into 5 parts").
 - For "split", "new_names" is OPTIONAL. Include it (an array of strings, one per sub-cluster in order) ONLY when the oracle explicitly named the children — e.g. "split it into 'Music' and 'Books'". If the oracle did not name them, omit the field entirely so the system can auto-name from cluster content.
 - When the oracle supplies cluster names (in "new_name" on merge/rename, or in "new_names" on split), copy them VERBATIM — character-for-character — into the operation. Do NOT rephrase, expand, abbreviate, censor, sanitize, translate, capitalize differently, or "improve" them. If the oracle says split into "miss" and "piss", the names are exactly "miss" and "piss". If the oracle says rename to "blabla", the name is exactly "blabla". The oracle's chosen label is authoritative; your job is to apply it, not to edit it.
+- For "rename", BOTH "new_name" and "new_description" are OPTIONAL. When the oracle asks to rename WITHOUT proposing a new label — e.g. "rename cluster 2", "give cluster 3 a better name", "this name is bad, redo it", "rinomina questo cluster" — emit the rename op with ONLY cluster_id and OMIT new_name (and new_description). The system will regenerate the name from the cluster's contents. Do NOT ask the oracle to supply a name and do NOT emit a "clarify". The same applies for description-only edits: include only the field the oracle actually changed; the omitted field is preserved.
 - For "move", point_ids may ONLY contain data point IDs the oracle explicitly referenced (see Target points above, or IDs named earlier in the conversation). NEVER invent point IDs or move points the oracle did not name — bulk reassignment is the clustering algorithm's job, not yours. Use "move" for point-level feedback such as resolving a boundary point or correcting a single misplaced point.
 - A "semantic_reembed" operation is EXCLUSIVE: when you emit one it MUST be the only entry in operations[]. Never combine it with merge, split, rename, or move in the same response — the re-embedding dissolves every existing cluster, so any other op IDs in the same response would be invalid afterwards.
 - axis_label MUST be the bare noun phrase naming the dimension (≤ 40 chars), with imperative or prepositional wrappers stripped. Examples of correct extraction: "cluster by sentiment" → "sentiment"; "let's re-embed along formal vs casual" → "formal vs casual"; "look at it through the lens of writing style" → "writing style"; "writing style" → "writing style". It must NEVER be a full sentence, a structural instruction ("make 5 clusters"), an existing cluster name, or a generic word like "data" / "clusters" / "groups".

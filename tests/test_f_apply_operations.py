@@ -178,6 +178,35 @@ def test_rename_preserves_existing_description_when_oracle_omits_it():
     assert kwargs["new_description"] == "Auto-generated description"
 
 
+def test_rename_preserves_existing_name_when_oracle_supplies_only_description():
+    """Mirror of the previous test for the (desc given, name missing) case."""
+    op = {"type": "rename", "cluster_id": "c1", "new_description": "Refreshed desc"}
+    builder = _builder()
+    existing = MagicMock()
+    existing.name = "Old name"
+    existing.description = "old desc"
+    builder.get_cluster.return_value = existing
+    with patch(f"{MOD}.rename_cluster") as mock_rename, \
+         patch(f"{MOD}.auto_name_cluster") as mock_auto:
+        f_apply_operations([op], builder=builder)
+    mock_auto.assert_not_called()
+    _, kwargs = mock_rename.call_args
+    assert kwargs["new_name"] == "Old name"
+    assert kwargs["new_description"] == "Refreshed desc"
+
+
+def test_bare_rename_runs_the_naming_prompt():
+    """A rename op with neither new_name nor new_description should re-run
+    the naming LLM on the cluster instead of falling through to a no-op."""
+    op = {"type": "rename", "cluster_id": "c1"}
+    builder = _builder()
+    with patch(f"{MOD}.rename_cluster") as mock_rename, \
+         patch(f"{MOD}.auto_name_cluster") as mock_auto:
+        f_apply_operations([op], builder=builder, axis_hint="sentiment")
+    mock_rename.assert_not_called()
+    mock_auto.assert_called_once_with("c1", builder, axis_hint="sentiment")
+
+
 # ── multiple operations share one turn ─────────────────────────────────────
 
 def test_multiple_ops_share_same_turn_number():

@@ -17,6 +17,7 @@ nothing was persisted.
 import difflib
 
 from src.engine.cluster_operations import (
+    auto_name_cluster,
     batch_move_points,
     merge_clusters,
     rename_cluster,
@@ -172,13 +173,18 @@ def f_apply_operations(
         elif op_type == "rename":
             inline_new_name = (op.get("new_name") or "").strip()
             inline_new_desc = (op.get("new_description") or "").strip()
-            existing = builder.get_cluster(op["cluster_id"])
-            rename_cluster(
-                cluster_id=op["cluster_id"],
-                new_name=inline_new_name or (existing.name if existing else ""),
-                new_description=inline_new_desc or (existing.description if existing else ""),
-                builder=builder,
-            )
+            if not inline_new_name and not inline_new_desc:
+                # Bare rename ("rename cluster X") — regenerate name and
+                # description from the cluster's current contents.
+                auto_name_cluster(op["cluster_id"], builder, axis_hint=axis_hint)
+            else:
+                existing = builder.get_cluster(op["cluster_id"])
+                rename_cluster(
+                    cluster_id=op["cluster_id"],
+                    new_name=inline_new_name or (existing.name if existing else ""),
+                    new_description=inline_new_desc or (existing.description if existing else ""),
+                    builder=builder,
+                )
 
         # Unknown op_type values are skipped intentionally so a future protocol
         # extension does not crash older clients. Missing op_type, however, is

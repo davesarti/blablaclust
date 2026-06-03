@@ -332,3 +332,43 @@ def rename_cluster(
     cluster.name = new_name[:255]
     cluster.description = new_description
     return cluster
+
+
+def auto_name_cluster(
+    cluster_id: str,
+    builder: TurnBuilder,
+    axis_hint: str | None = None,
+) -> DbCluster:
+    """Re-run the naming LLM on a single existing cluster.
+
+    Used when the oracle issues a bare rename (no name, no description) and
+    really means "give this cluster a better name from its current contents".
+
+    Raises:
+        ValueError: the cluster does not exist.
+    """
+    cluster = builder.get_cluster(cluster_id)
+    if cluster is None:
+        raise ValueError(f"cluster '{cluster_id}' not found")
+
+    member_ids = [
+        pid for pid, dist in builder.snapshot.items()
+        if _hard_cluster(dist) == cluster_id
+    ]
+    if not member_ids:
+        return cluster
+
+    points = (
+        builder.db.query(DataPoint).filter(DataPoint.id.in_(member_ids)).all()
+    )
+    naming_assignments = [
+        DbSoftAssignment(
+            data_point_id=pid,
+            cluster_id=cluster_id,
+            turn_number=builder.turn_number,
+            probability=1.0,
+        )
+        for pid in member_ids
+    ]
+    name_clusters([cluster], naming_assignments, points, axis_hint=axis_hint)
+    return cluster

@@ -15,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from src.engine.cluster_operations import (
+    auto_name_cluster,
     batch_move_points,
     merge_clusters,
     rename_cluster,
@@ -594,3 +595,35 @@ def test_rename_rejects_unknown_cluster(db):
     builder = _builder(db, turn_number=1)
     with pytest.raises(ValueError):
         rename_cluster("does-not-exist", "X", "Y", builder)
+
+
+# --- auto_name_cluster ------------------------------------------------------
+
+
+def test_auto_name_cluster_invokes_naming_llm_with_member_points(db):
+    cluster = _active_clusters(db)[0]
+    builder = _builder(db, turn_number=1)
+    expected_member_ids = {
+        pid for pid, dist in builder.snapshot.items()
+        if max(dist, key=dist.get) == cluster.id
+    }
+    assert expected_member_ids, "fixture must hard-assign at least one point"
+
+    with patch("src.engine.cluster_operations.name_clusters") as mock_name:
+        auto_name_cluster(cluster.id, builder, axis_hint="tone")
+
+    mock_name.assert_called_once()
+    args, kwargs = mock_name.call_args
+    clusters_arg, assignments_arg, points_arg = args
+    assert clusters_arg == [cluster]
+    assert kwargs == {"axis_hint": "tone"}
+    assert {p.id for p in points_arg} == expected_member_ids
+    assert {a.data_point_id for a in assignments_arg} == expected_member_ids
+    assert all(a.cluster_id == cluster.id for a in assignments_arg)
+    assert all(a.probability == 1.0 for a in assignments_arg)
+
+
+def test_auto_name_cluster_rejects_unknown_cluster(db):
+    builder = _builder(db, turn_number=1)
+    with pytest.raises(ValueError):
+        auto_name_cluster("does-not-exist", builder)
