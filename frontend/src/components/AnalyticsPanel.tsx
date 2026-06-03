@@ -56,11 +56,11 @@ export default function AnalyticsPanel({ onOpenUmap, onOpenEval }: Props) {
     const isNewTurn = hasMountedRef.current
     prevTurnRef.current = sess.turnNumber
     hasMountedRef.current = true
-    if (sess.turnNumber === 0) return
+    if (sess.clusters.length === 0) return
     loadUmap()
     if (isNewTurn) setEv(null)  // stale after a new turn
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sess.sessionId, sess.turnNumber])
+  }, [sess.sessionId, sess.turnNumber, sess.clusters.length])
 
   // Load cached eval on mount so stats show without re-running
   useEffect(() => {
@@ -168,9 +168,9 @@ export default function AnalyticsPanel({ onOpenUmap, onOpenEval }: Props) {
           style={{ background: 'var(--color-surface2)' }}>
           {!umap && !umapLoading && !umapError && (
             <div className="absolute inset-0 flex items-center justify-center">
-              {sess.turnNumber === 0 ? (
+              {sess.clusters.length === 0 ? (
                 <span className="font-mono text-[13px] text-faint text-center px-4">
-                  Run a turn to see the projection
+                  Initialise clusters to see the projection
                 </span>
               ) : (
                 <button onClick={loadUmap}

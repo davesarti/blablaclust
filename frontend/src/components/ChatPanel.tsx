@@ -201,14 +201,10 @@ export default function ChatPanel() {
       )}
 
       {/* Destination guidance */}
-      {(destinationAmbiguous || destinationMissing) && (
+      {destinationAmbiguous && (
         <div className="px-6 pb-2 flex items-center gap-2 text-[12px] font-mono text-muted">
           <span>ℹ</span>
-          <span>
-            {destinationAmbiguous
-              ? 'Multiple clusters and points pinned — clarify intentions in your message'
-              : 'No destination cluster pinned — name the destination in your message (e.g. "move to Reviews").'}
-          </span>
+          <span>Multiple clusters and points pinned — clarify intentions in your message</span>
         </div>
       )}
 
