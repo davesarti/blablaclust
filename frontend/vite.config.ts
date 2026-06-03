@@ -9,6 +9,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    host: true,
     proxy: {
       '/sessions': 'http://localhost:8000',
       '/datasets': 'http://localhost:8000',
