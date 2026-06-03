@@ -50,7 +50,7 @@ export default function NewSessionModal({ onCreated }: Props) {
         )}
 
         <label className="flex flex-col gap-1.5">
-          <span className="font-mono text-[15px] font-bold tracking-widest uppercase text-faint">Session name</span>
+          <span className="font-mono text-[12px] font-bold tracking-widest uppercase text-faint">Session name</span>
           <input value={name} onChange={e => setName(e.target.value)}
             placeholder="Optional name…"
             className="px-3 py-2 rounded-sm border border-border text-[14px] text-ink outline-none focus:border-borders transition-colors"
@@ -58,7 +58,7 @@ export default function NewSessionModal({ onCreated }: Props) {
         </label>
 
         <label className="flex flex-col gap-1.5">
-          <span className="font-mono text-[15px] font-bold tracking-widest uppercase text-faint">Dataset</span>
+          <span className="font-mono text-[12px] font-bold tracking-widest uppercase text-faint">Dataset</span>
           <select value={datasetId} onChange={e => setDatasetId(e.target.value)}
             className="px-3 py-2 rounded-sm border border-border text-[14px] text-ink outline-none focus:border-borders transition-colors cursor-pointer"
             style={{ background: 'var(--color-surface)' }}>
@@ -74,7 +74,7 @@ export default function NewSessionModal({ onCreated }: Props) {
         </label>
 
         <label className="flex flex-col gap-1.5">
-          <span className="font-mono text-[15px] font-bold tracking-widest uppercase text-faint">Initial clusters (k)</span>
+          <span className="font-mono text-[12px] font-bold tracking-widest uppercase text-faint">Initial clusters (k)</span>
           <input type="number" value={k} min={2} max={20} onChange={e => setK(+e.target.value)}
             className="px-3 py-2 rounded-sm border border-border text-[14px] text-ink outline-none focus:border-borders transition-colors"
             style={{ background: 'var(--color-surface)' }} />
