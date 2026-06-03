@@ -220,8 +220,9 @@ def _coherence_samples(db, state) -> list[dict]:
     text_by_id: dict[str, str] = {}
     if needed:
         for dp in db.query(DataPoint).filter(DataPoint.id.in_(needed)).all():
-            d = dp.data or {}
-            text_by_id[dp.id] = d.get("text") or d.get("title") or dp.id
+            # DataPoint moved from a `data` JSON blob to a flat `text` column
+            # (commit 0eeb6ce); mirror the live endpoint's `dp.text or dp.id`.
+            text_by_id[dp.id] = dp.text or dp.id
 
     cluster_by_id = {c.id: c for c in state.clusters}
     samples: list[dict] = []
@@ -338,7 +339,7 @@ def main() -> None:
     base_points = []
     for i, emb in enumerate(base_emb):
         dp = DataPoint(id=f"base-{i}", dataset_id=DATASET_ID,
-                       data={"title": "", "text": base_texts[i]}, embedding=emb.tolist())
+                       text=base_texts[i], embedding=emb.tolist())
         db.add(dp)
         base_points.append(dp)
     db.flush()
@@ -380,7 +381,7 @@ def main() -> None:
             continue
         batch_points = [
             DataPoint(id=f"new-{int(i)}", dataset_id=DATASET_ID,
-                      data={"title": "", "text": new_texts[int(i)]},
+                      text=new_texts[int(i)],
                       embedding=new_emb[int(i)].tolist())
             for i in idx
         ]
