@@ -18,6 +18,7 @@ export default function ExpandClusterModal({ clusterId, onClose }: Props) {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [showAll, setShowAll] = useState(false)
+  const [pinnedOnly, setPinnedOnly] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -27,11 +28,19 @@ export default function ExpandClusterModal({ clusterId, onClose }: Props) {
       .finally(() => setLoading(false))
   }, [clusterId])
 
+  useEffect(() => {
+    if (pinnedFromThisCluster === 0 && pinnedOnly) setPinnedOnly(false)
+  }, [pinnedFromThisCluster, pinnedOnly])
+
   const filtered = useMemo(() => {
-    if (!search) return points
-    const q = search.toLowerCase()
-    return points.filter(p => (p.text || p.id).toLowerCase().includes(q))
-  }, [points, search])
+    let result = points
+    if (pinnedOnly) result = result.filter(p => selectedPoints.has(p.id))
+    if (search) {
+      const q = search.toLowerCase()
+      result = result.filter(p => (p.text || p.id).toLowerCase().includes(q))
+    }
+    return result
+  }, [points, search, pinnedOnly, selectedPoints])
 
   const shown = showAll ? filtered : filtered.slice(0, 12)
 
@@ -66,10 +75,17 @@ export default function ExpandClusterModal({ clusterId, onClose }: Props) {
             {pinnedFromThisCluster > 0 && (
               <>
                 <span className="text-faint text-[11px]">·</span>
-                <span className="font-mono text-[11px] tracking-widest uppercase"
-                  style={{ color: 'var(--color-accent)' }}>
-                  {pinnedFromThisCluster} pinned
-                </span>
+                <button
+                  onClick={() => setPinnedOnly(v => !v)}
+                  title={pinnedOnly ? 'Show all points' : 'Show only pinned points'}
+                  className="font-mono text-[11px] tracking-widest uppercase px-2 py-0.5 rounded-sm border transition-colors"
+                  style={{
+                    color: 'var(--color-accent)',
+                    borderColor: pinnedOnly ? 'var(--color-accent)' : 'var(--color-border)',
+                    background: pinnedOnly ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'transparent',
+                  }}>
+                  {pinnedFromThisCluster} pinned {pinnedOnly ? '×' : '↗'}
+                </button>
               </>
             )}
             <span className="ml-auto font-mono text-[11px] text-faint italic">
