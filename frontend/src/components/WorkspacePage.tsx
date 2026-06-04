@@ -8,6 +8,7 @@ import ExpandClusterModal from './modals/ExpandClusterModal'
 import StopSessionModal from './modals/StopSessionModal'
 import EvalModal from './modals/EvalModal'
 import UmapModal from './modals/UmapModal'
+import PersonaModal from './modals/PersonaModal'
 import type { EvalResult } from '../types'
 
 const LOAD_COLORS = ['#4a7c59','#7a8a3a','#9a7a30','#8a5030','#8a3030']
@@ -24,6 +25,7 @@ export default function WorkspacePage() {
   const [showStop, setShowStop] = useState(false)
   const [evalResult, setEvalResult] = useState<EvalResult | null>(null)
   const [showUmap, setShowUmap] = useState(false)
+  const [showPersona, setShowPersona] = useState(false)
   const [marking, setMarking] = useState(false)
 
   const totalSize = sess.clusters.reduce((s, c) => s + c.size, 0)
@@ -61,6 +63,19 @@ export default function WorkspacePage() {
         </div>
 
         <div className="flex items-center">
+          {sess.session.oracle_kind === 'persona' && sess.session.persona_snapshot && (
+            <>
+              <button onClick={() => setShowPersona(true)}
+                className="flex items-center gap-1.5 font-mono text-[12px] font-bold tracking-wider uppercase text-faint hover:text-muted px-1.5 py-1 rounded hover:bg-surface2 transition-colors">
+                <svg width="11" height="11" viewBox="0 0 11 11" fill="none" className="shrink-0">
+                  <circle cx="5.5" cy="3.5" r="2" stroke="currentColor" strokeWidth="1.5"/>
+                  <path d="M1 10c0-2.485 2.015-4.5 4.5-4.5S10 7.515 10 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+                persona
+              </button>
+              <div className="w-px h-4 mx-3.5 bg-border" />
+            </>
+          )}
           <span className="font-mono text-[13px] text-faint">T{sess.turnNumber}</span>
           <div className="w-px h-4 mx-3.5 bg-border" />
           <span className="font-mono text-[13px] text-faint">${sess.costUsd.toFixed(3)}</span>
@@ -163,6 +178,9 @@ export default function WorkspacePage() {
       {showStop && <StopSessionModal onClose={() => setShowStop(false)} onClosed={goWelcome} />}
       {evalResult && <EvalModal result={evalResult} onClose={() => setEvalResult(null)} />}
       {showUmap && <UmapModal sessionId={sess.sessionId} onClose={() => setShowUmap(false)} />}
+      {showPersona && sess.session.persona_snapshot && (
+        <PersonaModal persona={sess.session.persona_snapshot} onClose={() => setShowPersona(false)} />
+      )}
     </div>
   )
 }

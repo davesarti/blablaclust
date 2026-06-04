@@ -6,11 +6,29 @@ export interface Dataset {
   description?: string;
 }
 
+export interface PersonaSnapshot {
+  name: string;
+  description?: string;
+  dataset: string;
+  k_initial: number;
+  model?: string;
+  goal: string;
+  notes?: {
+    tone?: string;
+    language?: string;
+    should_contradict?: boolean;
+    extra?: string;
+    [key: string]: unknown;
+  };
+}
+
 export interface Session {
   id: string;
   name: string;
   dataset_name: string;
   status: 'active' | 'converged' | 'closed';
+  oracle_kind?: 'human' | 'persona';
+  persona_snapshot?: PersonaSnapshot | null;
 }
 
 export interface Cluster {
