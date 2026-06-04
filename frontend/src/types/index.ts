@@ -99,12 +99,12 @@ export interface ClusterPointsResponse {
 // Evaluation
 export interface EvalResult {
   B1?: { overall_score: number; notes: string };
-  B2?: { coherence_mean: number; coherence_min: number; per_cluster: { coherence: number; reasoning: string }[] };
+  B2?: { coherence_mean: number | null; coherence_min: number | null; per_cluster: { coherence: number; reasoning: string }[] };
   B3?: { compliance_score: number; notes: string };
   B4?: { contradiction_score: number; notes: string; examples: string[] };
   A2?: { turns: number; weighted_turns: number; termination: string };
-  A3?: { mean_cognitive_load: number; cognitive_load_driver_by_turn: string[] };
-  A1?: { silhouette_initial: number; silhouette_final: number };
+  A3?: { mean_cognitive_load: number | null; cognitive_load_driver_by_turn: string[] };
+  A1?: { silhouette_initial: number | null; silhouette_final: number | null };
 }
 
 // UMAP

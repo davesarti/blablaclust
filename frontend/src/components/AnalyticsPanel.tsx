@@ -264,7 +264,7 @@ export default function AnalyticsPanel({ onOpenUmap, onOpenEval }: Props) {
                     <span className="font-mono text-[13px] text-faint tracking-wider uppercase">turns</span>
                   </div>
                 )}
-                {ev.A3?.mean_cognitive_load !== undefined && (
+                {ev.A3?.mean_cognitive_load != null && (
                   <div className="flex flex-col items-center gap-0.5">
                     <span className="font-mono text-[13px] font-bold text-ink">
                       {ev.A3.mean_cognitive_load.toFixed(1)}

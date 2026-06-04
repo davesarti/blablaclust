@@ -134,30 +134,45 @@ export default function EvalModal({ result, onClose }: Props) {
         <div className="flex flex-col gap-5">
           <SectionLabel>Process</SectionLabel>
 
-          {result.A1 && (
-            <div>
-              <div className="flex items-baseline justify-between mb-1.5">
-                <span className="text-[16px] text-muted">Silhouette</span>
-                <div className="flex items-center gap-2 font-mono text-[16px]">
-                  <span className="text-faint tabular-nums">{result.A1.silhouette_initial.toFixed(3)}</span>
-                  <span className="text-faint text-[11px]">→</span>
-                  <span className={`font-bold tabular-nums ${tierCls(result.A1.silhouette_final)}`}>{result.A1.silhouette_final.toFixed(3)}</span>
-                  <span className={`text-[14px] font-bold tabular-nums ${result.A1.silhouette_final > result.A1.silhouette_initial ? 'text-green-700' : 'text-red-700'}`}>
-                    {result.A1.silhouette_final > result.A1.silhouette_initial ? '↑' : '↓'}
-                    {Math.abs(result.A1.silhouette_final - result.A1.silhouette_initial).toFixed(3)}
-                  </span>
+          {(() => {
+            const init = result.A1?.silhouette_initial
+            const fin = result.A1?.silhouette_final
+            // Silhouette trend needs both endpoints. A freshly-created session
+            // (no clustering run logged yet / 0 turns) has them null — render a
+            // placeholder instead of crashing on `null.toFixed()`.
+            if (init == null || fin == null) {
+              return (
+                <div className="flex items-center justify-between">
+                  <span className="text-[16px] text-muted">Silhouette</span>
+                  <span className="text-[14px] text-faint italic">not available yet</span>
+                </div>
+              )
+            }
+            return (
+              <div>
+                <div className="flex items-baseline justify-between mb-1.5">
+                  <span className="text-[16px] text-muted">Silhouette</span>
+                  <div className="flex items-center gap-2 font-mono text-[16px]">
+                    <span className="text-faint tabular-nums">{init.toFixed(3)}</span>
+                    <span className="text-faint text-[11px]">→</span>
+                    <span className={`font-bold tabular-nums ${tierCls(fin)}`}>{fin.toFixed(3)}</span>
+                    <span className={`text-[14px] font-bold tabular-nums ${fin > init ? 'text-green-700' : 'text-red-700'}`}>
+                      {fin > init ? '↑' : '↓'}
+                      {Math.abs(fin - init).toFixed(3)}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1 rounded-full overflow-hidden" style={{ height: 2, background: 'var(--color-border)' }}>
+                    <div style={{ width: `${Math.min(1, Math.max(0, init)) * 100}%`, height: '100%', background: 'var(--color-borders)' }} />
+                  </div>
+                  <div className="flex-1 rounded-full overflow-hidden" style={{ height: 2, background: 'var(--color-border)' }}>
+                    <div style={{ width: `${Math.min(1, Math.max(0, fin)) * 100}%`, height: '100%', background: tierColor(fin) }} />
+                  </div>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <div className="flex-1 rounded-full overflow-hidden" style={{ height: 2, background: 'var(--color-border)' }}>
-                  <div style={{ width: `${Math.min(1, Math.max(0, result.A1.silhouette_initial)) * 100}%`, height: '100%', background: 'var(--color-borders)' }} />
-                </div>
-                <div className="flex-1 rounded-full overflow-hidden" style={{ height: 2, background: 'var(--color-border)' }}>
-                  <div style={{ width: `${Math.min(1, Math.max(0, result.A1.silhouette_final)) * 100}%`, height: '100%', background: tierColor(result.A1.silhouette_final) }} />
-                </div>
-              </div>
-            </div>
-          )}
+            )
+          })()}
 
           {result.A2 && (
             <div className="flex items-center justify-between">
