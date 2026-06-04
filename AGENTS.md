@@ -18,7 +18,7 @@ and extend, since the decision logic and the execution logic never mix.
 
 | Role | Function | What it does |
 |---|---|---|
-| Sensor | `f_cluster_uncertainty` | Reads soft-assignment posteriors from the DB and computes cluster-level overlap and cohesion scores — feeds signal into the Planner |
+| Sensor | `f_uncertainty` | Reads soft-assignment posteriors from the DB and computes cluster-level overlap and cohesion scores — feeds signal into the Planner |
 | Planner | `f_next_best_step` | Reads state + uncertainty scores, decides the next action: show / ask / stop |
 | Executor | `f_output` + `f_apply_operations` | Calls the LLM to turn oracle feedback into structured operations, then applies them via `TurnBuilder` |
 | Reembedder | `f_semantic_reembed` | Projects data along a user-specified semantic axis (cosine anchor poles + LLM hybrid) |
