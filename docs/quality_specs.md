@@ -152,6 +152,49 @@ against a hidden category**.
 
 Runner: [`scripts/run_generalization_stability_eval.py`](../scripts/run_generalization_stability_eval.py).
 
+### Empirical results (full-scale runs, 2026-06-04)
+
+All runs: 1 200 base points → 300 new arrivals (frozen split), seed 42, GMM
+primary / k-means fallback, `HARNESS_DRY_RUN=false` for real B2 judge.
+Bootstrap CIs: percentile, 10 000 resamples.
+
+| Dataset | k | A1 Δ (paired, pre-existing pts) | 95% CI | A4 OOD rate | A4 mean z CI | B2 Δ | B2 CI | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| **amazon_reviews** | 4 | +0.0002 | [+0.0001, +0.0003] | 5.7% | [−0.08, +0.16] | −0.21 | [−0.66, +0.04] | ✅ holds |
+| **20_newsgroups** | 6 | −0.0003 | [−0.0004, −0.0002] | 8.0% | [+0.10, +0.33] | −0.18 | [−0.43, +0.01] | ✅ holds (minor) |
+| **imdb_reviews** | 4 | +0.0002 | [+0.0000, +0.0003] | 7.7% | [+0.07, +0.30] | +0.06 | [+0.05, +0.09] | ✅ holds + improves |
+
+**Key findings.**
+
+- **Amazon** generalises cleanly: A1 CI is fully positive, A4 OOD rate (5.7%)
+  is at the ~5% null baseline, B2 CI includes zero (no significant change).
+  Product-review clusters cover heterogeneous topics (music, books, electronics)
+  that absorb new arrivals naturally.
+
+- **20 Newsgroups** shows a statistically detectable but practically negligible
+  A1 drop (−0.0003, ~0.5% relative; CI entirely negative). A4 is slightly
+  elevated (8.0%, CI above zero), reflecting that some topically adjacent
+  newsgroups (e.g. `sci.med` / `sci.space`) produce borderline new arrivals.
+  B2 CI barely includes zero (+0.01 upper bound) — not significant at 95%.
+  The drift curve (4 batches × 75 pts) is flat: silhouette 0.0555 → 0.0540,
+  OOD 8.0–9.3% across batches. **Verdict: holds, minor marginal effect.**
+
+- **IMDB** has a near-zero base silhouette (0.0032) because all-movie-review
+  embeddings are geometrically dense — clusters separate semantically, not
+  spatially. Despite this, A1 is stable (Δ +0.0002, CI barely positive),
+  and B2 **improves** after ingestion (Δ +0.063, CI entirely positive:
+  [+0.050, +0.088]). The 300 new arrivals reinforce rather than dilute the
+  clusters, consistent with a balanced (750 pos / 750 neg) and domain-uniform
+  dataset. A4 (7.7%) is slightly above baseline, matching the pattern seen on
+  20NG. **Verdict: holds and coherence improves.**
+
+**Summary.** Across all three datasets the generalisation procedure returns a
+positive or negligible result on every signal. The small A4 elevation on 20NG
+and IMDB (8–9% vs 5% null) is a consistent finding: it reflects genuine marginal
+uncertainty in those datasets but is not accompanied by A1 or B2 degradation.
+The converged clustering structure is robust to an ingestion of new data equal to
+25% of the base corpus.
+
 **Labels are out of scope.** Clustering is unsupervised and the oracle's judgment
 is the only objective. The generalization eval reads **only `title,text`** from
 any CSV — never the `label` column. Labels in `data/20newsgroups_*.csv` (and the
