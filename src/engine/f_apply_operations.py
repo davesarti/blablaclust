@@ -16,6 +16,8 @@ nothing was persisted.
 
 import difflib
 
+import numpy as np
+
 from src.engine.cluster_operations import (
     auto_name_cluster,
     batch_move_points,
@@ -88,6 +90,62 @@ def _normalize_cluster_ids(operations: list[dict], builder: TurnBuilder) -> None
             )
 
 
+def _match_names_to_clusters(
+    new_clusters: list,
+    oracle_names: list[str],
+    builder,
+) -> dict[str, str]:
+    """Match oracle-supplied names to clusters by centroid-embedding cosine similarity.
+
+    Returns {cluster_id: oracle_name}. Falls back to positional assignment if
+    embeddings are unavailable or the ST model fails.
+    """
+    from src.engine.cluster_operations import _hard_cluster
+    from src.engine.f_semantic_reembed import _get_st_model
+    from src.models import DataPoint
+
+    try:
+        model = _get_st_model()
+        name_embs = model.encode(oracle_names, convert_to_numpy=True).astype(np.float64)
+        name_embs /= np.linalg.norm(name_embs, axis=1, keepdims=True) + 1e-8
+
+        centroid_embs = []
+        for cluster in new_clusters:
+            point_ids = [
+                pid for pid, dist in builder.snapshot.items()
+                if _hard_cluster(dist) == cluster.id
+            ]
+            if not point_ids:
+                centroid_embs.append(None)
+                continue
+            points = builder.db.query(DataPoint).filter(DataPoint.id.in_(point_ids)).all()
+            embs = [p.embedding for p in points if p.embedding is not None]
+            if not embs:
+                centroid_embs.append(None)
+                continue
+            centroid = np.mean(embs, axis=0).astype(np.float64)
+            centroid /= np.linalg.norm(centroid) + 1e-8
+            centroid_embs.append(centroid)
+
+        matched: dict[str, str] = {}
+        used: set[int] = set()
+        for i, cluster in enumerate(new_clusters):
+            if centroid_embs[i] is None:
+                continue
+            sims = [
+                float(np.dot(centroid_embs[i], name_embs[j])) if j not in used else -2.0
+                for j in range(len(oracle_names))
+            ]
+            best_j = int(np.argmax(sims))
+            matched[cluster.id] = oracle_names[best_j]
+            used.add(best_j)
+        return matched
+
+    except Exception:
+        # Fall back to positional
+        return {c.id: oracle_names[i] for i, c in enumerate(new_clusters) if i < len(oracle_names)}
+
+
 def f_apply_operations(
     operations: list[dict],
     builder: TurnBuilder,
@@ -152,17 +210,18 @@ def f_apply_operations(
                 axis_hint=axis_hint,
             )
 
-            # K-means returns children in no oracle-meaningful order, so this
-            # mapping is best-effort: name[i] -> child[i].
-            for child, name in zip(new_clusters, inline_new_names):
-                if not name:
-                    continue
-                rename_cluster(
-                    cluster_id=child.id,
-                    new_name=name,
-                    new_description=child.description or "",
-                    builder=builder,
-                )
+            if inline_new_names:
+                matched = _match_names_to_clusters(new_clusters, inline_new_names, builder)
+                for child in new_clusters:
+                    name = matched.get(child.id, "")
+                    if not name:
+                        continue
+                    rename_cluster(
+                        cluster_id=child.id,
+                        new_name=name,
+                        new_description=child.description or "",
+                        builder=builder,
+                    )
 
         elif op_type == "move":
             target = op["target_cluster_id"]

@@ -172,13 +172,13 @@ def split_cluster(
     auto_name: bool = True,
     axis_hint: str | None = None,
 ) -> list[DbCluster]:
-    """Split one cluster into ``k`` sub-clusters using k-means on its members.
+    """Split one cluster into ``k`` sub-clusters using GMM (k-means fallback).
 
     Takes the data points whose hard assignment is ``cluster_id``, stages the
-    cluster as dissolved, runs real k-means with the requested ``k`` on the
-    subset, and updates the in-memory snapshot: subset points get the new
-    k-means probabilities, every other point is carried forward (re-normalised
-    after dropping the dissolved cluster).
+    cluster as dissolved, runs GMM with the requested ``k`` on the subset via
+    ``initial_clustering``, and updates the in-memory snapshot: subset points
+    get fresh soft probabilities, every other point is carried forward
+    (re-normalised after dropping the dissolved cluster).
 
     Raises:
         ValueError: ``k`` is less than 2; unknown or already-dissolved
