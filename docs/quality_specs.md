@@ -181,7 +181,23 @@ PYTHONPATH=. python scripts/run_eval.py --scenarios scenarios/*.json --out repor
 
 Output in `reports/<timestamp>/`:
 - `results.jsonl` — one record per scenario, machine-readable
-- `summary.md` — human-readable per-scenario breakdown with aggregate means/medians
+- `summary.md` — human-readable per-scenario breakdown with cross-scenario
+  aggregates: every aggregate (B1, B2, B3, B4, A1, A2 turns-to-convergence, A3)
+  is reported as **mean + percentile-bootstrap 95% CI** (10k resamples) over the
+  per-scenario values, gracefully degrading to "n=1 — CI needs ≥2 scenarios"
+  for single-run reports.
+
+### No-dialogue baseline arm
+
+For *"does the dialogue actually improve clustering?"*, the **control arm** is
+produced by `scripts/run_baseline_eval.py` — the initial k-means clustering with
+no oracle interaction, evaluated on A1 (silhouette) and B2 (coherence) with the
+same metrics and sampling as the live eval, again with bootstrap 95% CIs. It
+reads embeddings **read-only** from the live DB (no re-embedding) and clusters
+in a throwaway in-memory DB so the live DB is never written to. B1/B3/B4 are
+intentionally omitted: they are dialogue-dependent and have no meaning for a
+no-dialogue control. Compare its A1/B2 against the conversational arm at the
+same dataset+k to read the effect of dialogue.
 
 **`results.jsonl` record schema:**
 ```jsonc

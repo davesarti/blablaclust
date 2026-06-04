@@ -1,6 +1,6 @@
 # Progress Report — Conversational Clustering
 
-*Course: Designing Large Scale AI Systems · Team: vibe-coders (5 members) · Date: 2026-05-29 · Sprint 4*
+*Course: Designing Large Scale AI Systems · Team: vibe-coders (5 members) · Date: 2026-06-04 · Sprint 4*
 
 ---
 
@@ -27,9 +27,9 @@ fixed ground truth.
 **Profile.** Build-heavy project (per the course brief), team of 5.
 
 **In scope (minimum viable build) — now delivered end-to-end.**
-- Conversation over a text dataset — **two datasets**: Amazon Reviews (1200,
-  sentiment axis) and 20 Newsgroups (1200, topic axis), to show the system
-  adapts rather than being tuned to one.
+- Conversation over a text dataset — **three datasets**: Amazon Reviews (1200,
+  sentiment axis), 20 Newsgroups (1200, topic axis) and IMDB (1200, sentiment
+  axis), to show the system adapts rather than being tuned to one.
 - Initial clustering with LLM-generated cluster names and descriptions.
 - Oracle feedback at multiple levels: global / cluster / point / instructional.
 - Soft assignments — a probability distribution over clusters for each point.
@@ -69,14 +69,19 @@ provider-agnostic LLM harness (Claude / OpenAI / OpenRouter).
 | Backend routers (sessions / datasets / turns / clusters) | P1 | Done |
 | Structured logger + clustering-run log + CLI + web UI | P5 | Done |
 | **Closed-loop**: oracle feedback re-clusters + persists; planner on API path | team | Done |
-| **Generalization**: codified mapping evaluated on a held-out split | P2 | Done |
-| LLM-as-oracle harness + human study | P5/P3 | Not yet |
+| **Generalization (online, label-free)**: A1/B2 paired Δ around an ingestion event | P2 | Done |
+| **No-dialogue baseline arm** (A1+B2 with bootstrap CI) | P2 | Done |
+| **LLM-as-oracle harness + 3 personas** | P2/P5 | Done |
+| Human study | team | Not yet (protocol pending) |
 
-**Honest headline.** The loop is now **wired end-to-end and verified live**: an
-oracle turn is interpreted by the LLM, re-clusters the database (merge / split /
-move), and persists a new soft-assignment snapshot — confirmed on both datasets.
-The remaining gap is **evaluation at scale**: the LLM-as-oracle harness and the
-human study are not yet done. (Generalization is already quantified — see Slide 5.)
+**Honest headline.** The loop is **wired end-to-end and verified live** on all
+three datasets (Amazon, 20NG, IMDB): an oracle turn is interpreted by the LLM,
+re-clusters the database (merge / split / move / semantic re-embed), and
+persists a new soft-assignment snapshot. The **LLM-as-oracle harness now runs
+end-to-end**: all 3 personas reach `oracle_satisfied` with parse-retry +
+4xx-resilient runner. The **no-dialogue baseline arm** and **bootstrap 95% CIs**
+on the eval aggregates are in place. The remaining gap is the **human study**
+(protocol still to write).
 
 ---
 
@@ -84,11 +89,16 @@ human study are not yet done. (Generalization is already quantified — see Slid
 
 - **P1 — Backend & Data Modeling.** Routers for sessions / datasets / turns /
   clusters; session name + status; cluster-points render API.
-- **P2 — Data & Embeddings.** Added a **second dataset** (20 Newsgroups) and
-  proved adaptivity (87.9% purity, topic names); single-call LLM naming;
-  fixed a merge bug that collapsed the dataset into one cluster; verified
-  merge/split/move on the new geometry; built and ran the **generalization**
-  eval (Slide 5); silhouette computed once and made crash-safe.
+- **P2 — Data & Embeddings.** Added a **second** (20 Newsgroups) and **third**
+  (IMDB) dataset and proved adaptivity (topic names recovered, all-3 oracle
+  loop verified); single-call LLM naming; reframed **generalization** as an
+  online label-free A1/B2 eval with bootstrap CIs; built the **no-dialogue
+  baseline arm** (`run_baseline_eval.py`) and added **bootstrap 95% CIs** to
+  `eval_report.py`; UMAP visualization (Phase 1 + Phase 2 geometry-aware);
+  per-turn LLM cost accumulator + complete audit logging; ran **3 personas
+  end-to-end** with parse-retry and 4xx-resilient runner; DB migrations
+  (Dataset model, `data`→`text`) without re-embedding; zombie-session fix +
+  k≥2 enforcement.
 - **P3 — Core Engine.** Executor + operation dispatch (`f_apply_operations`),
   variable-arity split, naming-driven merge/split decisions, `f_eval` /
   `f_validate_point` judge; rename preserves existing names/descriptions.
@@ -105,57 +115,92 @@ human study are not yet done. (Generalization is already quantified — see Slid
 No ground truth exists, so we combine **process** and **outcome** signals.
 
 **Already measured.**
-- **Generalization (quantified, with CIs)** — a finished clustering is codified
-  into a nearest-centroid mapping and applied to a frozen held-out split. On
-  20 Newsgroups (real category labels): **87.0% held-out accuracy, 95% CI
-  [82.7%, 90.3%]**. Contrast on Amazon (vs. sentiment): **50.7% = base rate**,
-  because the embeddings cluster by *topic*, not *sentiment* — an honest limit
-  of what the representation encodes. Oracle refinement *holds* generalization
-  (87.0%→88.3%, not significant, McNemar p=0.34 — a ceiling effect, since
-  k-means already recovers the categories).
-- **Internal sanity check** — silhouette score logged per clustering run.
-- **Quality spec** — written and committed (`docs/quality_specs.md`).
+- **Generalization (online, label-free, with CIs)** — a converged clustering's
+  centroids are frozen; new arrivals are assigned via nearest-centroid; we
+  re-evaluate A1 (silhouette) and B2 (coherence) at t0 and t1 and report the
+  paired Δ with bootstrap 95% CI. On 20 Newsgroups (1200 base + 300 new, k=6):
+  **A1 paired Δ −0.0003, 95% CI [−0.0004, −0.0002]** — statistically detectable
+  but practically negligible (~0.5% relative); **A1 holds**. **B2 paired Δ
+  spans 0** across runs (judge non-determinism at k=6) — no significant
+  change. *Labels out of scope:* the eval reads only `title,text`.
+- **Honest limitation (qualitative).** On Amazon, k=2 splits by *topic*, not
+  *sentiment* — both clusters are sentiment-mixed. The representation encodes
+  topic; an oracle wanting a sentiment axis must steer it (semantic re-embed).
+- **No-dialogue baseline arm** — the control arm for *"does dialogue improve
+  clustering?"*. `run_baseline_eval.py` measures the initial k-means clustering
+  with no oracle interaction, using the same A1+B2 metrics with bootstrap CIs.
+  Read-only on the live DB (no pollution); A1 mean matches k-means' fit
+  silhouette (sanity check). Baseline numbers: Amazon (k=4) A1 0.0385
+  [0.0358, 0.0414], B2 0.788 [0.725, 0.850]; 20NG (k=6) A1 0.0555
+  [0.0528, 0.0581], B2 0.525 [0.242, 0.783]; IMDB (k=4) A1 0.0032
+  [0.0008, 0.0055], B2 0.787 [0.700, 0.875].
+- **Bootstrap 95% CIs on the eval aggregates** — `eval_report.py` now reports
+  percentile-bootstrap CIs (10k resamples) on every cross-scenario aggregate
+  including **turns to convergence** (the convergence claim with CI requested
+  by the brief). `n=1` is guarded.
+- **LLM-as-oracle harness — 3 personas, all reach `oracle_satisfied`.**
+  Parse-retry + provider-aware costs + 4xx-resilient runner. On Amazon:
+  `satisfied_minimalist` 2 turns / $0.0014 / B1 0.85;
+  `curious_explorer` 7 turns / $0.0093 / B1 0.75;
+  `contradictory_oracle` 7 turns / $0.0081 / B1 0.75 (hit a 422 mid-session
+  and recovered — proof the resilience works).
+- **Early finding (n=3, scripted scenarios) — honest reading.** At matched k=5
+  on Amazon, conversational B2 (0.69 [0.58, 0.78]) ≈ no-dialogue baseline B2
+  (0.66 [0.33, 0.88]) — CIs overlap; **no significant intrinsic-quality gain
+  from dialogue** — while B3 compliance = 1.00. The dialogue optimises
+  **oracle preference** (B3), not the automated metric — consistent with the
+  project's thesis ("the oracle is the objective").
+- **Internal sanity checks** — silhouette score logged per clustering run;
+  cluster naming and dialogue history validated end-to-end.
+- **Quality spec** — written and kept current (`docs/quality_specs.md`).
 
-**Pending (the main remaining work).**
-- **LLM-as-oracle simulation** — a small LLM with a preference spec, persona and
-  cognitive-load budget, to run many conversations at scale.
-- **Turns-to-convergence** (primary process metric, type-weighted) and
-  **cognitive load per turn** — harness + scenarios exist; needs the LLM-oracle.
-- **Human study** (N ≈ 5–10, within-subject) to validate the simulated oracle.
+**Pending (the remaining work).**
+- **Human study** (N ≈ 5–10, within-subject, scripted protocol, consent) to
+  validate the simulated oracle. Protocol still to write.
+- **More scenario coverage** — the convergence-with-CI claim becomes stronger
+  as we run more personas/scenarios; n=3 scripted scenarios is the floor.
 - **Contradiction / drift tracking** and **soft-assignment calibration** —
   scaffolding present; to be measured systematically.
 
 Candidate headline question: *"Does conversational refinement converge toward
-oracle-accepted clusterings, and at what cognitive-load cost?"*
+oracle-accepted clusterings, and at what cognitive-load cost — compared to a
+no-dialogue baseline?"*
 
 ---
 
 ## Slide 6 — Plan for next week
 
-The loop, `f_eval`, the quality spec, the second dataset and the generalization
-result are **done**. The final week is about **evaluation at scale** and polish:
+The loop, `f_eval`, the quality spec, the three datasets, the generalization
+result, the **no-dialogue baseline arm**, **bootstrap CIs on the eval
+aggregates** and the **LLM-as-oracle harness with 3 personas** are **done**.
+The final week is about **the human study** and **the write-up**:
 
-- **LLM-as-oracle harness** — run full conversations with a simulated oracle to
-  produce turns-to-convergence and cognitive-load numbers with CIs.
-- **Small human study** (N ≈ 5–10, scripted protocol) to validate the simulated
-  oracle before trusting any quantitative claim.
+- **Human study** (N ≈ 5–10, scripted protocol, consent) to validate the
+  simulated oracle. Protocol still to write — the prof flagged "3 friends with
+  no protocol" as a risk.
 - **Prompts dataset-agnostic** (#48) — remove residual "customer reviews" framing
-  so naming/intent aren't biased toward Amazon.
-- **Write-up**: fold the generalization result and the topic-vs-sentiment contrast
-  into the final report; honest discussion of what the oracle signal can and
-  cannot tell you.
-- Optional if time allows: hierarchy, UMAP/t-SNE, a second backend (HDBSCAN).
+  so naming/intent aren't biased toward Amazon (still pending).
+- **Write-up**: fold the **baseline-vs-conversational comparison** with CIs,
+  the online generalization result, the topic-vs-sentiment contrast, and the
+  persona-eval finding into the final report; honest discussion that the
+  dialogue serves oracle preference (B3=1.0), not the automated metric.
+- Optional if time allows: hierarchy, a second backend (HDBSCAN). UMAP/t-SNE
+  is already shipped.
 
 ---
 
 ## Slide 7 — Demo
 
 - **No hosted demo link yet.** The system runs locally.
-- Run: `PYTHONPATH=. python scripts/serve_ui.py`, then open `http://localhost:8000/ui`
-  (auto-seeds the demo dataset on first launch). CLI also available via
-  `python scripts/cli.py`.
-- **Working demo path** (verified live on both datasets): pick a dataset →
+- Run (two terminals): backend `PYTHONPATH=. python scripts/serve_ui.py`
+  (auto-seeds demo data on first launch), then React UI `cd frontend && npm run
+  dev` → `http://localhost:5173`. Legacy single-page UI still served at
+  `http://localhost:8000/ui`; CLI also available via `python scripts/cli.py`.
+- **Working demo path** (verified live on all three datasets): pick a dataset →
   initial clustering (k-means + LLM topic names) → oracle turns that **merge /
-  split / move** clusters and re-cluster the data in place → token/cost/cognitive-
-  load shown per turn. The full conversational loop works end-to-end.
+  split / move** clusters and re-cluster the data in place → semantic re-embed
+  along a user-stated axis → token/cost/cognitive-load shown per turn → UMAP
+  panel with the per-turn projection. The full conversational loop works
+  end-to-end and `oracle_satisfied` is reachable both manually and via the
+  scripted personas.
 - Repository: `github.com/ai-design-2026-projects/vibe-coders`.
