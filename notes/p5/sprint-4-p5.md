@@ -2,118 +2,99 @@
 
 ## Consegnato questo sprint
 
-### Feature: Semantic Re-Embedding (branch `feature/semantic-reembed`) ✅
+### Feature: Semantic Re-Embedding ✅
 
-Implementata la feature principale del piano: al Turn 1 l'oracle può fornire
-un asse semantico (`axis_hint`) che riorienta l'intero spazio di embedding
-prima del k-means, invece di partire sempre da un clustering topic-based.
+Implementata la feature principale: l'oracle può fornire un asse semantico che
+riorienta l'intero spazio di embedding prima del k-means, invece di partire
+sempre da un clustering topic-based. Il re-embedding può avvenire a qualsiasi
+turno (non solo al Turn 1).
 
 #### Architettura
 
 - **`src/engine/f_semantic_reembed.py`** — due strategie + selettore ibrido:
-  - Coseno su ancore (`"very {axis}"` / `"not {axis} at all"`) — gratuito
-  - LLM batch scoring (fallback se varianza coseno ≤ 0.01) — campiona 200/N
-    punti e propaga via nearest-neighbour; riduce da ~48 a ~8 chiamate LLM
+  - Coseno su ancore — gratuito, usa MiniLM con frasi polo generate dall'LLM
+  - LLM batch scoring (fallback se varianza coseno ≤ 0.01) — campiona 600/N
+    punti e propaga via nearest-neighbour; `LLM_SAMPLE_SIZE` alzato da 200 a 600
+    dopo esperimento Ridge vs NN (vedi sotto)
   - Matrice ibrida `(N, D+1)` con scaling `sqrt` per geometria esatta:
     `axis_weight=0.7` → 70% asse, 30% topic
-- **`src/engine/semantic_clustering.py`** — orchestra re-embed + k-means +
-  naming; `AXIS_K_CAP = 3` cappa il default k per assi 1-D
-- **`backend/routers/turns.py`** — path semantico al Turn 1 se `axis_hint`
-  presente; recupero `session_axis_hint` dai turni successivi per naming
-  coerente
-- **`src/schemas.py`** — `axis_hint: Optional[str]` aggiunto a `InputOracle`
-- **`src/engine/cluster_naming.py`** — blocco `AXIS CONTEXT` nel prompt
-  quando `axis_hint` è presente; nomi per grado/tono invece che per topic
-- **Propagazione completa**: `turns.py → f_apply_operations → merge/split_cluster
-  → name_clusters` — tutti i cluster creati successivamente al Turn 1 restano
-  coerenti con l'asse semantico
+- **`src/engine/semantic_clustering.py`** — orchestra re-embed + k-means + naming
+- **`backend/routers/turns.py`** — path semantico; flusso deterministico per
+  conferme post-clarify (bypass LLM per risposta "yes")
+- **`src/schemas.py`** — `axis_hint` aggiunto a `InputOracle`
+- **`src/engine/cluster_naming.py`** — blocco AXIS CONTEXT per nomi per
+  grado/tono invece che topic; criterio basato su posizione scalare sull'asse,
+  non pertinenza tematica
 
-#### Prompt (`prompts/f_output.txt`)
+#### Fix inclusi in questo sprint
 
-Aggiunti vincoli all'esecutore LLM:
-- **CLUSTER COUNT ARITHMETIC**: istruzioni esplicite per riduzione (merge N-way)
-  e aumento (K-N split su cluster distinti); proibizione esplicita di
-  "consolidate then expand"
-- Merge richiede ≥ 2 id; no operazione `delete` — merge con cluster più simile
-- `k` e `new_names` su split; nomi oracle usati VERBATIM
+**Pipeline non si attivava per input ambigui** — aggiunta action `clarify` con
+logica a tre casi: intent esplicito → `semantic_reembed` diretto; frase ambigua
+→ chiede conferma con spiegazione; conferma → `semantic_reembed` deterministico.
 
-#### Test
+**Conferma "yes" non avviava il reclustering** — flusso deterministico in
+`turns.py` che salva l'asse candidato nello `state_snapshot` al turno clarify e
+lo rilancia direttamente al turno successivo senza passare dall'LLM.
 
-- 15 test per `f_semantic_reembed` — tutti passano
-- 22 test per `semantic_clustering` — tutti passano
-- Test esistenti aggiornati per le nuove signature (`axis_hint`, `k`)
+**Nomi cluster non riflettevano l'asse** — criterio AXIS CONTEXT sostituito con
+posizione scalare HIGH/LOW; rimossi esempi hardcoded per asse-agnosticità.
+
+---
+
+### Esperimento: Ridge regression vs NN per propagazione LLM scores ✅
+
+**Ipotesi:** Ridge regression sul subspace MiniLM trova una direzione lineare
+che correla con il tono meglio del nearest-neighbour coseno.
+
+| N campioni | Metodo | std | R² | Silhouette | Bilanciamento |
+|---|---|---|---|---|---|
+| 200 | Ridge α=1.0 | 1.507 | 0.525 | 0.340 | — |
+| 200 | Ridge α=0.01 | 4.087 | 0.990 | 0.357 | — |
+| 200 | NN | ~2.8 | — | ~0.55 | — |
+| 600 | Ridge α=1.0 | 2.37 | 0.330 | 0.489 | 993/207 |
+| **600** | **NN** | **3.171** | **—** | **0.538** | **855/345** |
+
+**Conclusione:** Ridge non supera NN. A N=200 il regime D=384>>N non lascia
+spazio praticabile. A N=600 Ridge leviga la distribuzione perdendo la bimodalità
+che k-means sfrutta. Configurazione finale: **NN con N=600**.
 
 ---
 
 ### Integrazione miglioramenti da main ✅
 
-Letti i file su `main` con `git show main:<path>` e applicati manualmente
-nel branch senza merge/rebase:
-
 | Area | Miglioramento |
-|------|---------------|
-| Uncertainty | Cluster-level (`ClusterOverlap`, `ClusterCohesion`, `f_cluster_uncertainty`) — ask usa nomi non UUID |
-| Stop threshold | Alzato a 5; load=4 non ferma più prematuramente |
-| Softmax | Temperatura scalata → assegnamenti meno uniformi, silhouette migliore |
-| Merge fix | Massa dei cluster fusi droppata (non ripiegata) — impedisce collasso dataset |
-| Inline names | Oracle può nominare cluster in merge/split nello stesso turno |
-| Rename | Preserva description esistente se oracle non la specifica |
+|---|---|
+| Uncertainty | Cluster-level (`ClusterOverlap`, `ClusterCohesion`) |
+| Stop threshold | Alzato a 5; load=4 non ferma prematuramente |
+| Softmax | Temperatura scalata → silhouette migliore |
+| Merge fix | Massa fusa droppata — impedisce collasso dataset |
+| Inline names | Oracle può nominare in merge/split nello stesso turno |
 | Cognitive load | Floor division invece di round() |
 
 ---
 
-### Fix: token counter UI sempre a zero ✅
-
-`SystemTurn` mancava dei campi `token_usage` e `cost_usd` (presenti nello
-schema su main ma non nel branch); `turns.py` calcolava `usage` e `cost` ma
-li scartava. Fix: aggiunti campi a schema, popolati in `turns.py` e passati al
-`SystemTurn` prima del salvataggio. La UI mostra ora i valori reali per sessione.
-
----
-
-### UI: placeholder dinamico nel campo di testo ✅
-
-Il placeholder del campo input si adatta al turno corrente:
-- **Turn 0**: guida per l'asse semantico
-- **Turn 1+**: esempi con i nomi reali dei cluster correnti separati da `·`
-  (merge, split, rename, make N clusters)
-
----
-
-### Documentazione ✅
-
-- `docs/semantic-reembed-report.md` — report tecnico completo della feature,
-  aggiornato ad ogni modifica (pushato su `main` per condivisione con il gruppo)
-- Copre: architettura, file modificati, fix applicati, problemi aperti,
-  costi LLM stimati, prospettive future
-
----
-
-## Risultati test manuali
+### Risultati test manuali
 
 | Sessione | axis_hint | silhouette | Cluster prodotti | Note |
-|----------|-----------|-----------|-----------------|------|
+|---|---|---|---|---|
 | 1 | "angry tone" | 0.055 | 5 topic-based | prima del fix axis_weight |
 | 2 | "angry tone" | 0.055 | 5 tone-aware | prima del fix k cap |
 | 3 | "angry tone" | 0.151 | 3 tone-aware | k=3 ma lento (48 LLM calls) |
-| 4 | "angry tone" | 0.475 | `Very Angry` / `Neutral/Satisfied` / `Mildly Frustrated` | dopo tutti i fix |
+| 4 | "angry tone" | 0.475 | Very Angry / Neutral / Mildly Frustrated | dopo tutti i fix |
 
-Silhouette passata da 0.055 a 0.475 dopo i fix.
+### Test coverage
+
+| Suite | Test | Stato |
+|---|---|---|
+| `test_f_semantic_reembed.py` | 21 | ✅ |
+| `test_semantic_clustering.py` | 25 | ✅ |
+| `test_f_apply_operations.py` | 13 | ✅ |
+| **Suite completa** | **236** | ✅ 0 fail |
 
 ## Problemi aperti
 
-- **"make 5 clusters" da 3**: fix applicato (proibizione esplicita merge se
-  K>N) ma non ancora riverificato con test manuale
-- **Linguaggio libero non-operativo**: istruzioni implicite ("these look the
-  same") ancora inconsistenti — documentato nel report, da testare
-  sistematicamente
-
-## Piano sprint 5 (P5)
-
-- [ ] Harness LLM-as-oracle: script che fa girare una sessione completa con
-      oracle LLM (DeepSeek via OpenRouter) — era in piano sprint 4, rimandato
-- [ ] Batteria di test sistematici sui limiti di comprensione dell'LLM
-      (6 categorie: conteggio implicito, linguaggio valutativo, riferimenti
-      per nome, operazioni concatenate, contraddizioni, nomi verbatim)
-- [ ] Notebook Jupyter con metriche finali (turns-to-convergence, costo/sessione)
-- [ ] Valutare svincolo del re-embedding dal Turn 1 (cambio asse mid-session)
+- **MiniLM non discrimina assi tonali via coseno**: varianza coseno sempre sotto
+  soglia (0.006–0.009 < 0.01) per "angry tone" → LLM fallback sempre attivo per
+  assi tonali; il coseno funziona solo per assi tematici
+- **"make 5 clusters" da 3**: fix del vincolo CLUSTER COUNT ARITHMETIC applicato
+  ma non ancora riverificato con test manuale
