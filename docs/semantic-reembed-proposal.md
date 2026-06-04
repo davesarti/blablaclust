@@ -1,3 +1,5 @@
+> **SUPERSEDED — do not read.** This is the original pre-implementation proposal. The current implementation and findings are in [semantic-reembed-report.md](semantic-reembed-report.md).
+
 # Proposta: Semantic Re-Embedding (Turn 1 Axis Extraction)
 
 **Autore:** P5 (Arianna)  
