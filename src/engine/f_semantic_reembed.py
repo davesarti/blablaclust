@@ -164,6 +164,12 @@ def _llm_score_sample(
                 model=response.model,
             )
             raw = loads_llm_json(response.text)
+            # Unwrap {"scores": [...]} or similar object wrappers
+            if isinstance(raw, dict):
+                for key in ("scores", "results", "values", "data"):
+                    if isinstance(raw.get(key), list):
+                        raw = raw[key]
+                        break
             if isinstance(raw, list) and len(raw) >= len(batch):
                 batch_scores = [float(raw[j]) for j in range(len(batch))]
             else:

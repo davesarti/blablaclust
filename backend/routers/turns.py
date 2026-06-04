@@ -368,6 +368,32 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
                 builder=builder,
                 axis_hint=session_axis_hint,
             )
+        except AxisNotDiscriminativeError as exc:
+            db.rollback()
+            axis = next(
+                (op.get("axis_label", "") for op in operations if op.get("type") == "cluster_reembed"),
+                "",
+            )
+            return TurnRead(
+                session_id=session.id,
+                turn_number=new_turn_number - 1,
+                oracle_input=payload,
+                system_output=SystemTurn(
+                    session_id=session.id,
+                    turn_number=new_turn_number - 1,
+                    action="ask",
+                    clusters_updated=False,
+                    display=Display(
+                        type="text",
+                        content=(
+                            f"The axis \"{axis}\" doesn't vary enough within that cluster "
+                            f"to produce meaningful sub-clusters. "
+                            f"Try a different axis — one that clearly spans a range in those reviews."
+                        ),
+                    ),
+                    cognitive_load_score=1,
+                ),
+            )
         except (ValueError, KeyError) as exc:
             db.rollback()
             raise HTTPException(
