@@ -1,6 +1,6 @@
 # Progress Report — Conversational Clustering
 
-*Course: Designing Large Scale AI Systems · Team: vibe-coders (5 members) · Date: 2026-06-04 · Sprint 4*
+*Course: Designing Large Scale AI Systems · Team: vibe-coders (5 members) · Date: 2026-06-04 · Sprint 5*
 
 ---
 
@@ -104,9 +104,14 @@ on the eval aggregates are in place. The remaining gap is the **human study**
   `f_validate_point` judge; rename preserves existing names/descriptions.
 - **P4 — LLM Harness.** Retry + dry-run; prompt versioning; tolerant JSON
   parsing (handles markdown-fenced LLM output); inline naming on ops.
-- **P5 — Evaluation & UI.** Eval harness + scenarios + clustering-run log;
-  web UI (dynamic dataset label, loading states, token/cost/load readout);
-  semantic re-embedding feature (branch).
+- **P5 — Evaluation & UI.** Eval harness (LLM-as-oracle, 23 personas, 7
+  scripted scenarios) + clustering-run log; web UI (dynamic dataset label,
+  loading states, token/cost/load readout); semantic re-embedding feature
+  (cosine + LLM hybrid, clarify/confirm flow, axis-aware cluster naming);
+  literature review and state-of-the-art positioning against 5 related systems
+  (`docs/related-work.md`, radar chart); quantitative embedding model comparison
+  MiniLM vs BGE-base (NMI +20%, ARI +24% — upgrade deferred on CPU latency
+  grounds, documented in `docs/embedding-model-comparison.md`).
 
 ---
 
