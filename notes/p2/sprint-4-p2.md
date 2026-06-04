@@ -515,6 +515,61 @@ script length, not organic convergence — the real convergence-with-CI claim ne
 the LLM-oracle personas (§ pending). (iii) B2 is a single non-deterministic judge
 call per arm; its CI is over clusters, coarse at small k.
 
+### 25. Persona reports made robust (#3) — the LLM-as-oracle deliverable
+
+`src/eval/llm_oracle.py`, `scripts/run_persona_eval.py`,
+`tests/test_llm_oracle.py` (commit `43a6a60`).
+
+The persona reports (an LLM pretending to be a user, driving a full session) are
+a required deliverable. They were **incomplete and fragile**: the last run got
+only 1 of 3 personas, and that one died mid-session. Three fixes:
+
+- **Oracle parse retry.** `LLMOracle.next_turn` raised on the first reply that
+  wasn't valid JSON, ending the session — this is what killed `curious_explorer`
+  at turn 3 in run1. Now it retries (up to 3×) with a corrective "reply with ONLY
+  the JSON object" nudge; only after exhausting retries does it give up. Each
+  call (incl. retries) is logged and its usage accrued.
+- **Oracle cost fix.** `self._model` defaulted to `ANTHROPIC_MODEL` (Claude) while
+  the active provider is OpenRouter/Gemini, so `estimate_cost_usd` fell through to
+  the $0 default → run1 reported `cost 0.0`. Now resolved via `_active_model()`
+  (the active provider's model) → real costs.
+- **Runner 4xx-resilience.** An invalid op (e.g. the oracle naming a cluster a
+  prior split/merge had dissolved → `422 cannot split/merge already-dissolved
+  cluster`) terminated the whole session. Now a 4xx feeds the error back to the
+  oracle ("that no longer exists — pick another") and the session **continues**,
+  exactly as a human would after a rejected action; only 5xx terminates.
+- **3 regression tests** (recover from one bad reply / accrue failed-attempt
+  usage / give up after N attempts).
+
+**Result — all 3 personas now reach `oracle_satisfied`** with real costs:
+
+| Persona | Termination | Turns | k→k | Cost | B1 / B2 / B3 |
+|---|---|---|---|---|---|
+| satisfied_minimalist | oracle_satisfied | 2 | 5→5 | $0.0014 | 0.85 / 0.77 / 1.0 |
+| curious_explorer | oracle_satisfied | 7 | 4→7 | $0.0093 | 0.75 / 0.69 / 1.0 |
+| contradictory_oracle | oracle_satisfied | 7 | 4→5 | $0.0081 | 0.75 / 0.69 / 0.8 |
+
+`contradictory_oracle` hit a 422 mid-session, **recovered, and continued to
+satisfaction** — proof the resilience fix works. Reports in `reports/personas/`
+(note: `reports/` is gitignored, so committing them as a deliverable needs a
+forced add — team decision).
+
+### 26. React UMAP / Workspace UI fixes (P5 frontend, with go-ahead)
+
+- **UMAP geom-aware toggle removed** (`UmapModal.tsx`, commit `afedb95`). The
+  React UI re-exposed the internal geometry-aware projection via a checkbox; per
+  the #58 decision the feature stays internal (dev/eval only, via
+  `?geometry_aware=true`). Removed the checkbox + toggle state; the render path
+  falls back to the standard projection (unchanged), backend untouched.
+- **WorkspacePage production build repaired** (commit `53e9570`). `WorkspacePage.tsx`
+  referenced an undefined `setShowEval` (introduced in `992ecc3`), so `npm run
+  build` (tsc) failed; the dev server (esbuild, no type-check) hid it. Fixed to
+  `setEvalResult`. Pre-existing breakage, not P2's — fixed with Thomas's go-ahead.
+- **Eval modal no longer auto-opens on session resume** (commit `3989da5`). The
+  build fix above restored an on-mount auto-open of the eval modal; per Thomas's
+  request the mount effect was removed so the eval opens **only on click** (the
+  AnalyticsPanel button path is untouched). Production build green.
+
 ## Results
 
 | Check | Result |
@@ -547,7 +602,11 @@ call per arm; its CI is over clusters, coarse at small k.
 | No-dialogue baseline arm (§24) | `run_baseline_eval.py`; A1+B2 with CI, read-only, no DB pollution |
 | Baseline vs conversational (§24) | matched-k amazon: B2 0.66 vs 0.69 (overlap) — no intrinsic gain; B3=1.0 |
 | Generalization eval fix (§24) | `data`→`text`; was crashing post-migration, now runs |
-| Full test suite | **306 passed**, 0 fail |
+| Persona robustness (§25) | oracle parse-retry + provider-aware cost + 4xx-resilient runner; 3 tests |
+| Persona reports (§25) | all 3 personas → oracle_satisfied, real costs (was 1/3 partial, cost $0) |
+| UMAP geom-aware removed (§26) | checkbox dropped from React UI; feature stays internal; build green |
+| WorkspacePage build + eval UX (§26) | fixed undefined `setShowEval`; eval modal opens on click, not on resume |
+| Full test suite | **309 passed**, 0 fail |
 
 ## Issues opened this sprint
 
@@ -611,20 +670,23 @@ for 20NG — P5), #51 (datasets API record count — P1, merged), #52
       site; `log_llm_call` best-effort; 6 regression tests. Committed `04f448d`.
 - [x] **Zombie-session fix + backend k≥2** (§23) — client validation +
       rollback-on-failure; API enforces k≥2; 15 orphans purged. Committed `a095253`.
-- [ ] **Push:** 3 commits above are local on `main` (ahead 3, not pushed) —
-      awaiting Thomas's ok (coordinate a `pull --rebase` first, shared branch).
-- [ ] **Run personas at scale** — produce `reports/` with results.jsonl +
-      summary.md across all 3 personas; commit as deliverable for the prof.
-- [ ] **CI on convergence claim** — `eval_report.py` aggregates mean±std but
-      lacks bootstrap CI. Needed for the prof's "1 claim with CI" requirement.
-- [ ] **Baseline comparison** — clustering without dialogue for the
-      trio/quartet headline experiment (prof's spec).
-- [ ] **Human study protocol** — at minimum a written protocol (within-subject,
-      randomized, scripted, consented). Prof flags "3 friends with no protocol"
-      as a risk.
-- [ ] **Update `notes/progress_report.md`** — still dated 2026-05-29, says
-      "LLM-as-oracle: Not yet" and cites old 87% accuracy claim. Both wrong now.
-      P5/P1 authored — flag to them.
+- [x] **All sprint commits pushed** to `main` (migration, cost/logging, zombie
+      fix + k≥2, eval CIs, baseline arm, persona robustness, UMAP/UI fixes).
+- [x] **CI on convergence claim** (§24) — bootstrap 95% CIs in `eval_report.py`
+      on every aggregate + a turns-to-convergence claim. Committed `b5c3cf0`.
+- [x] **Baseline comparison** (§24) — `run_baseline_eval.py`, no-dialogue arm
+      (A1+B2 with CI), read-only, zero DB pollution. Committed `b5c3cf0`.
+- [x] **Run personas at scale** (§25) — all 3 personas → oracle_satisfied, real
+      costs; oracle parse-retry + 4xx-resilient runner. Committed `43a6a60`.
+      Reports in `reports/personas/` (gitignored — force-add if wanted as deliverable).
+- [x] **React UMAP/UI fixes** (§26) — geom-aware toggle removed, WorkspacePage
+      build repaired, eval opens on click not on resume. `afedb95` `53e9570` `3989da5`.
+- [ ] **Human study protocol** (#5, next) — at minimum a written protocol
+      (within-subject, randomized, scripted, consented). Prof flags "3 friends with
+      no protocol" as a risk.
+- [ ] **Update `notes/progress_report.md`** (#4, next) — still dated 2026-05-29,
+      says "LLM-as-oracle: Not yet" and cites the removed 87% accuracy claim. Both
+      wrong now. P5/P1 authored — flag to them.
 - [ ] Coordinate with P5 on folding into the final report:
       turns-to-convergence, online generalization A1/B2 result,
       topic-vs-sentiment contrast, UMAP figures.
