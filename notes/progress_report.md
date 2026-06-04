@@ -104,14 +104,17 @@ on the eval aggregates are in place. The remaining gap is the **human study**
   `f_validate_point` judge; rename preserves existing names/descriptions.
 - **P4 — LLM Harness.** Retry + dry-run; prompt versioning; tolerant JSON
   parsing (handles markdown-fenced LLM output); inline naming on ops.
-- **P5 — Evaluation & UI.** Eval harness (LLM-as-oracle, 23 personas, 7
-  scripted scenarios) + clustering-run log; web UI (dynamic dataset label,
-  loading states, token/cost/load readout); semantic re-embedding feature
-  (cosine + LLM hybrid, clarify/confirm flow, axis-aware cluster naming);
-  literature review and state-of-the-art positioning against 5 related systems
-  (`docs/related-work.md`, radar chart); quantitative embedding model comparison
-  MiniLM vs BGE-base (NMI +20%, ARI +24% — upgrade deferred on CPU latency
-  grounds, documented in `docs/embedding-model-comparison.md`).
+- **P5 — Evaluation & UI.** Full **React + TypeScript + Tailwind v4 rewrite**
+  of the frontend (replaces HTML prototype): two-panel workspace (cluster grid
+  + fixed chat sidebar), animated welcome page, Plotly UMAP evolution modal,
+  eval scores modal, per-cluster expand/search/pin, dataset management UI
+  (upload, preview, delete), stop + export modal, persona session UI; eval
+  harness (LLM-as-oracle, 23 personas, 7 scripted scenarios) + clustering-run
+  log; semantic re-embedding feature (cosine + LLM hybrid, clarify/confirm
+  flow, axis-aware cluster naming); literature review and state-of-the-art
+  positioning against 5 related systems (`docs/related-work.md`, radar chart);
+  quantitative embedding model comparison MiniLM vs BGE-base (NMI +20%,
+  ARI +24% — upgrade deferred on CPU latency, `docs/embedding-model-comparison.md`).
 
 ---
 

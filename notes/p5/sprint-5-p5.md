@@ -2,6 +2,36 @@
 
 ## Consegnato questo sprint
 
+### React frontend — riscrittura completa (`frontend/`) ✅
+
+Sostituzione del prototipo HTML (`ui/index.html`) con una SPA React + TypeScript
++ Tailwind v4 (commit `81ea060`, 2026-06-02).
+
+**Stack:** Vite + React 18 + TypeScript + Tailwind v4 + Plotly.js
+
+**Componenti principali:**
+- `WelcomePage.tsx` — landing animata con lista sessioni e creazione nuova sessione
+- `WorkspacePage.tsx` — layout a due pannelli: griglia cluster + chat sidebar fissa
+- `ChatPanel.tsx` — interfaccia conversazionale con history, typing indicator, invio
+- `ClusterCard.tsx` — card cluster con chip selezionabili, expand, pin punti
+- `AnalyticsPanel.tsx` — UMAP + visualizzazione evoluzione per turno
+- `store/AppContext.tsx` — stato globale applicazione
+- `api/client.ts` — client API tipizzato
+
+**Modali:**
+- `DatasetsModal.tsx` — upload CSV, anteprima, delete dataset
+- `NewSessionModal.tsx` — configurazione nuova sessione
+- `EvalModal.tsx` — metriche A1–B4 per sessione
+- `UmapModal.tsx` — proiezione UMAP geometria-aware per turno
+- `ExpandClusterModal.tsx` — ricerca e pin punti per cluster
+- `PersonaModal.tsx` — sessioni persona nel UI
+- `StopSessionModal.tsx` — stop + export
+
+Fix successivi: TypeScript build errors, null metrics handling, WSL2 browser
+access, dataset management, pinning, eval modal on resume, UMAP geometry toggle.
+
+---
+
 ### Eval harness: LLM-as-oracle ✅
 
 Implementato il sistema di valutazione automatica che sostituisce l'oracolo
