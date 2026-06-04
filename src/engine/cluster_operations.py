@@ -31,7 +31,7 @@ import uuid
 import numpy as np
 
 from src.engine.cluster_naming import name_clusters
-from src.engine.initial_clustering import _fit_kmeans, _softmax, initial_clustering
+from src.engine.initial_clustering import _fit_gmm, _fit_kmeans, _softmax, initial_clustering
 from src.engine.turn_builder import TurnBuilder
 from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoftAssignment
 
@@ -430,11 +430,19 @@ def semantic_reembed_cluster(
 
     X = reembed_for_axis(subset_points, axis_hint, axis_weight=axis_weight)
 
-    model = _fit_kmeans(X, k)
-    centroids = model.cluster_centers_
-    diffs = X[:, np.newaxis, :] - centroids[np.newaxis, :, :]
-    sq_dists = np.sum(diffs ** 2, axis=2)
-    probs = _softmax(-sq_dists, axis=1)  # (n_subset, k)
+    try:
+        _, probs = _fit_gmm(X, k)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(
+            "GMM failed in semantic_reembed_cluster (k=%d, n=%d, reason=%s) — falling back to k-means",
+            k, len(subset_points), exc,
+        )
+        model = _fit_kmeans(X, k)
+        centroids = model.cluster_centers_
+        diffs = X[:, np.newaxis, :] - centroids[np.newaxis, :, :]
+        sq_dists = np.sum(diffs ** 2, axis=2)
+        probs = _softmax(-sq_dists, axis=1)
 
     new_cluster_ids = [str(uuid.uuid4()) for _ in range(k)]
     new_clusters = [
