@@ -1,18 +1,16 @@
 # Data Model
 
 The persistence layer for the conversational clustering system. Defined as
-SQLAlchemy ORM models in [`src/models.py`](../src/models.py); SQLite in dev,
-PostgreSQL in production. The schema is smoke-tested in
-[`tests/test_data_model_smoke.py`](../tests/test_data_model_smoke.py) — that test
-is the executable companion to this doc, so if the two ever disagree, trust the
-test and fix the doc.
+SQLAlchemy ORM models in [`src/models.py`](../src/models.py); SQLite was used. The schema is smoke-tested in
+[`tests/test_data_model_smoke.py`](../tests/test_data_model_smoke.py).
 
 ## Overview
 
 ```
 ChatSession ──< Cluster ──< SoftAssignment >── DataPoint ──< Dataset
      │                          (turn N)
-     └──< Turn
+     ├──< Turn
+     └──< EvalCache
 ```
 
 A **session** is one oracle's clustering conversation over a dataset — it is
@@ -52,7 +50,7 @@ A single record from the source dataset, plus its embedding.
 |---|---|---|
 | `id` | `String(36)` | PK (UUID). |
 | `dataset_id` | `String(36)` | Indexed. FK → `datasets.id` (`ondelete="CASCADE"`). |
-| `data` | `JSON` | The raw record, e.g. `{"text": "..."}`. |
+| `text` | `Text` | The raw string content of the data point. |
 | `embedding` | `JSON`, nullable | Vector as a JSON list; `NULL` until embeddings are generated. |
 
 Relationships: `dataset` (many-to-one), `soft_assignments` (one-to-many, `delete-orphan`).
@@ -70,6 +68,7 @@ One clustering conversation.
 | `status` | `String(32)` | Default `active`. **Constraint** `ck_sessions_status`: one of `active`, `converged`, `closed`. |
 | `oracle_kind` | `String(16)` | Default `human`. **Constraint** `ck_sessions_oracle_kind`: one of `human`, `persona`. |
 | `persona_snapshot` | `JSON`, nullable | Persona config frozen at session creation; `NULL` for human sessions. |
+| `preference_summary` | `Text`, nullable | Rolling LLM-generated bullet-point summary of the oracle's revealed preferences (`f_update_preferences`). Updated after each turn; `NULL` until first summary is produced. Exposed as `oracle_preference_summary` in `ChatSessionState`. |
 
 Relationships: `dataset` (many-to-one), `clusters` and `turns` (one-to-many,
 both `delete-orphan` — see [Cascade](#cascade-deletes)).
@@ -126,6 +125,25 @@ One exchange in the oracle conversation.
 
 Relationship: `session` (many-to-one).
 
+### `eval_cache` — `EvalCache`
+
+Caches the computed eval response for a session so repeated `GET /sessions/{id}/eval`
+calls are fast. A new entry is written on every `POST /eval` (unless the caller
+passes `?force=true` to recompute). The cache is keyed by a hash of the full
+session state + coherence samples + compliance turns, so a stale hit is
+impossible — any meaningful state change produces a new key.
+
+| Column | Type | Notes |
+|---|---|---|
+| `key` | `String(64)` | PK. SHA-256 hash of the eval inputs. |
+| `session_id` | `String(36)` | Indexed. FK → `sessions.id` (`ondelete="CASCADE"`). |
+| `response_json` | `Text` | Full `EvalResponse` serialised as JSON. |
+| `created_at` | `DateTime` | UTC timestamp of when the entry was written. |
+
+Deleting a session cascades to its eval-cache rows at the DB level
+(`ondelete="CASCADE"` on `session_id`). There is no ORM relationship back to
+`ChatSession`; the cache is looked up by key, not navigated from the session.
+
 ## The turn / snapshot model
 
 `turn_number` is the spine of the whole model, and it means two related things:
@@ -162,7 +180,8 @@ therefore removes its clusters, turns, and (transitively) their soft assignments
 `Dataset` owns its `data_points` via ORM `cascade="all, delete-orphan"`. It also
 cascades to sessions at the **DB level** (`ondelete="CASCADE"` on both
 `data_points.dataset_id` and `sessions.dataset_id`), so deleting a dataset wipes
-its points and all sessions (plus their clusters/turns/assignments transitively).
+its points and all sessions (plus their clusters/turns/assignments/eval-cache
+rows transitively).
 
 `DataPoint` rows survive session deletion — they're dataset-scoped. Deleting a
 data point cascades to its own soft assignments only.
@@ -176,5 +195,5 @@ data point cascades to its own soft assignments only.
 - Engine functions never touch the DB session — the **caller owns the
   transaction**. Operations stage rows on the session and let the caller commit,
   so a multi-operation oracle turn stays atomic.
-- JSON columns (`data`, `embedding`, `oracle_input`, `system_output`) round-trip
+- JSON columns (`embedding`, `persona_snapshot`, `oracle_input`, `system_output`) round-trip
   as native dict / list.

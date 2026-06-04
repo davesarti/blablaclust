@@ -350,6 +350,7 @@ def read_sessions(db: Session = Depends(get_db)):
             "embedding_model": session.embedding_model,
             "status": session.status,
             "oracle_kind": session.oracle_kind,
+            "persona_snapshot": session.persona_snapshot,
         }
         for session in chat_sessions
     ]
