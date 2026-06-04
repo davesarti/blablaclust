@@ -137,6 +137,8 @@ def _llm_score_sample(
     points: list[DataPoint],
     axis_label: str,
     batch_size: int,
+    pole_pos_text: str = "",
+    pole_neg_text: str = "",
 ) -> np.ndarray:
     """Score exactly `points` via LLM batching. Returns float64 (N,)."""
     scores: list[float] = []
@@ -151,6 +153,8 @@ def _llm_score_sample(
             axis=axis_label,
             texts=texts,
             n=len(batch),
+            pole_pos=pole_pos_text,
+            pole_neg=pole_neg_text,
         )
         messages = [{"role": "user", "content": texts}]
         try:
@@ -192,6 +196,8 @@ def _llm_axis_scores(
     points: list[DataPoint],
     axis_label: str,
     batch_size: int = 25,
+    pole_pos_text: str = "",
+    pole_neg_text: str = "",
 ) -> np.ndarray:
     """Score each point along the axis via LLM batch scoring.
 
@@ -211,7 +217,7 @@ def _llm_axis_scores(
             f"[semantic-reembed] LLM scoring {n} points  calls={n_calls}",
             flush=True,
         )
-        return _llm_score_sample(points, axis_label, batch_size)
+        return _llm_score_sample(points, axis_label, batch_size, pole_pos_text, pole_neg_text)
 
     # Sample LLM_SAMPLE_SIZE points, score them, propagate via NN.
     rng = np.random.default_rng(42)
@@ -225,7 +231,7 @@ def _llm_axis_scores(
         f"calls={n_calls}  (was {(n + batch_size - 1) // batch_size} without sampling)",
         flush=True,
     )
-    sample_scores = _llm_score_sample(sampled, axis_label, batch_size)
+    sample_scores = _llm_score_sample(sampled, axis_label, batch_size, pole_pos_text, pole_neg_text)
 
     sample_embs = np.array([p.embedding for p in sampled], dtype=np.float64)
     all_embs    = np.array([p.embedding for p in points],  dtype=np.float64)
@@ -306,7 +312,9 @@ def reembed_for_axis(
             f"cosine_variance={cosine_var:.4f} <= threshold={COSINE_VARIANCE_THRESHOLD}",
             flush=True,
         )
-        axis_scores = _llm_axis_scores(points, axis_label)
+        axis_scores = _llm_axis_scores(points, axis_label,
+                                       pole_pos_text=pole_pos_text,
+                                       pole_neg_text=pole_neg_text)
         llm_std = float(axis_scores.std())
         print(
             f"[semantic-reembed] LLM scores  "
