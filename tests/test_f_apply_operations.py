@@ -118,7 +118,8 @@ def test_split_with_inline_new_names_calls_rename_for_each_child():
     builder = _builder()
     children = [MagicMock(id="x", description=""), MagicMock(id="y", description="")]
     with patch(f"{MOD}.split_cluster", return_value=children), \
-         patch(f"{MOD}.rename_cluster") as mock_rename:
+         patch(f"{MOD}.rename_cluster") as mock_rename, \
+         patch(f"{MOD}._match_names_to_clusters", return_value={"x": "A", "y": "B"}):
         f_apply_operations([op], builder=builder)
     assert mock_rename.call_count == 2
 
