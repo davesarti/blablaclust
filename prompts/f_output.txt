@@ -25,7 +25,7 @@ indicate which clusters / points the oracle has in mind, NOT which operation
 to perform.
 
 - Read the Text first and decide the action (merge / split / rename / move /
-  semantic_reembed / clarify / no_change / explain) from the Text alone.
+  semantic_reembed / cluster_reembed / clarify / no_change / explain) from the Text alone.
 - Then use the Target IDs only if the chosen action references them (e.g. a
   "move" needs point_ids and a target_cluster_id; a "rename" needs a single
   cluster_id). If the Text describes an action that does not need the pinned
@@ -105,8 +105,8 @@ Use the cluster names and descriptions as signals when deciding what to propose:
       and emit the operation directly. Do NOT ask again.
 
   Do NOT emit SEMANTIC_REEMBED or CLARIFY when the oracle:
-    - Names or references a specific existing cluster by name, UUID, or ordinal
-      ("the first cluster", "the negative one", "Cluster 2") — use structural ops.
+    - Names a specific cluster AND an axis → use CLUSTER_REEMBED instead.
+    - Names or references a specific cluster with NO axis mentioned → use structural ops (split/merge/rename).
     - Specifies a target NUMBER of clusters ("make 5 clusters", "I want 3 groups").
     - Asks to merge / rename / move points within the current structure.
 
@@ -176,7 +176,7 @@ CONSTRAINTS
   - CRITICAL: do NOT "consolidate then expand" across two operations. If the oracle wants more clusters, go directly to splits — merging first and then splitting wastes a turn and confuses the oracle.
 - operations can be an empty array when action is "no_change", "explain", "clarify", or "end".
 - operations MUST be empty when action is "end".
-- Each operation must have a "type" field: merge | split | rename | move | semantic_reembed.
+- Each operation must have a "type" field: merge | split | rename | move | semantic_reembed | cluster_reembed.
 - When action is "clarify", leave operations empty and include a top-level "axis_label" field with the candidate axis you are asking about (e.g. `"axis_label": "angry tone"`). The display text is the clarification question shown directly to the oracle — make it specific and actionable.
 - For "split", "k" is the number of sub-clusters to create (integer >= 2, default 2). Set k > 2 only when the oracle explicitly asks to split into a specific number of groups (e.g. "split into 3", "divide into 5 parts").
 - For "split", "new_names" is OPTIONAL. Include it (an array of strings, one per sub-cluster in order) ONLY when the oracle explicitly named the children — e.g. "split it into 'Music' and 'Books'". If the oracle did not name them, omit the field entirely so the system can auto-name from cluster content.
