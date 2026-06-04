@@ -17,3 +17,4 @@ reports/
 logs/*
 !logs/.gitkeep
 .claude/launch.json
+CLAUDE.md
