@@ -384,7 +384,6 @@ def semantic_reembed_cluster(
     axis_hint: str,
     builder: TurnBuilder,
     k: int = 2,
-    axis_weight: float = 0.7,
     auto_name: bool = True,
 ) -> list[DbCluster]:
     """Re-embed a single cluster along a semantic axis and split into k sub-clusters.
@@ -428,7 +427,7 @@ def semantic_reembed_cluster(
         builder.db.query(DataPoint).filter(DataPoint.id.in_(subset_ids)).all()
     )
 
-    X = reembed_for_axis(subset_points, axis_hint, axis_weight=axis_weight)
+    X, _ = reembed_for_axis(subset_points, axis_hint)
 
     try:
         _, probs = _fit_gmm(X, k)

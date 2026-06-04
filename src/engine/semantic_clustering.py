@@ -138,7 +138,7 @@ def semantic_clustering(
 
     # Compute the hybrid (N, D+1) embedding matrix.
     # Must happen before k selection so silhouette-based auto-k uses real geometry.
-    X = reembed_for_axis(valid, axis_hint, axis_weight=axis_weight)
+    X, _ = reembed_for_axis(valid, axis_hint, axis_weight=axis_weight)
 
     if k is None:
         k = _auto_select_k(X, K_AUTO_MIN, min(K_AUTO_MAX, len(valid) - 1))

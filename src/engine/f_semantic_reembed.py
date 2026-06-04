@@ -47,6 +47,15 @@ def _get_st_model() -> SentenceTransformer:
 # asked to pick a different one rather than silently falling back to topic clustering.
 LLM_STD_THRESHOLD = 1.0
 
+# Auto axis_weight values per strategy.
+# Cosine strategy: the axis is already partially captured by the original
+# embeddings (high cosine variance), so the original embeddings are informative
+# and a moderate weight is enough.
+# LLM strategy: the axis is orthogonal to the embeddings (e.g. sentiment vs
+# topic) — a high weight is needed to force clustering off the topical geometry.
+AXIS_WEIGHT_COSINE = 0.5
+AXIS_WEIGHT_LLM = 0.9
+
 
 class AxisNotDiscriminativeError(ValueError):
     """The requested axis doesn't meaningfully vary across the dataset."""
@@ -235,12 +244,13 @@ def _llm_axis_scores(
 def reembed_for_axis(
     points: list[DataPoint],
     axis_label: str,
-    axis_weight: float = 0.7,
-) -> np.ndarray:
+    axis_weight: float | None = None,
+) -> tuple[np.ndarray, str]:
     """Compute a hybrid embedding where axis_weight controls geometric influence.
 
-    axis_weight is the exact fraction of k-means distance driven by the
-    semantic axis. axis_weight=0.7 means 70% axis, 30% original embeddings.
+    When axis_weight is None (default), the weight is chosen automatically:
+    - "cosine" strategy (axis captured by embeddings) → AXIS_WEIGHT_COSINE (0.5)
+    - "llm" strategy (axis orthogonal to embeddings)  → AXIS_WEIGHT_LLM (0.9)
 
     Strategy selection:
     - Try cosine anchor poles (free, no LLM call).
@@ -250,10 +260,12 @@ def reembed_for_axis(
     Args:
         points: DataPoint rows, all must have non-None embeddings.
         axis_label: Semantic axis (e.g. "angry", "battery life").
-        axis_weight: Fraction [0, 1] of k-means signal from the axis.
+        axis_weight: Fraction [0, 1] of clustering signal from the axis.
+            None = auto-select based on scoring strategy.
 
     Returns:
-        Float32 array of shape (N, D+1) where D is the original embedding dim.
+        (matrix, strategy) — Float32 array of shape (N, D+1) and the strategy
+        string ("cosine" or "llm") used to score the axis.
 
     Raises:
         ValueError: if any point has a None embedding.
@@ -281,6 +293,7 @@ def reembed_for_axis(
             flush=True,
         )
         axis_scores = cosine_scores
+        strategy = "cosine"
     else:
         print(
             f"[semantic-reembed] axis='{axis_label}'  strategy=LLM-fallback  "
@@ -301,6 +314,10 @@ def reembed_for_axis(
                 f"dataset (LLM score std={llm_std:.2f} < threshold={LLM_STD_THRESHOLD}). "
                 f"Try an axis that is clearly present and varies in the data."
             )
+        strategy = "llm"
+
+    if axis_weight is None:
+        axis_weight = AXIS_WEIGHT_COSINE if strategy == "cosine" else AXIS_WEIGHT_LLM
 
     # Standardise axis scores (zero-mean, unit-variance). Combined with
     # row-normalised embeddings (unit norm), both components have expected
@@ -315,10 +332,10 @@ def reembed_for_axis(
     orig_scale = float(np.sqrt(1.0 - axis_weight))
     ax_scale   = float(np.sqrt(axis_weight))
     print(
-        f"[semantic-reembed] axis_weight={axis_weight:.2f}  "
+        f"[semantic-reembed] axis_weight={axis_weight:.2f} (strategy={strategy})  "
         f"orig_scale={orig_scale:.3f}  axis_scale={ax_scale:.3f}",
         flush=True,
     )
     return np.hstack(
         [orig_norm * orig_scale, axis_norm.reshape(-1, 1) * ax_scale]
-    ).astype(np.float32)
+    ).astype(np.float32), strategy

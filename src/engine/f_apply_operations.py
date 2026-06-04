@@ -197,7 +197,6 @@ def f_apply_operations(
                 axis_hint=axis,
                 builder=builder,
                 k=k,
-                axis_weight=0.7,
             )
 
         # Unknown op_type values are skipped intentionally so a future protocol
