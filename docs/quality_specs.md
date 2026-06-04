@@ -60,6 +60,24 @@ the LLM's prompt is bloated enough to start degrading. Oracle-side cognitive
 load (what the human has to process) is a separate concern not measured here.
 Deterministic and read straight from the per-turn `state_snapshot`.
 
+**A4. Generalization OOD rate (assignment-function fitness)** — for the
+generalization procedure only. After a converged session freezes its
+centroids, we calibrate a per-cluster **Mahalanobis-distance** reference from
+the base in-cluster points. Each cluster ``c`` contributes a per-dim sample
+variance vector ``σ²_c ∈ ℝ^d``; new arrivals are scored as:
+``d²_M(x, c) = Σ_j (x_j − μ_{c,j})² / (σ²_{c,j} + ε)``
+where ``ε = 1e-4`` matches the GMM `reg_covar` regularisation. The OOD
+threshold is the 95th percentile of the base ``d²_M`` distribution for that
+cluster. Aggregates: **pooled OOD rate** (baseline ≈ 5% under the null — the
+complement of the 95th-percentile threshold) and **pooled mean z** with
+bootstrap 95% CI, plus a per-cluster breakdown (``n``, ``ood_rate``,
+``mean_z``). Implemented by `calibrate_distance_reference` + `assignment_ood`
+in [`src/engine/generalization.py`](../src/engine/generalization.py).
+Temperature-free, deterministic, no LLM dependency — survives
+`HARNESS_DRY_RUN` and B2 provider failures. The covariance is recovered from
+base hard-label assignments (argmax of snapshot), so it works whether the
+engine ran GMM or k-means fallback without coupling to the fitted model.
+
 ## Family B — LLM-as-oracle + LLM-as-judge
 
 The scripted/LLM **oracle** produces
@@ -100,26 +118,37 @@ context: a high B4 partially excuses low B2 / B3.
 
 ## Generalization (procedure)
 
-Generalization is **not a new metric** — it is a procedure that re-evaluates
-**A1** (silhouette) and **B2** (cluster coherence) at two snapshots around an
-ingestion event. It reframes the brief's "generalization" question operationally:
-*once the oracle is happy, do new points entering the running system keep the
-structure intact?* — **consistency under growth, not accuracy against a hidden
-category**.
+Generalization is a procedure that evaluates three signals at two snapshots
+around an ingestion event — **A1** (silhouette), **B2** (cluster coherence),
+and **A4** (distance-based OOD rate on new arrivals, the only one specific to
+this procedure). It reframes the brief's "generalization" question
+operationally: *once the oracle is happy, do new points entering the running
+system keep the structure intact?* — **consistency under growth, not accuracy
+against a hidden category**.
 
-- **t0** — eval A1 + B2 on the converged state.
+- **t0** — eval A1 + B2 on the converged state; build the **A4 calibration**
+  once (`calibrate_distance_reference` — per-cluster `(d²_95, μ, σ)` over
+  base in-cluster squared distances). The calibration is frozen for the whole
+  run, mirroring the centroid freeze.
 - **Ingest** a batch of new points: embed → nearest-centroid `assign_nearest`
   against the **frozen** convergence centroids → write a fresh full snapshot at
   `turn + 1` (`ingest_points` in
   [`src/engine/generalization.py`](../src/engine/generalization.py)). Centroids
   are not recomputed; pre-existing points are carried forward verbatim.
-- **t1** — eval A1 + B2 again, plus an A1 sub-aggregate over just the new batch
-  ("do the new points sit cleanly relative to the centroids?"). B2's bottom-2
-  stress sample naturally surfaces bad new members.
+- **t1** — eval A1 + B2 again, plus:
+    - an A1 sub-aggregate over just the new batch ("do the new points sit
+      cleanly relative to the centroids?")
+    - **A4 on the new batch** (`assignment_ood`): Mahalanobis d² per new point
+      scored against the frozen cluster calibration; pooled OOD rate, pooled
+      mean z + bootstrap CI, per-cluster breakdown
+    - B2's bottom-2 stress sample naturally surfaces bad new members.
 - Report **paired Δ + bootstrap 95% CI** on A1 (over the common, pre-existing
-  points) and B2 (over the per-cluster scores). Generalization *holds* when A1
-  does not drop (paired Δ CI spans 0 or is positive) and B2 does not decline;
-  repeat the ingest/eval loop over multiple batches for a drift curve.
+  points) and B2 (over the per-cluster scores), and **pooled OOD rate + mean z
+  + CI** on A4. Generalization *holds* when A1 does not drop (paired Δ CI spans
+  0 or is positive), **A4's OOD rate stays near its 5% baseline**, and B2 does
+  not decline; repeat the ingest/eval loop over multiple batches for a drift
+  curve on A1 and A4 (B2 is per-snapshot only by default; pass
+  `--b2-every-batch` to score B2 mid-run).
 
 Runner: [`scripts/run_generalization_stability_eval.py`](../scripts/run_generalization_stability_eval.py).
 
@@ -132,11 +161,13 @@ whether the conversational system generalizes.
 
 **Why no separate "assignment stability" metric.** Under the read-only-assignment
 policy (frozen centroids, ingestion is pure assignment) pre-existing points are
-never re-evaluated, so their assignment stability is 100% *by construction* —
-measuring it would test a property the architecture trivially satisfies. The
-signals such a metric would carry are already covered by A1's calibration
-companion (`f_uncertainty`, `1 − max(prob)`, low for ill-fitting new points) and
-B2's bottom-2 stress sample.
+never re-evaluated, so their assignment stability on the **old** set is 100%
+*by construction* — measuring it would test a property the architecture
+trivially satisfies. The signals such a metric would carry for *new* arrivals
+are covered by **A4** (deterministic OOD rate against the calibrated reference,
+temperature-free) and B2's bottom-2 stress sample. The `f_uncertainty` soft-side
+signal (`1 − max(prob)`) remains available as a per-point diagnostic but is
+calibration-dependent (temperature-coupled), so A4 is the more honest aggregate.
 
 ## Reproducibility & caveats
 
@@ -164,6 +195,7 @@ end-of-session.
 | A1 | Silhouette + soft-assignment calibration | Math | Secondary diagnostic | Silhouette implemented; calibration unvalidated |
 | A2 | Turns to convergence (type-weighted) | Math | **Primary process** | Implemented; two termination codes (`converged`, `cognitive_overload`) |
 | A3 | Cognitive load vs. oracle input | Math (engine-authored) | Interaction cost | Implemented (Executor-authored) |
+| A4 | Distance-based OOD rate on new arrivals (generalization) | Math | Assignment-function fitness on the stream | Implemented |
 | B1 | Overall verdict (synthesis of B2 + B3 + B4) | LLM-judge | **Primary outcome** | Implemented |
 | B2 | Cluster coherence (per-cluster) | LLM-judge | Output quality | Implemented |
 | B3 | Oracle compliance (request → operation fidelity) | LLM-judge | System behaviour | Implemented |

@@ -5,9 +5,8 @@ The project brief's "generalization" question, framed *operationally* and
 **without ground-truth labels** (clustering is unsupervised; the oracle is the
 objective). The test is not "does the clustering recover a hidden category" —
 it is "once the oracle is happy, do new data points that arrive into the running
-system keep the clustering coherent?". We answer it by re-evaluating the two
-relevant metrics already frozen in ``docs/quality_specs.md`` at two snapshots
-around an ingestion event — **no new metric**:
+system keep the clustering coherent?". We answer with three deterministic /
+LLM-assisted signals around an ingestion event:
 
   1. Reach a converged session. Here we cluster the train split with the real
      engine (k-means) and treat that snapshot as the converged state. No LLM
@@ -17,18 +16,23 @@ around an ingestion event — **no new metric**:
      oracle-converged session instead, load its snapshot from the DB and pass
      its centroids to ``ingest_points`` (same call).
   2. t0 — pre-ingestion eval: A1 (silhouette) and B2 (cluster coherence) on the
-     converged state.
+     converged state, plus A4 calibration (per-cluster d²_95 / μ / σ over base
+     in-cluster squared distances; temperature-free, frozen for the run).
   3. Ingest the frozen split as the stream of *new arrivals*: embed →
-     ``assign_nearest`` against the frozen centroids → write a fresh full
-     snapshot at ``turn + 1`` (``ingest_points``). Centroids stay frozen; the
+     ``assign_gmm_posterior`` against the frozen GMM parameters → write a
+     fresh full snapshot at ``turn + 1`` (``ingest_points``). All GMM params
+     stay frozen; the
      pre-existing points are carried forward verbatim, never re-evaluated.
   4. t1 — post-ingestion eval: A1 and B2 again, plus an A1 sub-aggregate over
      just the newly-ingested batch ("do the new points sit cleanly relative to
      the centroids?"). B2's bottom-2 stress sample naturally picks up bad new
-     members.
+     members. A4 scores every new point against its assigned cluster's base
+     reference: OOD when d² > d²_95(c); the headline is the pooled OOD rate
+     (baseline ≈ 5% under the null).
   5. Report **paired Δ + bootstrap 95% CI** on A1 (over the common, pre-existing
-     points) and B2 (over the per-cluster scores) between t0 and t1. With
-     ``--batches N`` the ingest/eval loop repeats to trace a drift curve.
+     points) and B2 (over the per-cluster scores) between t0 and t1, plus A4's
+     pooled OOD rate, mean z + CI, and per-cluster breakdown. With ``--batches
+     N`` the ingest/eval loop repeats to trace a drift curve on A1 and A4.
 
 LABELS ARE OUT OF SCOPE. This script reads only ``title,text`` from every CSV —
 never the ``label`` column. Generalization is consistency under growth, not
@@ -63,7 +67,14 @@ import src.logger as logger
 from backend.session_state import build_session_state
 from src.dataset_processing.text_cleaning import clean_text
 from src.engine.f_eval import f_eval_coherence
-from src.engine.generalization import centroids_from_snapshot, ingest_points
+from src.engine.generalization import (
+    OOD_PERCENTILE,
+    assign_gmm_posterior,
+    assignment_ood,
+    calibrate_distance_reference,
+    gmm_params_from_snapshot,
+    ingest_points,
+)
 from src.engine.initial_clustering import KMEANS_RANDOM_STATE, initial_clustering
 from src.harness import DRY_RUN
 from src.models import Base, ChatSession, DataPoint, Dataset, SoftAssignment
@@ -272,6 +283,57 @@ def _report_a1(s0: dict[str, float], s1: dict[str, float], new_ids: set[str]) ->
               f"{m:.4f}  95% CI [{lo:.4f}, {hi:.4f}]")
 
 
+def _report_a4(batches: list[tuple[list[str], dict]]) -> None:
+    """A4 — distance-based OOD on new arrivals (temperature-free).
+
+    ``batches`` is a list of ``(assigned_clusters, scores)`` pairs, where
+    ``scores`` is the output of :func:`assignment_ood`. We pool per-point arrays
+    across batches and report the pooled OOD rate (baseline ≈ 5% under the null),
+    pooled mean z + bootstrap 95% CI, and a per-cluster breakdown.
+    """
+    if not batches:
+        print("A4 — OOD on new arrivals: skipped (no batches)")
+        return
+    all_z = np.concatenate([s["z"] for _, s in batches])
+    all_is_ood = np.concatenate([s["is_ood"] for _, s in batches])
+    all_assigned: list[str] = []
+    for assigned, _ in batches:
+        all_assigned.extend(assigned)
+    baseline = 1.0 - OOD_PERCENTILE / 100.0
+    pooled_rate = float(all_is_ood.mean())
+    # Bootstrap CI on mean z. If any z is ±inf (singleton calibration), the CI
+    # collapses to inf — surface that honestly rather than silently dropping.
+    finite = np.isfinite(all_z)
+    if finite.all():
+        mean_z, lo, hi = _bootstrap_mean(all_z)
+        ci_str = f"{mean_z:+.4f}  95% CI [{lo:+.4f}, {hi:+.4f}]"
+    else:
+        ci_str = (
+            f"{float(all_z.mean()):+.4f}  "
+            f"(CI unavailable — {int((~finite).sum())} non-finite z from "
+            f"singleton-calibrated clusters)"
+        )
+    print(
+        "A4 — distance-based OOD on new arrivals "
+        f"(temperature-free, threshold = base d²_{int(OOD_PERCENTILE)})"
+    )
+    print(f"    pooled OOD rate: {pooled_rate * 100:.1f}%   "
+          f"(baseline ~{baseline * 100:.1f}%)")
+    print(f"    pooled mean z:   {ci_str}")
+
+    print("    per-cluster:")
+    for cid in sorted(set(all_assigned)):
+        mask = np.array([c == cid for c in all_assigned])
+        n = int(mask.sum())
+        rate = float(all_is_ood[mask].mean()) * 100.0
+        z_slice = all_z[mask]
+        if np.isfinite(z_slice).all():
+            z_str = f"mean_z={float(z_slice.mean()):+.3f}"
+        else:
+            z_str = "mean_z=inf (uncalibrated σ=0)"
+        print(f"        {cid}  n={n:<4d}  ood={rate:5.1f}%  {z_str}")
+
+
 def _report_b2(c0: dict[str, float], c1: dict[str, float]) -> None:
     if not c0 or not c1:
         print("B2 — coherence: skipped (no clusters / no judge output)")
@@ -355,10 +417,20 @@ def main() -> None:
     print(f"\nConverged: {len(base_points)} points → k={args.k} "
           f"(k-means, seed={KMEANS_RANDOM_STATE}, fit silhouette={sil:.4f}).")
 
-    # Freeze the convergence centroids ONCE.
+    # Freeze the convergence GMM parameters ONCE.
     snap0 = _snapshot_at(db, 0)
     emb0 = {f"base-{i}": e for i, e in enumerate(base_emb)}
-    centroid_ids, centroids = centroids_from_snapshot(emb0, snap0)
+    centroid_ids, centroids, diag_vars, log_weights = gmm_params_from_snapshot(emb0, snap0)
+
+    # A4 calibration: per-cluster Mahalanobis-d² reference built ONCE from the
+    # converged state. calibrate_distance_reference recovers diag_var internally
+    # from the base hard-label assignments — consistent with gmm_params_from_snapshot.
+    calib_pids = [pid for pid in snap0 if pid in emb0]
+    calib_emb = np.asarray([emb0[pid] for pid in calib_pids], dtype=np.float64)
+    calib_labels = [max(snap0[pid], key=snap0[pid].get) for pid in calib_pids]
+    ood_calibration = calibrate_distance_reference(
+        calib_emb, calib_labels, centroid_ids, centroids
+    )
 
     # ── t0 eval (BEFORE any ingestion) ───────────────────────────────────────
     # A1 (silhouette) is deterministic and always computed. B2 (coherence) calls
@@ -374,7 +446,8 @@ def main() -> None:
 
     # ── Ingest the new arrivals (1+ batches) ─────────────────────────────────
     batches = np.array_split(np.arange(len(new_emb)), max(1, args.batches))
-    drift: list[tuple[int, float, int]] = []  # (turn, mean_silhouette, n_points)
+    drift: list[tuple[int, float, int, float]] = []  # (turn, mean_sil, n, ood_rate)
+    a4_batches: list[tuple[list[str], dict]] = []
     last_turn = 0
     for b, idx in enumerate(batches):
         if len(idx) == 0:
@@ -385,14 +458,28 @@ def main() -> None:
                       embedding=new_emb[int(i)].tolist())
             for i in idx
         ]
-        last_turn, _ = ingest_points(SESSION_ID, batch_points, centroid_ids, centroids, db)
+        last_turn, _ = ingest_points(
+            SESSION_ID, batch_points, centroid_ids, centroids, diag_vars, log_weights, db
+        )
         db.commit()
         snap = _snapshot_at(db, last_turn)
         sil_b = _hard_silhouette(db, snap)
         mean_b = float(np.mean(list(sil_b.values()))) if sil_b else 0.0
-        drift.append((last_turn, mean_b, len(snap)))
+
+        # A4 on the batch: score new embeddings against the frozen calibration.
+        batch_emb = np.asarray([new_emb[int(i)] for i in idx], dtype=np.float64)
+        batch_assigned = assign_gmm_posterior(
+            batch_emb, centroid_ids, centroids, diag_vars, log_weights
+        )
+        batch_scores = assignment_ood(
+            batch_emb, batch_assigned, centroid_ids, centroids, ood_calibration
+        )
+        a4_batches.append((batch_assigned, batch_scores))
+
+        drift.append((last_turn, mean_b, len(snap), batch_scores["ood_rate"]))
         print(f"  ingested batch {b + 1}/{len(batches)}: +{len(batch_points)} points "
-              f"→ turn {last_turn}, {len(snap)} total, mean silhouette {mean_b:.4f}")
+              f"→ turn {last_turn}, {len(snap)} total, mean silhouette {mean_b:.4f}, "
+              f"OOD {batch_scores['ood_rate'] * 100:.1f}%")
 
     # ── t1 eval (final state) ────────────────────────────────────────────────
     snap1 = _snapshot_at(db, last_turn)
@@ -414,22 +501,26 @@ def main() -> None:
           f"ingested: {len(new_ids)} new points over {len(drift)} batch(es)\n")
     _report_a1(sil0, sil1, new_ids)
     print()
+    _report_a4(a4_batches)
+    print()
     if b2_error:
         print("B2 — cluster coherence: UNAVAILABLE (LLM judge failed)")
         print(f"    {b2_error}")
-        print("    A1 above is deterministic and complete; re-run with a working")
+        print("    A1 + A4 above are deterministic and complete; re-run with a working")
         print("    LLM provider to get the B2 paired Δ.")
     else:
         _report_b2(coh0, coh1)
     if len(drift) > 1:
-        print("\nDrift curve (mean silhouette as new data accrues):")
-        print(f"    t0  : {float(np.mean(list(sil0.values()))):.4f}  ({len(snap0)} pts)")
-        for turn, mean_b, n in drift:
-            print(f"    t{turn}  : {mean_b:.4f}  ({n} pts)")
+        print("\nDrift curve (per batch — mean silhouette + A4 OOD rate):")
+        print(f"    t0  : sil={float(np.mean(list(sil0.values()))):.4f}  "
+              f"({len(snap0)} pts)")
+        for turn, mean_b, n, ood in drift:
+            print(f"    t{turn}  : sil={mean_b:.4f}  ood={ood * 100:5.1f}%  ({n} pts)")
     print("=" * 70)
     print("Generalization holds when A1 stays put (paired Δ CI spans 0 or is "
-          "positive) and B2 does not drop. A decline means new data is breaking "
-          "the converged structure.")
+          "positive), A4's OOD rate stays near its baseline, and B2 does not "
+          "drop. A decline on any of these means new data is breaking the "
+          "converged structure.")
     print("=" * 70)
 
     db.close()
