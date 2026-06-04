@@ -1,73 +1,53 @@
-# React + TypeScript + Vite
+# BlaBlaClust — React Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**Stack:** React 18 + TypeScript + Tailwind v4 + Vite + Plotly.js
 
-Currently, two official plugins are available:
+Primary interface for the BlaBlaClust conversational clustering system.
+See the [root README](../README.md) for full setup instructions.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Quick start
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cd frontend
+npm install
+npm run dev      # dev server → http://localhost:5173
+npm run build    # production build
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+The backend must be running first:
+```bash
+PYTHONPATH=. python scripts/serve_ui.py   # from repo root
 ```
+
+## Structure
+
+```
+src/
+├── api/
+│   └── client.ts              # Typed API client (all backend endpoints)
+├── components/
+│   ├── WelcomePage.tsx         # Landing page — dataset/session selector
+│   ├── WorkspacePage.tsx       # Main workspace — cluster grid + chat sidebar
+│   ├── ChatPanel.tsx           # Conversational oracle interface
+│   ├── ClusterCard.tsx         # Cluster card with expand, pin, select
+│   ├── AnalyticsPanel.tsx      # UMAP projection + turn-history visualisation
+│   └── modals/
+│       ├── DatasetsModal.tsx   # Upload, preview, delete datasets
+│       ├── NewSessionModal.tsx # New session configuration
+│       ├── EvalModal.tsx       # A1–B4 metrics for the current session
+│       ├── UmapModal.tsx       # Geometry-aware UMAP per turn
+│       ├── ExpandClusterModal.tsx  # Full point list with search and pin
+│       ├── PersonaModal.tsx    # Persona session display
+│       └── StopSessionModal.tsx    # Stop session + export
+├── store/
+│   └── AppContext.tsx          # Global app state (React context)
+└── types/
+    └── index.ts                # Shared TypeScript types
+```
+
+## Notes
+
+- The legacy single-file HTML UI (`ui/index.html`) is still served at
+  `http://localhost:8000/ui` for reference; see [`ui/README.md`](../ui/README.md).
+- API base URL defaults to `http://localhost:8000` (Vite proxy configured in
+  `vite.config.ts`).
