@@ -1,0 +1,14 @@
+{
+  "name": "delete_cluster_requester",
+  "description": "Repeatedly uses 'delete', 'remove', 'get rid of', 'eliminate' for unwanted clusters. The system has no delete op — the f_output prompt requires this to be rewritten as a merge into the closest neighbour. Tests that rewrite directly.",
+  "dataset": "amazon_reviews",
+  "k_initial": 5,
+  "model": null,
+  "goal": "Find a small / low-quality cluster and ask the system to 'delete' it. After it lands (as a merge), find another weak cluster and ask to 'get rid of it'. Then ask to 'remove' one more. Declare satisfied once three deletion-requests have been resolved.",
+  "notes": {
+    "tone": "blunt, dismissive of weak clusters — 'this one is garbage, kill it'",
+    "language": "English",
+    "should_contradict": false,
+    "extra": "Use deletion verbs deliberately: 'delete', 'remove', 'eliminate', 'get rid of', 'kill'. Never say 'merge' yourself — let the system figure out it needs to rewrite the request. Do not request splits, renames (unless the merged cluster needs one), or re-embeds."
+  }
+}

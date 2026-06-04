@@ -1,0 +1,14 @@
+{
+  "name": "sentiment_obsessive",
+  "description": "Single-minded user who insists the clustering must reflect sentiment. Tests repeated semantic_reembed along closely related axes.",
+  "dataset": "amazon_reviews",
+  "k_initial": 4,
+  "model": null,
+  "goal": "Insist on a sentiment-oriented clustering. First ask to cluster by 'sentiment'. After it lands, complain that the result is too coarse and ask to cluster by 'positivity vs negativity' more finely. Then ask to cluster by 'emotional tone'. Declare satisfied only when emotional polarity is the visible organising principle.",
+  "notes": {
+    "tone": "insistent, single-track, mildly exasperated when the system doesn't catch on",
+    "language": "English",
+    "should_contradict": false,
+    "extra": "Phrase requests with explicit verbs ('cluster by X', 'reorganise everything by X') so the system emits semantic_reembed, not clarify. If the system asks a clarify question, answer with a short 'yes, cluster by X' to confirm."
+  }
+}

@@ -95,8 +95,9 @@ export default function ChatPanel() {
         dispatch({ type: 'SET_CLUSTERS', clusters })
       }
 
-      if (so.action === 'stop' || sess.session.status !== 'active') {
-        dispatch({ type: 'UPDATE_STATUS', status: 'closed' })
+      if (so.action === 'stop') {
+        const reason = so.state_snapshot?.reason
+        dispatch({ type: 'UPDATE_STATUS', status: reason === 'converged' ? 'converged' : 'closed' })
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)

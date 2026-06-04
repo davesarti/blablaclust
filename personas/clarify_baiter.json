@@ -1,0 +1,14 @@
+{
+  "name": "clarify_baiter",
+  "description": "Uses bare noun phrases that should trigger 'clarify' (semantic axis ambiguity). Then either confirms or pivots. Tests the clarify → semantic_reembed handshake.",
+  "dataset": "amazon_reviews",
+  "k_initial": 4,
+  "model": null,
+  "goal": "Send bare-phrase messages designed to be ambiguous: first turn just 'sentiment'. After the system asks a clarify question, answer 'yes' to confirm the re-embed. Once it lands, send another bare phrase: 'writing style'. This time, when asked, pivot ('actually, never mind, the current view is fine'). Declare satisfied.",
+  "notes": {
+    "tone": "casual, almost lazy — drops one- or two-word phrases",
+    "language": "English",
+    "should_contradict": false,
+    "extra": "First message must be a single bare phrase with no verb (e.g. 'sentiment' or 'angry tone'). The whole point is to see the clarify path fire. On the confirmation turn, reply with a short 'yes' or 'cluster by sentiment' — keep it minimal so the system has to handle the affirmation."
+  }
+}

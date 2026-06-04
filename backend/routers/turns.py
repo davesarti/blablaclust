@@ -151,9 +151,10 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     )
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    if session.status == "closed":
+    if session.status in {"closed", "converged"}:
         raise HTTPException(
-            status_code=409, detail="Session is closed — cannot add turns"
+            status_code=409,
+            detail=f"Session is {session.status} — cannot add turns",
         )
 
     clusters = (
@@ -418,7 +419,20 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
     updated_state = build_session_state(db, session)
     uncertainty = f_cluster_uncertainty(session.id, db)
     cognitive_load = f_cognitive_load(updated_state, context)
-    system_turn = f_next_best_step(updated_state, uncertainty, cognitive_load)
+
+    # The oracle converges the session only when f_output classified their
+    # input as an explicit close signal (action="end"). Anything else —
+    # satisfaction phrases, no_change, explain, clarify, a structural op —
+    # keeps the session open.
+    oracle_action = raw.get("action") if isinstance(raw, dict) else None
+    oracle_signaled_end = oracle_action == "end"
+
+    system_turn = f_next_best_step(
+        updated_state,
+        uncertainty,
+        cognitive_load,
+        oracle_signaled_end=oracle_signaled_end,
+    )
     system_turn.clusters_updated = bool(operations)
 
     # Collect the accumulated usage+cost for ALL LLM calls that happened in
@@ -446,9 +460,13 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
         if not is_json:
             system_turn.display.content = raw_display
 
-    # Close the session when the planner decides to stop.
+    # End the session when the planner decides to stop. The state_snapshot's
+    # "reason" distinguishes the two terminal kinds: oracle-satisfied (the
+    # state is stable and the oracle has stopped requesting ops) → converged;
+    # otherwise (cognitive_overload) → closed.
     if system_turn.action == "stop":
-        session.status = "closed"
+        reason = (system_turn.state_snapshot or {}).get("reason")
+        session.status = "converged" if reason == "converged" else "closed"
 
     ops_to_store = snapshot_operations if snapshot_operations else operations
     if ops_to_store:

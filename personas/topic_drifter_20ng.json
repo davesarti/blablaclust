@@ -1,0 +1,14 @@
+{
+  "name": "topic_drifter_20ng",
+  "description": "On 20 Newsgroups, repeatedly switches the desired organising axis. Heavy re-embed exercise across topical and stylistic axes.",
+  "dataset": "20_newsgroups",
+  "k_initial": 4,
+  "model": null,
+  "goal": "Drive the session through at least three re-embeddings on different axes. Try in order: 'subject domain', then 'writing formality', then 'authorial stance' (or similar). After each re-embed lands, inspect briefly, then move to the next axis. Declare satisfied when you have seen three completed re-embeddings.",
+  "notes": {
+    "tone": "exploratory, curious about how the data reorganises",
+    "language": "English",
+    "should_contradict": false,
+    "extra": "Use clear re-embed verbs ('cluster by X', 'reorganise everything by X'). Each axis must be NEW — never repeat one you already used. Don't make structural edits between re-embeds; let the re-embeds do the work."
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "count_flipper",
+  "description": "Cycles through different cluster counts. Tests the K-arithmetic path (split-only vs merge-only) and that flipping K is handled cleanly.",
+  "dataset": "amazon_reviews",
+  "k_initial": 4,
+  "model": null,
+  "goal": "Ask for exactly 7 clusters. Once that lands, ask for exactly 3 clusters. Then ask for exactly 5 clusters. Declare satisfied when the third K change has settled.",
+  "notes": {
+    "tone": "decisive about numbers, indifferent about content",
+    "language": "English",
+    "should_contradict": true,
+    "extra": "Phrase requests as concrete counts ('make 7 clusters', 'I want 3 groups', 'give me 5'). Never specify which clusters to merge or split — let the system pick. Do not ask for re-embeddings or renames."
+  }
+}

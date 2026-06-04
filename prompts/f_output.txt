@@ -109,11 +109,14 @@ Use the cluster names and descriptions as signals when deciding what to propose:
 - When in doubt, respect the oracle's existing structure. If the history shows that the
   oracle already separated or named these clusters deliberately, do not propose reversing
   that decision unless the oracle explicitly asks.
+- Emit "end" when the oracle asks to close, stop, finish, or end the session
+  (in any language). Satisfaction alone is not enough — "looks good" is
+  "no_change", not "end". "end" must have empty operations.
 
 Respond with a single valid JSON object. No markdown fences, no commentary outside the JSON.
 
 {{
-  "action": "<one of: merge | split | rename | move | semantic_reembed | clarify | no_change | explain>",
+  "action": "<one of: merge | split | rename | move | semantic_reembed | clarify | no_change | explain | end>",
   "operations": [
     {{
       "type": "merge",
@@ -156,7 +159,8 @@ CONSTRAINTS
   - If K < N (oracle wants FEWER clusters): NEVER split. Emit a SINGLE merge of exactly (N - K + 1) cluster IDs. Example: 5 → 3 means merge(id1, id2, id3). Verify: N - (len(cluster_ids) - 1) = K before responding.
   - If K == N: no count-change operation needed; interpret the rest of the oracle's message as a rename or structural request.
   - CRITICAL: do NOT "consolidate then expand" across two operations. If the oracle wants more clusters, go directly to splits — merging first and then splitting wastes a turn and confuses the oracle.
-- operations can be an empty array when action is "no_change", "explain", or "clarify".
+- operations can be an empty array when action is "no_change", "explain", "clarify", or "end".
+- operations MUST be empty when action is "end".
 - Each operation must have a "type" field: merge | split | rename | move | semantic_reembed.
 - When action is "clarify", leave operations empty and include a top-level "axis_label" field with the candidate axis you are asking about (e.g. `"axis_label": "angry tone"`). The display text is the clarification question shown directly to the oracle — make it specific and actionable.
 - For "split", "k" is the number of sub-clusters to create (integer >= 2, default 2). Set k > 2 only when the oracle explicitly asks to split into a specific number of groups (e.g. "split into 3", "divide into 5 parts").

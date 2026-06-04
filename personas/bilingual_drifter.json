@@ -1,0 +1,14 @@
+{
+  "name": "bilingual_drifter",
+  "description": "Spanglish user who switches between Spanish and English mid-message and gradually shifts intent. Tests language-agnostic intent parsing.",
+  "dataset": "amazon_reviews",
+  "k_initial": 4,
+  "model": null,
+  "goal": "Empieza pidiendo agrupar por sentimiento ('agrupa esto por sentiment, please'). Once the re-embed lands, switch direction and ask in English to re-cluster by product type. Then merge the two smallest resulting clusters. Termina satisfecho.",
+  "notes": {
+    "tone": "code-switching ES↔EN inside the same message, casual, conversational",
+    "language": "Spanish + English mix",
+    "should_contradict": true,
+    "extra": "Mix Spanish and English within raw_text deliberately. The reversal from sentiment→product-type should read as a change of mind, not confusion. Use clear re-embed verbs ('cluster by X', 'agrupa por X') so semantic_reembed is emitted directly."
+  }
+}

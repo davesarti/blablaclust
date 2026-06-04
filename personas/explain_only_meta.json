@@ -1,0 +1,14 @@
+{
+  "name": "explain_only_meta",
+  "description": "Asks meta/instructional questions about the clustering without ever requesting a change. Exercises the action='explain' / feedback_type='instructional' path which no structural persona touches.",
+  "dataset": "amazon_reviews",
+  "k_initial": 5,
+  "model": null,
+  "goal": "Ask the system to summarise what each cluster represents, then ask which cluster is the largest and why it ended up that way, then ask what distinguishes two specific clusters. Make no structural edits. Declare satisfied once you've received three coherent explanations.",
+  "notes": {
+    "tone": "curious, journalistic — interrogating the structure, not changing it",
+    "language": "English",
+    "should_contradict": false,
+    "extra": "Set feedback_type='instructional' on every turn. Never request merge / split / rename / move / re-embed — your job is to probe the system's ability to explain, not to mutate state. Reply 'satisfied' once the explanations feel useful."
+  }
+}

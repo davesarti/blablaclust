@@ -18,19 +18,41 @@ Operation types: merge, split, rename. An empty operations list means the system
 performed no structural change that turn (it may have answered, asked, or stopped).
 {turns_json}
 
+AVAILABLE OPERATIONS
+- merge: combine two or more clusters into one
+- split: divide one cluster into sub-clusters
+- rename: change a cluster's name or description
+- move: reassign specific named data points to a different cluster
+- semantic_reembed: reorganise ALL points along a new semantic axis (dissolves existing structure; always exclusive)
+- clarify: ask the oracle a targeted question — no structural change; empty operations is correct
+- no_change / explain: informational turn — no structural change; empty operations is correct
+
+An empty operations list is FULLY COMPLIANT for clarify, no_change, explain, and
+any instructional oracle turn (summary request, question, clarification). Do NOT
+penalise empty operations for those turn types.
+
 TASK
 Across all turns, score `compliance_score` (0.0–1.0): how faithfully did the
 system's operations carry out what the oracle asked?
 
-- Reward correct translation of intent into the right operation on the right
-  target.
-- Penalise ignored requests and operations that contradict what was asked.
-- Judge intent, not vocabulary — the oracle need not say "merge" for a merge to
-  be the right move.
-- If the oracle's request was itself unclear or self-contradictory, do NOT
-  excuse the system here — that is captured by a separate contradiction judge.
-  Just score what the system did against the most reasonable reading of the
-  request.
+- Reward correct translation of intent into the right operation on the right target.
+- Penalise ignored structural requests and operations that contradict what was asked.
+- Judge intent, not vocabulary — the oracle need not say "merge" for a merge to be right.
+- An instructional turn (question, summary request, clarification) that the system
+  answers without structural changes is FULLY COMPLIANT — score it 1.0 for that turn.
+- If the oracle's request was itself unclear or self-contradictory, do NOT excuse the
+  system here — that is captured by a separate contradiction judge. Score against the
+  most reasonable reading of the request.
+
+SCORING ANCHORS
+- 0.9–1.0: Every structural request was carried out correctly on the right target.
+- 0.7–0.89: Most requests honoured; at most one turn where the system missed the target
+  or chose the wrong operation but the overall trajectory was right.
+- 0.5–0.69: The system frequently partially addressed requests — right intent, wrong
+  target or wrong operation type.
+- 0.3–0.49: The system consistently ignored or mis-executed requests despite a
+  reasonably clear oracle.
+- 0.0–0.29: The system systematically disregarded the oracle's instructions.
 
 IMPORTANT: In any free-text field (notes), always refer to clusters by their name,
 never by their ID.

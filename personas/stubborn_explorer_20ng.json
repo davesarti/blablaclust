@@ -1,0 +1,14 @@
+{
+  "name": "stubborn_explorer_20ng",
+  "description": "Long-session explorer on 20 Newsgroups. Alternates re-embeddings and structural edits. Stress-tests state coherence across many turns.",
+  "dataset": "20_newsgroups",
+  "k_initial": 4,
+  "model": null,
+  "goal": "Run a long, varied session: (1) re-embed by 'subject domain', (2) split the largest resulting cluster, (3) re-embed by 'writing tone', (4) merge two redundant clusters, (5) rename one cluster with a precise label, (6) re-embed once more by an axis you haven't used. Declare satisfied only after all six steps completed.",
+  "notes": {
+    "tone": "patient, exploratory, willing to wait through long sequences",
+    "language": "English",
+    "should_contradict": false,
+    "extra": "Use explicit re-embed verbs ('cluster by X'). Never repeat an axis. Between re-embeds, the previous cluster UUIDs are gone — always work off the NEW cluster list shown in the panel."
+  }
+}

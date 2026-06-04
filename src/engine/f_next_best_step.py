@@ -3,16 +3,20 @@
 The three possible actions:
   - "show"  →  present the current clustering state to the oracle
   - "ask"   →  ask a targeted structural question (merge or split candidate)
-  - "stop"  →  end the session (deterministic A3 load saturated)
+  - "stop"  →  end the session (overload saturated, or oracle converged)
 
 Decision logic (rule-based, no LLM needed):
-  1. If cognitive_load.score >= 5, stop. The driver and breakdown are
-     written into state_snapshot so the eval report can group stops by
-     which signal saturated.
-  2. If two clusters overlap significantly, ask whether to merge them.
+  1. If the oracle explicitly signaled close intent (f_output classified
+     the turn as action="end"), stop with reason="converged". This wins
+     over every other rule — an explicit close from the oracle is always
+     a clean termination, never a forced shutdown.
+  2. If cognitive_load.score >= 5, stop with reason="cognitive_overload".
+     The driver and breakdown are written into state_snapshot so the eval
+     report can group stops by which signal saturated.
+  3. If two clusters overlap significantly, ask whether to merge them.
      If a cluster has low internal cohesion, ask whether to split it.
      Structural questions are asked one at a time, most urgent first.
-  3. Otherwise, show — present the current state and wait for next turn.
+  4. Otherwise, show — present the current state and wait for next turn.
 """
 
 from src.engine.f_uncertainty import ClusterUncertainty
@@ -23,6 +27,7 @@ def f_next_best_step(
     state: ChatSessionState,
     uncertainty: ClusterUncertainty,
     cognitive_load: CognitiveLoad,
+    oracle_signaled_end: bool = False,
 ) -> SystemTurn:
     """Return the next action the system should take.
 
@@ -35,7 +40,30 @@ def f_next_best_step(
     Returns:
         A SystemTurn describing what to show/ask/stop and why.
     """
-    # Rule 1: stop when the deterministic A3 score saturates.
+    # Rule 1: stop when the oracle explicitly signaled close intent (f_output
+    # emitted action="end"). This takes priority over overload — an explicit
+    # oracle close is always recorded as a converged termination.
+    if oracle_signaled_end:
+        return SystemTurn(
+            session_id=state.session_id,
+            turn_number=state.turn_number,
+            action="stop",
+            clusters_updated=False,
+            display=Display(
+                type="text",
+                content=(
+                    f"Clustering converged after {state.turn_number} turns. "
+                    f"Final state has {len(state.clusters)} clusters."
+                ),
+            ),
+            cognitive_load_score=cognitive_load.score,
+            state_snapshot={
+                "reason": "converged",
+                "cluster_count": len(state.clusters),
+            },
+        )
+
+    # Rule 2: stop when the deterministic A3 score saturates.
     if cognitive_load.score >= 5:
         return SystemTurn(
             session_id=state.session_id,
@@ -125,7 +153,7 @@ def f_next_best_step(
             state_snapshot={"low_cohesion_count": len(uncertainty.low_cohesion)},
         )
 
-    # Rule 3: show — clustering looks stable, present current state.
+    # Rule 4: show — clustering looks stable, present current state.
     return SystemTurn(
         session_id=state.session_id,
         turn_number=state.turn_number,

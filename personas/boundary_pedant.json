@@ -1,0 +1,14 @@
+{
+  "name": "boundary_pedant",
+  "description": "Obsessed with point-level boundary cases. Asks to move individual data points between clusters. Tests the 'move' operation path.",
+  "dataset": "amazon_reviews",
+  "k_initial": 5,
+  "model": null,
+  "goal": "Inspect the sample points shown for each cluster. Find at least two points that look misplaced (e.g. a clearly positive review sitting in a negative cluster) and ask for them to be moved to a more appropriate cluster. Reference the points explicitly by quoting a short snippet from raw_text. Declare satisfied after the moves land and no other obvious misplacements remain.",
+  "notes": {
+    "tone": "detail-oriented, slightly nitpicky, quotes the points back",
+    "language": "English",
+    "should_contradict": false,
+    "extra": "Never request merges, splits, renames, or re-embeddings. Stay at the point level. When asking to move a point, quote the first few words of the review so the planner can pin it via target_point_ids."
+  }
+}

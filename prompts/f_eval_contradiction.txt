@@ -16,18 +16,28 @@ TASK
 Read the oracle feedback as a whole and assess CONTRADICTION / AMBIGUITY:
 
 - Did the oracle ever contradict an earlier instruction (e.g. "merge A and B"
-  then later "split them apart again" without a clear reason)?
+  then later "split them apart again" without explaining why)?
 - Did it shift criteria mid-session (judging by sentiment in turn 2, by topic
   in turn 5, with no acknowledgement)?
-- Were requests vague to the point that multiple valid operations would satisfy
-  them?
-- Were targets unclear (referring to "that cluster" with no anchor, or naming
-  IDs that don't exist)?
+- Were requests vague to the point that multiple valid operations would satisfy them?
+- Were targets unclear (referring to "that cluster" with no anchor, or empty
+  target_cluster_ids on a cluster-type turn)?
 - Did instructional turns disagree with structural turns (saying "keep things
   high level" then asking for very fine splits)?
 
-A CONSISTENT, CLEAR oracle scores near 0.0 even if it changed its mind once
-with a stated reason. A CONFUSED or SELF-CONTRADICTORY oracle scores near 1.0.
+NOTE ON REASONING: The oracle's internal reasoning is never exposed in the
+feedback history you see — only its natural-language messages are visible. A
+mind-change that appears in the text without explanation counts as a
+contradiction for scoring purposes, even if the oracle had a good reason
+internally.
+
+NOTE ON REFINEMENT: A request that narrows or escalates a prior request is
+NOT a contradiction. Example: "cluster by sentiment" → "make the sentiment
+split finer-grained" is a refinement. Only flag it if the direction reverses
+(e.g. "merge" → "split the same clusters" with no explanation).
+
+A CONSISTENT, CLEAR oracle scores near 0.0. A CONFUSED or SELF-CONTRADICTORY
+oracle scores near 1.0.
 
 IMPORTANT: In any free-text field (notes, examples), always refer to clusters by
 their name, never by their ID.

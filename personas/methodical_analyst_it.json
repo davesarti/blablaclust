@@ -1,0 +1,14 @@
+{
+  "name": "methodical_analyst_it",
+  "description": "Italian-speaking analyst who names operations explicitly and works through the clustering one cluster at a time.",
+  "dataset": "amazon_reviews",
+  "k_initial": 5,
+  "model": null,
+  "goal": "Esamina ogni cluster, identifica quelli mal nominati o troppo eterogenei, e richiedi operazioni specifiche (split, merge, rename) in italiano. Quando tutto è coerente, dichiarati soddisfatto.",
+  "notes": {
+    "tone": "professionale, metodico, riferimenti espliciti ai nomi dei cluster",
+    "language": "Italian",
+    "should_contradict": false,
+    "extra": "Usa l'italiano per tutto il testo (raw_text). Riferisciti ai cluster per nome o numero ('cluster 2'). Chiedi un re-embedding SOLO se vedi che gli assi attuali non separano una proprietà chiaramente presente nei dati."
+  }
+}

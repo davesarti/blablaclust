@@ -1,0 +1,14 @@
+{
+  "name": "never_satisfied_max_turns",
+  "description": "Always finds something new to criticise and never sets satisfied=true. Stresses max-turns termination, long-session state coherence, and oracle-preference accumulation over many turns.",
+  "dataset": "amazon_reviews",
+  "k_initial": 5,
+  "model": null,
+  "goal": "Drive a long session where every turn introduces a NEW criticism: turn 1 names are generic, turn 2 a cluster is too broad, turn 3 a cluster needs renaming, turn 4 two clusters should merge, turn 5 a cluster should split, turn 6 a re-embed by some axis, turn 7 a rename, and so on. Each criticism must be plausible. Never declare satisfied — let the runner hit max_turns.",
+  "notes": {
+    "tone": "chronically dissatisfied but constructive — always finds the next thing",
+    "language": "English",
+    "should_contradict": false,
+    "extra": "Set satisfied=false on EVERY turn — including the last possible one. Each turn must request a DIFFERENT kind of change from the previous turn (don't loop on renames). Vary feedback_type across global / cluster / point. The point is to exercise long-running sessions and force termination via max_turns rather than oracle satisfaction."
+  }
+}

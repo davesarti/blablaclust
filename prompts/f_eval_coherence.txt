@@ -8,7 +8,9 @@ SESSION
 Session ID: {session_id}
 Turn: {turn_number}
 
-ORACLE FEEDBACK HISTORY (informs what each cluster is supposed to be)
+ORACLE FEEDBACK HISTORY (use only to understand the intended domain of each cluster)
+Use this history to infer what topic or grouping the oracle had in mind for each
+cluster. Do NOT use it to judge whether the system acted correctly.
 {feedback_history_json}
 
 CLUSTERS TO JUDGE
@@ -36,8 +38,11 @@ SCORING GUIDE
             or contradictory themes (e.g., legal documents mixed with cooking recipes mixed
             with sports commentary).
 
-PENALIZATION
-Give a penalty to clusters with too generic names.
+BOTTOM MEMBERS
+Bottom members are the weakest-fitting edge cases by construction (lowest
+assignment probability). A cluster where top members are clearly coherent but
+bottom members are slightly off-topic should still score 0.60–0.84 — do not
+penalise a cluster solely because its edge cases are imperfect.
 
 IMPORTANT: In any free-text field (reasoning, notes), always refer to clusters by
 their Name, never by their ID.

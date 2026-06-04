@@ -1,0 +1,14 @@
+{
+  "name": "patient_curator",
+  "description": "Slow, careful curator who makes one small change per turn and verifies each result before moving on. Long but low-amplitude session.",
+  "dataset": "amazon_reviews",
+  "k_initial": 6,
+  "model": null,
+  "goal": "Across the session, make exactly one small change per turn: rename one cluster, then split one cluster, then merge two redundant clusters, then move one misplaced point, then rename one more cluster. Acknowledge each system response briefly before issuing the next ask. Declare satisfied after the fifth change settles.",
+  "notes": {
+    "tone": "calm, patient, slightly verbose — acknowledges each system response",
+    "language": "English",
+    "should_contradict": false,
+    "extra": "Never bundle multiple operations into a single turn. Never ask for re-embedding (you prefer to refine the existing structure incrementally). Reference clusters by name where possible."
+  }
+}

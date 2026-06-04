@@ -44,6 +44,14 @@ def client():
             status="closed",
         )
     )
+    db.add(
+        ChatSession(
+            id="sess-converged",
+            dataset_id="ds",
+            embedding_model="default",
+            status="converged",
+        )
+    )
     db.add(DataPoint(id="p1", dataset_id="ds", text="a", embedding=[0.1]))
     db.add(DataPoint(id="p2", dataset_id="ds", text="b", embedding=[0.2]))
     db.add(
@@ -53,6 +61,15 @@ def client():
         Cluster(
             id="c-closed",
             session_id="sess-closed",
+            name="C",
+            description="d",
+            created_at_turn=1,
+        )
+    )
+    db.add(
+        Cluster(
+            id="c-converged",
+            session_id="sess-converged",
             name="C",
             description="d",
             created_at_turn=1,
@@ -112,6 +129,43 @@ def test_session_without_clusters_returns_409(client):
 def test_closed_session_returns_409(client):
     resp = client.post("/turns", json=_payload(session_id="sess-closed"))
     assert resp.status_code == 409
+
+
+def test_converged_session_returns_409(client):
+    resp = client.post("/turns", json=_payload(session_id="sess-converged"))
+    assert resp.status_code == 409
+
+
+def test_oracle_end_action_converges_session(client):
+    """f_output emitting action='end' is the sole signal that converges a
+    session. The router must flip status to 'converged' and 409 further POSTs."""
+    from unittest.mock import patch
+
+    end_response = (
+        {"action": "end", "operations": [], "display": "Closing the session."},
+        {"input_tokens": 1, "output_tokens": 1},
+    )
+    with patch("backend.routers.turns.f_output", return_value=end_response):
+        first = client.post("/turns", json=_payload(raw_text="I'm done, close it")).json()
+
+    assert first["system_output"]["action"] == "stop"
+    assert first["system_output"]["state_snapshot"]["reason"] == "converged"
+
+    # Subsequent POSTs must be refused with 409.
+    resp = client.post("/turns", json=_payload())
+    assert resp.status_code == 409
+    assert "converged" in resp.json()["detail"]
+
+
+def test_no_change_action_does_not_converge_session(client):
+    """A 'no_change' turn must NOT converge — the oracle hasn't signalled
+    close intent, they just had nothing structural to request this turn."""
+    body = client.post("/turns", json=_payload(raw_text="hmm, let me think")).json()
+    assert body["system_output"]["action"] == "show"
+
+    # Session still accepts new turns.
+    follow = client.post("/turns", json=_payload(raw_text="still thinking"))
+    assert follow.status_code == 201
 
 
 def test_unknown_target_cluster_returns_422(client):

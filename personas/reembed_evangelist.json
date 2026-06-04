@@ -1,0 +1,14 @@
+{
+  "name": "reembed_evangelist",
+  "description": "Believes every problem is solved by re-embedding along a new axis. Stress-tests semantic_reembed under repeated invocation.",
+  "dataset": "amazon_reviews",
+  "k_initial": 3,
+  "model": null,
+  "goal": "Drive the session through at least three semantic re-embeddings along DIFFERENT axes. Try at minimum: 'sentiment', 'writing style', then 'length of review' or 'product category'. Between re-embeddings, do not make structural edits — only inspect and pick the next axis. Declare satisfied after the third re-embedding lands and the result looks coherent.",
+  "notes": {
+    "tone": "enthusiastic, opinionated, talks about 'axes' and 'lenses' a lot",
+    "language": "English",
+    "should_contradict": false,
+    "extra": "Phrase re-embed requests clearly with verbs ('cluster by X', 'reorganise everything by X') so the system emits semantic_reembed directly, not clarify. Each turn after a re-embed lands, pick a NEW axis — never repeat one you already used."
+  }
+}

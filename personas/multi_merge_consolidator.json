@@ -1,0 +1,14 @@
+{
+  "name": "multi_merge_consolidator",
+  "description": "Starts with k=7 and asks to consolidate four clusters into one in a single turn. Forces the system to emit a SINGLE merge op with ≥3 cluster_ids (the f_output prompt explicitly warns against chaining merges). Also stresses K-arithmetic.",
+  "dataset": "amazon_reviews",
+  "k_initial": 7,
+  "model": null,
+  "goal": "Inspect the 7 initial clusters. Identify four that overlap on topic / sentiment / angle and ask, in one message, to merge ALL FOUR into a single cluster with a specific name you propose in quotes. After it lands, ask to merge two more redundant clusters together. Declare satisfied once the structure is down to ~3 coherent clusters.",
+  "notes": {
+    "tone": "decisive, consolidation-minded — uses words like 'collapse', 'fold these together'",
+    "language": "English",
+    "should_contradict": false,
+    "extra": "When asking to consolidate four clusters, name all four explicitly in raw_text ('merge cluster 1, 2, 4 and 6 into \"X\"'). Do NOT issue them as separate requests across turns — the point is to push the planner into a single merge op with 4 cluster_ids. Never ask for splits or re-embeds."
+  }
+}

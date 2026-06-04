@@ -173,6 +173,63 @@ def test_stop_snapshot_records_load_driver():
     assert result.state_snapshot["cognitive_load_driver"] == "tokens"
 
 
+def test_converged_when_oracle_signals_end_and_state_stable():
+    state = _make_state(turn_number=5)
+    result = f_next_best_step(
+        state,
+        _empty_uncertainty(),
+        _make_load(score=2),
+        oracle_signaled_end=True,
+    )
+    assert result.action == "stop"
+    assert result.state_snapshot["reason"] == "converged"
+    assert result.state_snapshot["cluster_count"] == len(state.clusters)
+    assert "converged" in result.display.content.lower()
+
+
+def test_show_when_oracle_did_not_signal_end():
+    """Silence / no_change / explain must NOT trigger convergence — the
+    oracle has to explicitly express satisfaction or close intent."""
+    state = _make_state(turn_number=2)
+    result = f_next_best_step(
+        state,
+        _empty_uncertainty(),
+        _make_load(score=2),
+        oracle_signaled_end=False,
+    )
+    assert result.action == "show"
+
+
+def test_oracle_end_beats_unresolved_overlaps():
+    """An explicit close from the oracle terminates the session as converged
+    even when overlaps are still flagged — the oracle's stated intent to
+    stop wins over any pending structural question."""
+    state = _make_state(turn_number=5)
+    result = f_next_best_step(
+        state,
+        _overlap_uncertainty(0.3),
+        _make_load(score=2),
+        oracle_signaled_end=True,
+    )
+    assert result.action == "stop"
+    assert result.state_snapshot["reason"] == "converged"
+
+
+def test_oracle_end_beats_cognitive_overload():
+    """An explicit close from the oracle is always recorded as a converged
+    termination, even when cognitive load would otherwise saturate. The
+    oracle's stated intent wins over the deterministic overload signal."""
+    state = _make_state(turn_number=5)
+    result = f_next_best_step(
+        state,
+        _empty_uncertainty(),
+        _make_load(score=5),
+        oracle_signaled_end=True,
+    )
+    assert result.action == "stop"
+    assert result.state_snapshot["reason"] == "converged"
+
+
 def test_stop_snapshot_records_load_breakdown_and_raw():
     state = _make_state(turn_number=10, n_clusters=4)
     load = CognitiveLoad(

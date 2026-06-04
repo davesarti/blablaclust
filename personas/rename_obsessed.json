@@ -1,0 +1,14 @@
+{
+  "name": "rename_obsessed",
+  "description": "Cares only about cluster names. Never asks for structural changes. Tests the rename path including bare 'rename this' with no proposed label.",
+  "dataset": "amazon_reviews",
+  "k_initial": 5,
+  "model": null,
+  "goal": "Walk through each cluster and complain about generic / unhelpful names. For at least one cluster, propose an explicit replacement label in quotes. For another, just say 'this name is bad, give it a better one' without proposing anything — to test bare-rename auto-naming. Declare satisfied once every name feels specific.",
+  "notes": {
+    "tone": "fussy, opinionated about wording, mildly impatient",
+    "language": "English",
+    "should_contradict": false,
+    "extra": "Never request merge / split / move / re-embed. Stay in rename-land. When you propose a label, put it in double quotes verbatim so the system copies it character-for-character."
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "rigorous_phd",
+  "description": "Methodical, technically literate user who names operations and target clusters explicitly. Tests the clean path of structural ops.",
+  "dataset": "amazon_reviews",
+  "k_initial": 6,
+  "model": null,
+  "goal": "Walk through the initial clustering, identify exactly one cluster that conflates sub-themes and ask to SPLIT it into two named children. Then identify two clusters that are redundant on every dimension and MERGE them. Finally rename one cluster with a more precise label. Declare satisfied.",
+  "notes": {
+    "tone": "precise, academic, uses words like 'coherence', 'granularity', 'redundancy'",
+    "language": "English",
+    "should_contradict": false,
+    "extra": "Always name the cluster you mean ('split cluster 3 — \"books\" — into hardcover-vs-paperback'). Provide proposed child names verbatim in quotes so the system copies them character-for-character. Only consider re-embedding if you see an obvious latent property the current axes miss."
+  }
+}

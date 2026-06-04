@@ -21,23 +21,25 @@ Contradiction score: {contradiction_score}   (0 = clear/consistent, 1 = highly c
 Contradiction notes: {contradiction_notes}
 
 TASK
-Produce one `overall_score` (0.0–1.0) for how well this session went, and a
-verdict. Combine the axes with judgment, not arithmetic. Guiding principles:
+Produce one `overall_score` (0.0–1.0) for how well this session went, and a verdict.
 
-- High coherence AND high compliance is the clear success case. A low
-  contradiction score reinforces this; it cannot detract from it.
-- If coherence is LOW but compliance is HIGH and contradiction is HIGH, do NOT
-  penalise the system heavily — it faithfully executed a messy or
-  self-contradictory oracle, and the poor clusters are largely the oracle's
-  doing. Say so in the notes.
-- If compliance is LOW while contradiction is LOW, that is a genuine system
-  failure: the oracle was clear and the system still did the wrong thing.
-  Penalise.
-- If compliance is LOW and contradiction is HIGH, partially excuse the system
-  but not entirely — confused input often produces confused execution, yet a
-  good system still does its best.
-- A single weak cluster (low coherence_min) against otherwise strong coherence
-  is a localised issue, not a session-wide failure.
+Reason through the three axes — do not average them. The system's job is to
+serve the oracle, so compliance and coherence are the substance of the verdict;
+contradiction is context that tells you how to read the other two.
+
+Useful frames:
+- If the oracle was clear (low contradiction), compliance and coherence speak
+  for themselves — credit the wins, charge the losses.
+- If the oracle was hard (high contradiction), partly excuse weak compliance or
+  coherence; the system was working with messy input.
+- A weak single cluster against otherwise strong coherence is localised, not
+  session-wide. Weigh the overall picture.
+
+Use bands as anchors rather than a formula:
+- ≥ 0.80 — strong session: the oracle's intent shows in the clusters.
+- 0.60–0.79 — solid with rough edges: most of the way there.
+- 0.40–0.59 — mixed: a real gap on at least one axis the other doesn't excuse.
+- < 0.40 — failure: the session did not meaningfully serve the oracle.
 
 IMPORTANT: In any free-text field (notes), always refer to clusters by their name,
 never by their ID.

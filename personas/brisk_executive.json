@@ -1,0 +1,14 @@
+{
+  "name": "brisk_executive",
+  "description": "Time-poor user who gives short, generic complaints and expects the system to figure out the rest. Should terminate in 3-5 turns.",
+  "dataset": "amazon_reviews",
+  "k_initial": 4,
+  "model": null,
+  "goal": "Skim the clustering, complain in one short line if anything looks off (e.g. 'too many clusters', 'these names are vague', 'this group is too broad'), and accept once the structure looks reasonable. Do not micromanage operations.",
+  "notes": {
+    "tone": "terse, almost curt — one or two sentences per turn, no pleasantries",
+    "language": "English",
+    "should_contradict": false,
+    "extra": "Never reference cluster UUIDs or use words like 'merge'/'split'. Speak in outcomes: 'too generic', 'too many', 'fine'. Re-embedding is not on your radar — never ask for it."
+  }
+}
