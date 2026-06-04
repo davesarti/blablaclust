@@ -62,8 +62,17 @@ Use the cluster names and descriptions as signals when deciding what to propose:
   property / axis of the texts. Which one to emit depends on how explicit the
   reorganisation intent is:
 
-  (1) CLEAR INTENT → emit "semantic_reembed" directly. The message contains an
-      explicit operation verb or whole-dataset framing in any language:
+  (1) CLEAR INTENT, SINGLE CLUSTER → emit "cluster_reembed". The message names
+      a specific existing cluster AND a semantic axis/property, asking to zoom in
+      or sub-divide that cluster semantically:
+        - "split cluster 2 by sentiment", "re-embed the electronics cluster by battery"
+        - "zoom into cluster 3 along writing style"
+        - "subdivide [cluster name] by [axis]", "look at [cluster] through [axis]"
+        - "break down [cluster] by [axis]", "separate [cluster] by [axis]"
+      The axis applies ONLY within that cluster — other clusters are untouched.
+
+  (1b) CLEAR INTENT, WHOLE DATASET → emit "semantic_reembed" directly. The
+      message contains an explicit operation verb or whole-dataset framing:
         - "cluster by X", "group by X", "organise by X", "sort by X"
         - "raggruppa per X", "organizza per X", "guarda attraverso X"
         - "look at this through X", "re-embed by X", "re-cluster by X"
@@ -116,7 +125,7 @@ Use the cluster names and descriptions as signals when deciding what to propose:
 Respond with a single valid JSON object. No markdown fences, no commentary outside the JSON.
 
 {{
-  "action": "<one of: merge | split | rename | move | semantic_reembed | clarify | no_change | explain | end>",
+  "action": "<one of: merge | split | rename | move | semantic_reembed | cluster_reembed | clarify | no_change | explain | end>",
   "operations": [
     {{
       "type": "merge",
@@ -143,6 +152,12 @@ Respond with a single valid JSON object. No markdown fences, no commentary outsi
     {{
       "type": "semantic_reembed",
       "axis_label": "<short noun phrase naming the axis, e.g. 'writing style' or 'angry tone'>"
+    }},
+    {{
+      "type": "cluster_reembed",
+      "cluster_id": "<existing cluster id>",
+      "axis_label": "<short noun phrase naming the axis, e.g. 'battery performance'>",
+      "k": 2
     }}
   ],
   "display": "<plain English explanation of what changed and why, max 3 sentences, shown directly to oracle>"
@@ -169,6 +184,7 @@ CONSTRAINTS
 - For "rename", BOTH "new_name" and "new_description" are OPTIONAL. When the oracle asks to rename WITHOUT proposing a new label — e.g. "rename cluster 2", "give cluster 3 a better name", "this name is bad, redo it", "rinomina questo cluster" — emit the rename op with ONLY cluster_id and OMIT new_name (and new_description). The system will regenerate the name from the cluster's contents. Do NOT ask the oracle to supply a name and do NOT emit a "clarify". The same applies for description-only edits: include only the field the oracle actually changed; the omitted field is preserved.
 - For "move", point_ids may ONLY contain data point IDs the oracle explicitly referenced (see Target points above, or IDs named earlier in the conversation). NEVER invent point IDs or move points the oracle did not name — bulk reassignment is the clustering algorithm's job, not yours. Use "move" for point-level feedback such as resolving a boundary point or correcting a single misplaced point.
 - A "semantic_reembed" operation is EXCLUSIVE: when you emit one it MUST be the only entry in operations[]. Never combine it with merge, split, rename, or move in the same response — the re-embedding dissolves every existing cluster, so any other op IDs in the same response would be invalid afterwards.
+- A "cluster_reembed" operation targets ONE specific cluster. Use it when the oracle names a cluster AND an axis. It dissolves only that cluster and creates k sub-clusters from its points; all other clusters are untouched. "k" defaults to 2; only set it higher when the oracle explicitly asks for more sub-clusters. axis_label follows the same extraction rules as semantic_reembed (bare noun phrase, ≤ 40 chars). Use "split" (not cluster_reembed) when the oracle names a cluster but gives no axis — split is purely structural, cluster_reembed is semantic.
 - axis_label MUST be the bare noun phrase naming the dimension (≤ 40 chars), with imperative or prepositional wrappers stripped. Examples of correct extraction: "cluster by sentiment" → "sentiment"; "let's re-embed along formal vs casual" → "formal vs casual"; "look at it through the lens of writing style" → "writing style"; "writing style" → "writing style". It must NEVER be a full sentence, a structural instruction ("make 5 clusters"), an existing cluster name, or a generic word like "data" / "clusters" / "groups".
 - If feedback_type is "explain", set action to "explain" and leave operations empty.
 - Never emit action "no_change" when the oracle's message contains a recognisable text property or axis (sentiment, tone, quality, formality, etc.) without referencing a specific cluster or count — use "clarify" instead.

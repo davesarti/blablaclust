@@ -21,6 +21,7 @@ from src.engine.cluster_operations import (
     batch_move_points,
     merge_clusters,
     rename_cluster,
+    semantic_reembed_cluster,
     split_cluster,
 )
 from src.engine.turn_builder import TurnBuilder
@@ -185,6 +186,19 @@ def f_apply_operations(
                     new_description=inline_new_desc or (existing.description if existing else ""),
                     builder=builder,
                 )
+
+        elif op_type == "cluster_reembed":
+            axis = (op.get("axis_label") or "").strip()
+            if not axis:
+                raise KeyError("cluster_reembed operation requires a non-empty axis_label")
+            k = int(op.get("k", 2))
+            semantic_reembed_cluster(
+                cluster_id=op["cluster_id"],
+                axis_hint=axis,
+                builder=builder,
+                k=k,
+                axis_weight=0.7,
+            )
 
         # Unknown op_type values are skipped intentionally so a future protocol
         # extension does not crash older clients. Missing op_type, however, is

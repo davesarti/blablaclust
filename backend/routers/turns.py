@@ -376,7 +376,7 @@ def create_turn(payload: InputOracle, db: Session = Depends(get_db)):
             )
 
         structural_types = {op.get("type") for op in operations}
-        if structural_types & {"merge", "split"}:
+        if structural_types & {"merge", "split", "cluster_reembed"}:
             # Boundary repair targets the clusters created during THIS turn —
             # those are the ones whose k-means placement might have boundary
             # mistakes the LLM can correct.

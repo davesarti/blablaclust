@@ -28,8 +28,10 @@ replaces the snapshot wholesale.
 
 import uuid
 
+import numpy as np
+
 from src.engine.cluster_naming import name_clusters
-from src.engine.initial_clustering import initial_clustering
+from src.engine.initial_clustering import _fit_kmeans, _softmax, initial_clustering
 from src.engine.turn_builder import TurnBuilder
 from src.models import Cluster as DbCluster, DataPoint, SoftAssignment as DbSoftAssignment
 
@@ -375,3 +377,102 @@ def auto_name_cluster(
     ]
     name_clusters([cluster], naming_assignments, points, axis_hint=axis_hint)
     return cluster
+
+
+def semantic_reembed_cluster(
+    cluster_id: str,
+    axis_hint: str,
+    builder: TurnBuilder,
+    k: int = 2,
+    axis_weight: float = 0.7,
+    auto_name: bool = True,
+) -> list[DbCluster]:
+    """Re-embed a single cluster along a semantic axis and split into k sub-clusters.
+
+    Unlike split_cluster (plain k-means geometry), this projects the subset into
+    a hybrid embedding space oriented by axis_hint before clustering, so the
+    resulting sub-clusters reflect the semantic axis rather than raw distance.
+    All other clusters and their soft assignments are unaffected (non-subset
+    points are renormalized after the parent is dissolved).
+
+    Raises:
+        ValueError: unknown/dissolved cluster; fewer than k points; empty snapshot.
+        AxisNotDiscriminativeError: the axis doesn't vary enough in the subset.
+    """
+    from src.engine.f_semantic_reembed import reembed_for_axis
+
+    cluster = builder.get_cluster(cluster_id)
+    if cluster is None:
+        raise ValueError(
+            f"cluster '{cluster_id}' not found in session '{builder.session_id}'"
+        )
+    if builder.is_dissolved(cluster_id):
+        raise ValueError(f"cannot re-embed already-dissolved cluster '{cluster_id}'")
+    if not builder.snapshot:
+        raise ValueError(
+            f"session '{builder.session_id}' has no soft assignments — "
+            "run initial clustering first"
+        )
+
+    subset_ids = [
+        pid for pid, dist in builder.snapshot.items()
+        if _hard_cluster(dist) == cluster_id
+    ]
+    if len(subset_ids) < k:
+        raise ValueError(
+            f"cannot split cluster '{cluster_id}': {len(subset_ids)} point(s) "
+            f"assigned to it (need at least {k})"
+        )
+
+    subset_points = (
+        builder.db.query(DataPoint).filter(DataPoint.id.in_(subset_ids)).all()
+    )
+
+    X = reembed_for_axis(subset_points, axis_hint, axis_weight=axis_weight)
+
+    model = _fit_kmeans(X, k)
+    centroids = model.cluster_centers_
+    diffs = X[:, np.newaxis, :] - centroids[np.newaxis, :, :]
+    sq_dists = np.sum(diffs ** 2, axis=2)
+    probs = _softmax(-sq_dists, axis=1)  # (n_subset, k)
+
+    new_cluster_ids = [str(uuid.uuid4()) for _ in range(k)]
+    new_clusters = [
+        DbCluster(
+            id=new_cluster_ids[i],
+            session_id=builder.session_id,
+            name=f"{cluster.name} - part {i + 1}"[:255],
+            description="",
+            created_at_turn=builder.turn_number,
+        )
+        for i in range(k)
+    ]
+
+    subset_dist: dict[str, dict[str, float]] = {}
+    naming_assignments: list[DbSoftAssignment] = []
+    for i, dp in enumerate(subset_points):
+        dist = {new_cluster_ids[j]: float(probs[i, j]) for j in range(k)}
+        subset_dist[dp.id] = dist
+        for j in range(k):
+            naming_assignments.append(DbSoftAssignment(
+                data_point_id=dp.id,
+                cluster_id=new_cluster_ids[j],
+                turn_number=builder.turn_number,
+                probability=float(probs[i, j]),
+            ))
+
+    for point_id, distribution in list(builder.snapshot.items()):
+        if point_id in subset_dist:
+            builder.snapshot[point_id] = subset_dist[point_id]
+        else:
+            remaining = {cid: p for cid, p in distribution.items() if cid != cluster_id}
+            builder.snapshot[point_id] = _renormalize(remaining)
+
+    builder.dissolve(cluster_id)
+    for child in new_clusters:
+        builder.add_cluster(child)
+
+    if auto_name:
+        name_clusters(new_clusters, naming_assignments, subset_points, axis_hint=axis_hint)
+
+    return new_clusters
