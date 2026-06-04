@@ -39,6 +39,13 @@ def _hard_cluster(distribution: dict[str, float]) -> str:
     return max(distribution, key=distribution.get)
 
 
+def _renormalize(distribution: dict[str, float]) -> dict[str, float]:
+    total = sum(distribution.values())
+    if total < 1e-12:
+        return distribution
+    return {cid: p / total for cid, p in distribution.items()}
+
+
 def merge_clusters(
     cluster_ids: list[str],
     builder: TurnBuilder,
@@ -121,11 +128,8 @@ def merge_clusters(
         if _hard_cluster(distribution) in merge_set:
             builder.snapshot[point_id] = {new_cluster.id: 1.0}
         else:
-            builder.snapshot[point_id] = {
-                cid: prob
-                for cid, prob in distribution.items()
-                if cid not in merge_set
-            }
+            remaining = {cid: p for cid, p in distribution.items() if cid not in merge_set}
+            builder.snapshot[point_id] = _renormalize(remaining)
 
     for cid in merge_ids:
         builder.dissolve(cid)
@@ -235,9 +239,8 @@ def split_cluster(
         if point_id in subset_dist:
             builder.snapshot[point_id] = subset_dist[point_id]
         else:
-            builder.snapshot[point_id] = {
-                cid: prob for cid, prob in distribution.items() if cid != cluster_id
-            }
+            remaining = {cid: p for cid, p in distribution.items() if cid != cluster_id}
+            builder.snapshot[point_id] = _renormalize(remaining)
 
     builder.dissolve(cluster_id)
     for child in new_clusters:
