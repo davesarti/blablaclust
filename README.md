@@ -87,54 +87,103 @@ quality) to find better-calibrated values.
 ├── backend/
 │   ├── main.py                # FastAPI app + SQLite engine/session setup
 │   ├── session_state.py       # Builds ChatSessionState from DB rows
+│   ├── eval_cache.py          # Content-hash cache for /sessions/{id}/eval
 │   └── routers/
 │       ├── datasets.py        # upload / list datasets
 │       ├── sessions.py        # create / read sessions, initial clustering
 │       ├── turns.py           # the main oracle-interaction loop endpoint
-│       └── clusters.py        # read clusters and their points
+│       ├── clusters.py        # read clusters and their points
+│       └── umap.py            # 2-D UMAP projection for the analytics panel
 ├── frontend/                  # React UI (Vite + TypeScript) — primary interface
 │   ├── src/
 │   │   ├── App.tsx
-│   │   ├── components/        # UI components
-│   │   ├── store/             # App state (context + reducers)
-│   │   └── api/               # API client helpers
+│   │   ├── components/
+│   │   │   ├── WelcomePage.tsx      # dataset / session selector
+│   │   │   ├── WorkspacePage.tsx    # main chat + cluster workspace
+│   │   │   ├── ChatPanel.tsx
+│   │   │   ├── ClusterCard.tsx
+│   │   │   ├── AnalyticsPanel.tsx   # UMAP + turn-history visualisation
+│   │   │   └── modals/
+│   │   ├── store/AppContext.tsx     # app-wide state (context)
+│   │   └── api/client.ts           # typed API client
 │   └── package.json
 ├── scripts/
-│   ├── serve_ui.py            # auto-seed + serve backend (recommended entrypoint)
-│   └── cli.py                 # interactive terminal client
+│   ├── serve_ui.py                       # auto-seed + serve backend (recommended entrypoint)
+│   ├── cli.py                            # interactive terminal client
+│   ├── run_persona_eval.py               # drive sessions with LLM-oracle personas
+│   ├── run_scenario_eval.py              # drive sessions with scripted scenarios
+│   ├── run_baseline_eval.py              # non-interactive baseline clustering eval
+│   ├── run_generalization_stability_eval.py  # held-out generalization eval
+│   ├── compare_embeddings.py             # embedding model comparison report
+│   ├── verify_loop_20ng.py               # smoke-test the 20 Newsgroups loop
+│   └── migrate_datapoint_text.py         # one-off DB migration utility
 ├── ui/
 │   ├── index.html             # legacy single-file HTML UI (served at /ui)
 │   └── DESIGN.md
 ├── data/
-│   ├── train.csv              # 1200 training records (demo dataset)
-│   ├── frozen_eval.csv        # 300 evaluation records — do not modify
-│   └── demo_database.db       # SQLite DB (created/seeded on first run)
+│   ├── train.csv                  # 1 200 Amazon reviews (demo dataset)
+│   ├── frozen_eval.csv            # 300 Amazon eval records — do not modify
+│   ├── 20newsgroups_train.csv     # 20 Newsgroups training split
+│   ├── 20newsgroups_frozen.csv    # 20 Newsgroups frozen eval split
+│   ├── imdb_train.csv             # IMDB training split
+│   ├── imdb_frozen.csv            # IMDB frozen eval split
+│   └── demo_database.db           # SQLite DB (created/seeded on first run)
+├── scenarios/                 # Scripted oracle scenario files (JSON)
+│   ├── stable_oracle.json
+│   ├── contradictory_oracle.json
+│   ├── high_load_oracle.json
+│   ├── sentiment_split.json
+│   ├── topic_merge.json
+│   └── …
+├── personas/                  # LLM-oracle persona definitions (JSON)
 ├── prompts/                   # One .txt file per LLM prompt (versioned)
 │   ├── f_output.txt
 │   ├── f_next_best_step.txt
-│   ├── f_eval.txt
+│   ├── f_eval.txt / f_eval_coherence.txt / f_eval_compliance.txt …
+│   ├── f_boundary_repair.txt
+│   ├── f_update_preferences.txt
+│   ├── f_semantic_reembed.txt / semantic_axis_poles.txt
 │   ├── cluster_naming.txt
-│   └── parse_clustering_intent.txt
+│   ├── parse_clustering_intent.txt
+│   ├── dataset_description.txt
+│   └── llm_oracle.txt
 ├── src/
-│   ├── engine/                # Core clustering logic (P3)
-│   │   ├── f_output.py              # Executor: LLM → structured operations + usage
+│   ├── engine/                # Core clustering logic
+│   │   ├── turn_builder.py          # In-memory staging; single DB commit per turn
+│   │   ├── f_output.py              # Executor: LLM → structured operations
 │   │   ├── f_apply_operations.py    # Dispatch operations to cluster_operations
-│   │   ├── f_next_best_step.py      # Decide: show / ask / stop
+│   │   ├── f_next_best_step.py      # Planner: show / ask / stop
 │   │   ├── f_uncertainty.py         # Score data points by cluster ambiguity
 │   │   ├── f_parse_clustering_intent.py  # Free text → k + clustering axis
-│   │   ├── f_eval.py                # Self-assess clustering quality
+│   │   ├── f_semantic_reembed.py    # Semantic axis re-embedding (cosine + LLM hybrid)
+│   │   ├── f_boundary_repair.py     # Post-op LLM-guided boundary correction
+│   │   ├── f_cognitive_load.py      # Estimate conversation cognitive load
+│   │   ├── f_update_preferences.py  # Rolling oracle preference summary
+│   │   ├── f_eval.py                # Self-assess clustering quality (A/B metrics)
+│   │   ├── semantic_clustering.py   # Turn-1 semantic axis re-clustering
+│   │   ├── generalization.py        # Nearest-centroid assignment for held-out data
 │   │   ├── initial_clustering.py    # k-means + soft assignments
 │   │   ├── cluster_operations.py    # merge / split / move / rename executors
-│   │   └── cluster_naming.py        # LLM-generated cluster names + descriptions
-│   ├── harness.py             # LLM wrapper (Claude) + provider dispatch
-│   ├── harness_openai.py      # OpenAI-compatible provider (OpenAI / Groq)
-│   ├── harness_openrouter.py  # OpenRouter provider
+│   │   ├── cluster_naming.py        # LLM-generated cluster names + descriptions
+│   │   └── cognitive_load_caps.py   # Turn / token / cluster thresholds (A3)
+│   ├── eval/                  # LLM-oracle eval harness
+│   │   ├── llm_oracle.py      # Drives sessions as a simulated user
+│   │   ├── oracle_view.py     # Builds per-turn cluster panel for the oracle LLM
+│   │   ├── persona.py         # Persona file loader + validation
+│   │   └── eval_report.py     # Shared report writer (results.jsonl + summary.md)
+│   ├── viz/
+│   │   └── umap_projection.py # 2-D UMAP reduction (cached per dataset)
+│   ├── harness/               # LLM provider abstraction
+│   │   ├── harness.py         # Public API + provider dispatch
+│   │   ├── harness_claude.py  # Anthropic Claude provider
+│   │   ├── harness_openai.py  # OpenAI-compatible provider (OpenAI / Groq)
+│   │   └── harness_openrouter.py  # OpenRouter provider
+│   ├── dataset_processing/    # CSV ingest, embeddings, text cleaning
 │   ├── logger.py              # Logging + structured LLM call log
 │   ├── models.py              # SQLAlchemy ORM models
-│   ├── schemas.py             # Pydantic schemas (shared contracts)
-│   └── dataset_processing/    # CSV ingest, embeddings, text cleaning
+│   └── schemas.py             # Pydantic schemas (shared contracts)
 ├── notes/                     # Sprint notes per person
-├── AGENTS.md                  # Planner/Executor architecture (grading component)
+├── AGENTS.md                  # Planner/Executor architecture
 ├── .env.example               # Environment variable template
 └── requirements.txt
 ```
@@ -161,7 +210,7 @@ The provider is selected by `LLM_PROVIDER`; only the keys for the chosen provide
 ## Development notes
 
 - **Do not modify** `data/frozen_eval.csv` — reserved for final evaluation.
-- All LLM calls go through `src/harness.py` — never import a provider SDK (`anthropic`, `openai`) directly in engine code.
+- All LLM calls go through `src/harness/` — never import a provider SDK (`anthropic`, `openai`) directly in engine code.
 - Prompts live in `prompts/` as `.txt` files — never hardcode them as f-strings in Python.
 - Engine functions never call `db.commit()` — the caller (the API router) owns the transaction so a turn that applies several operations stays atomic.
 - Engine errors propagate (no silent skipping); the API surfaces them as HTTP 422 so failures are visible to the oracle.

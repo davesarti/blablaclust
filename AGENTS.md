@@ -20,8 +20,13 @@ and extend, since the decision logic and the execution logic never mix.
 |---|---|---|
 | Sensor | `f_uncertainty` | Reads the DB and scores each data point by how ambiguous its cluster assignment is — feeds signal into the Planner |
 | Planner | `f_next_best_step` | Reads state + uncertainty scores, decides the next action: show / ask / stop |
-| Executor | `f_output` + `f_apply_operations` | Calls Claude to turn oracle feedback into structured operations, then applies them to the DB |
-| Judge | `f_eval` | Self-assesses the quality of the current clustering at the end of a session |
+| Executor | `f_output` + `f_apply_operations` | Calls the LLM to turn oracle feedback into structured operations, then applies them via `TurnBuilder` |
+| Reembedder | `f_semantic_reembed` | Projects data along a user-specified semantic axis (cosine anchor poles + LLM hybrid) |
+| Repair | `f_boundary_repair` | Post-op LLM pass that corrects boundary points placed in the wrong cluster by geometry alone |
+| Preference tracker | `f_update_preferences` | Distils the oracle's feedback history into a rolling 3–5 bullet summary injected into the next turn's prompt |
+| Cognitive load | `f_cognitive_load` | Estimates conversation complexity; caps in `cognitive_load_caps.py` trigger A3 warnings |
+| Judge | `f_eval` | Self-assesses clustering quality (A1–A3, B1–B4 metrics) at session end |
+| Staging | `TurnBuilder` | In-memory staging layer; all ops read/write the builder; a single `commit()` writes the turn to the DB |
 
 ## Architecture
 
@@ -29,19 +34,29 @@ and extend, since the decision logic and the execution logic never mix.
 Oracle natural language input
            │
            ▼
-    f_output ──▶ Claude (via harness.py)
+    f_output ──▶ LLM (via src/harness/)
            │                  │
-           │        operations (merge / split / move / rename)
+           │        operations (merge / split / move / rename /
+           │                    semantic_reembed)
            │◀─────────────────┘
            │
            ▼
-    f_apply_operations ──writes──▶ clusters + soft_assignments (DB)
+    f_apply_operations ──writes──▶ TurnBuilder (in-memory)
+           │
+           ├──▶ f_semantic_reembed  (if axis_hint present)
+           │
+           ├──▶ f_boundary_repair   (post-merge / post-split)
+           │
+           ▼
+    TurnBuilder.commit() ──writes──▶ clusters + soft_assignments (DB)
            │
            ▼
     f_uncertainty ──reads──▶ SoftAssignment table (DB)
            │
            ▼
     f_next_best_step ──decides──▶ show / ask / stop
+           │
+           ├──▶ f_update_preferences  (rolling oracle summary)
            │
            ▼
        f_eval ──assesses──▶ SystemTurn.state_snapshot
@@ -55,6 +70,7 @@ uvicorn backend.main:app --reload
 ```
 
 ## Key rules
-- All LLM calls go through `src/harness.py` — never import `anthropic` directly
+- All LLM calls go through `src/harness/` — never import `anthropic` or `openai` directly in engine code
 - Prompts live in `prompts/` as `.txt` files — never hardcode them in Python
-- Only `src/api/` reads and writes to the DB — engine functions transform state only
+- Engine functions write to `TurnBuilder`, not the DB directly; only `TurnBuilder.commit()` and API routers own DB transactions
+- Engine errors propagate (no silent skipping); the API surfaces them as HTTP 422
