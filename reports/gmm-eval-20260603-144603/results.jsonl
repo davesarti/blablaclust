@@ -1,0 +1,90 @@
+{
+  "scenario": "stable_oracle",
+  "description": "Oracle approves the initial clustering with minimal tweaks. Expects fast termination and high coherence.",
+  "session_id": "b0e4faa5-e11b-4a40-a570-5fcad03925ae",
+  "k_initial": 5,
+  "k_final": null,
+  "errors": [
+    "turn[1] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[2] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[3] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "eval http=500 body=Internal Server Error"
+  ],
+  "wall_time_s": 10.6
+}
+{
+  "scenario": "sentiment_split",
+  "description": "Oracle refines the clustering by splitting a broad cluster on sentiment, renaming, then accepting. Should exercise split + rename + show in one healthy session.",
+  "session_id": "f91658b5-4be5-4f6f-be26-793126d596b2",
+  "k_initial": 4,
+  "k_final": null,
+  "errors": [
+    "turn[1] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[2] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[3] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "eval http=500 body=Internal Server Error"
+  ],
+  "wall_time_s": 8.2
+}
+{
+  "scenario": "contradictory_oracle",
+  "description": "Oracle first splits a cluster by sentiment, then reverses course and asks to merge the sentiment clusters back together. Tests that the agent handles contradictory intent gracefully and keeps producing valid state. NOTE: the built-in B3 detector fires only when target_cluster_ids overlap across turns \u2014 since scenarios use empty target lists, B3 will read 0 even though the intent is contradictory. This scenario instead validates agent robustness (no crashes, valid final state) rather than the contradiction counter.",
+  "session_id": "cb3aac22-2b36-43e2-a9c9-63599925c2fd",
+  "k_initial": 4,
+  "k_final": null,
+  "errors": [
+    "turn[1] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[2] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[3] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[4] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "eval http=500 body=Internal Server Error"
+  ],
+  "wall_time_s": 7.3
+}
+{
+  "scenario": "topic_merge",
+  "description": "Oracle starts with an over-fragmented clustering (k=7) and progressively merges related topic clusters down to a cleaner set. Tests that merge operations fire correctly and coherence improves.",
+  "session_id": "4c8fbc71-a21c-4b50-8020-c50b2ac85ea6",
+  "k_initial": 7,
+  "k_final": null,
+  "errors": [
+    "turn[1] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[2] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[3] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[4] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "eval http=500 body=Internal Server Error"
+  ],
+  "wall_time_s": 10.0
+}
+{
+  "scenario": "high_load_oracle",
+  "description": "Oracle sends 21 turns of small, unrelenting nudges without ever converging. Designed to exhaust the cognitive-load budget (score reaches 5 at turn 20, triggering termination=cognitive_overload) before the script ends. Validates the A2 cognitive_overload termination code and that B2 load scores rise predictably with turn count.",
+  "session_id": "657bd9a5-6ef3-46eb-a978-05a1ec422cef",
+  "k_initial": 5,
+  "k_final": null,
+  "errors": [
+    "turn[1] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[2] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[3] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[4] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[5] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[6] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[7] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[8] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[9] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[10] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[11] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[12] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[13] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[14] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[15] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[16] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[17] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[18] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[19] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[20] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "turn[21] http=502 body={'detail': \"Engine call failed: Error code: 401 - {'error': {'message': 'Missing Authentication header', 'code': 401}}\"}",
+    "eval http=500 body=Internal Server Error"
+  ],
+  "wall_time_s": 13.9
+}

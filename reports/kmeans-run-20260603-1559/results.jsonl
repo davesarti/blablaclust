@@ -1,0 +1,368 @@
+{
+  "scenario": "stable_oracle",
+  "description": "Oracle approves the initial clustering with minimal tweaks. Expects fast termination and high coherence.",
+  "session_id": "36ac5bcd-29a6-4be1-a660-89f5b70e57bc",
+  "k_initial": 5,
+  "k_final": 5,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.042566243559122086,
+    "silhouette_final": 0.042566243559122086,
+    "trend": [
+      0.042566243559122086
+    ]
+  },
+  "A2": {
+    "turns": 3,
+    "weighted_turns": 4.0,
+    "termination": "converged",
+    "last_action": "show",
+    "ops_per_turn": [
+      [],
+      [],
+      []
+    ]
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      1,
+      1
+    ],
+    "mean_cognitive_load": 1.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.85,
+    "notes": "The session was highly successful, driven by perfect oracle compliance and zero contradiction, which allowed the system to maintain a stable, well-defined structure. While the overall verdict is positive, the moderate coherence issues within Personal Electronic Device Reviews and Consumer Household and Hobby Products prevent a perfect score, representing localized quality concerns rather than a systemic failure."
+  },
+  "B2": {
+    "coherence_mean": 0.72,
+    "coherence_min": 0.5,
+    "per_cluster": [
+      {
+        "cluster_id": "96b33610-7558-4198-b86c-b6888cef97c3",
+        "cluster_name": "Film and Television Reviews",
+        "coherence": 0.85,
+        "reasoning": "The cluster consistently focuses on reviews of films and television content. While one bottom member mentions a book, it does so specifically in comparison to a movie, maintaining the thematic relevance of media critiques."
+      },
+      {
+        "cluster_id": "543113a0-9967-4b6a-985d-b8345b71b9a5",
+        "cluster_name": "Consumer Household and Hobby Products",
+        "coherence": 0.65,
+        "reasoning": "This cluster accurately groups varied consumer products. However, the inclusion of two distinct book reviews in the bottom members is off-topic, as the cluster is explicitly described as focusing on household and hobby hardware."
+      },
+      {
+        "cluster_id": "0b8a077e-c1bf-41e3-8c16-2b16ef8f9249",
+        "cluster_name": "Music Albums and Collections",
+        "coherence": 0.7,
+        "reasoning": "The cluster effectively compiles feedback on music albums. A notable outlier is a bottom member reviewing an MP3 player hardware device rather than musical content, which shifts the domain from media to electronic hardware."
+      },
+      {
+        "cluster_id": "d447ae02-db3f-4a8b-969f-40aced5f7cba",
+        "cluster_name": "Personal Electronic Device Reviews",
+        "coherence": 0.5,
+        "reasoning": "While centered on hardware, it is fragmented by specific off-topic queries about video game cheats and a customer service complaint regarding baby bedding, which do not align with personal electronic device performance reports."
+      },
+      {
+        "cluster_id": "e77034ed-9ac3-4b0c-85e0-a99166631fbc",
+        "cluster_name": "Book Reviews and Literature",
+        "coherence": 0.9,
+        "reasoning": "The cluster is highly coherent as it focuses entirely on literary and educational book reviews. All members, including the bottom ones, discuss specific books as primary objects of evaluation."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The system correctly identified that all oracle requests in this session were instructional or conversational rather than operational. It faithfully maintained the existing cluster structure as requested, performing no unnecessary modifications."
+  },
+  "B4": {
+    "contradiction_score": 0.0,
+    "notes": "The oracle provided highly consistent feedback throughout the session. The user maintained a steady level of satisfaction with the existing clustering, focusing on summarizing the state rather than requesting structural modifications.",
+    "examples": [
+      "Turn 1 stated the clustering was reasonable, turn 2 requested summaries without changes, and turn 3 confirmed satisfaction with those same groupings."
+    ]
+  },
+  "wall_time_s": 105.4
+}
+{
+  "scenario": "sentiment_split",
+  "description": "Oracle refines the clustering by splitting a broad cluster on sentiment, renaming, then accepting. Should exercise split + rename + show in one healthy session.",
+  "session_id": "1a6878c6-d31e-4cd0-bc07-ca332fb4a8c4",
+  "k_initial": 4,
+  "k_final": 5,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.03854570537805557,
+    "silhouette_final": 0.024104822427034378,
+    "trend": [
+      0.03854570537805557,
+      0.024104822427034378
+    ]
+  },
+  "A2": {
+    "turns": 3,
+    "weighted_turns": 6.0,
+    "termination": "converged",
+    "last_action": "show",
+    "ops_per_turn": [
+      [
+        "split"
+      ],
+      [
+        "rename"
+      ],
+      []
+    ]
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      1,
+      1
+    ],
+    "mean_cognitive_load": 1.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.7,
+    "notes": "The session was highly successful in terms of oracle compliance and clarity, though the overall score is tempered by poor internal coherence in the 'Positive Reviews' and 'Negative Reviews' clusters. These thematic failures indicate that while the system followed instructions perfectly, it struggled to maintain domain-specific integrity when grouping primarily by sentiment."
+  },
+  "B2": {
+    "coherence_mean": 0.59,
+    "coherence_min": 0.35,
+    "per_cluster": [
+      {
+        "cluster_id": "832eb4fa-3b7f-4612-8316-e8ce0caa16f3",
+        "cluster_name": "Music Album Reviews",
+        "coherence": 0.75,
+        "reasoning": "The cluster focuses on music and album reviews. While mostly consistent, the inclusion of a review for a generic portable media player playback device is slightly off-topic but remains within the domain of music consumption."
+      },
+      {
+        "cluster_id": "244b7c79-39a5-42bd-b6c8-91c7363ec238",
+        "cluster_name": "Book Reviews",
+        "coherence": 0.8,
+        "reasoning": "This cluster is highly coherent regarding book critiques. The bottom member mentioning a movie adaptation is an acceptable peripheral context for a book review cluster."
+      },
+      {
+        "cluster_id": "f51cfb1a-2df5-4206-be90-33d7fc347ae4",
+        "cluster_name": "Film and Television Reviews",
+        "coherence": 0.65,
+        "reasoning": "The cluster effectively groups film and video feedback. It suffers slightly from the inclusion of a 'yoga DVD' which, while a video format, functions as an instructional fitness tool rather than entertainment media."
+      },
+      {
+        "cluster_id": "9ebcd9fd-ae97-4cba-bb81-5430316a1d2a",
+        "cluster_name": "Positive Reviews",
+        "coherence": 0.35,
+        "reasoning": "The name 'Positive Reviews' is too generic, resulting in a fragmented cluster that mixes household tools and appliances with literature reviews. The theme is defined by sentiment rather than subject matter, which fails to create a specific domain."
+      },
+      {
+        "cluster_id": "1b072fea-ade3-4525-a791-ed52f2d3a1ad",
+        "cluster_name": "Negative Reviews",
+        "coherence": 0.4,
+        "reasoning": "The cluster name 'Negative Reviews' is too generic, and the content is fragmented by sentiment-based grouping. It mixes technical hardware failures with a highly positive review for a GPS unit, demonstrating a fundamental lack of thematic focus."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The system correctly interpreted and executed all requests provided by the oracle across every turn. The split of the mixed cluster was handled accurately, and the renaming of the Book Reviews cluster was applied faithfully."
+  },
+  "B4": {
+    "contradiction_score": 0.0,
+    "notes": "The oracle provided a consistent and clear progression of instructions. The commands demonstrated a logical flow from specific structural changes to finalizing the categorization.",
+    "examples": [
+      "Turn 1 established a sentiment-based splitting goal, and Turn 3 confirmed this specific objective had been met, showing alignment throughout the session."
+    ]
+  },
+  "wall_time_s": 104.8
+}
+{
+  "scenario": "contradictory_oracle",
+  "description": "Oracle first splits a cluster by sentiment, then reverses course and asks to merge the sentiment clusters back together. Tests that the agent handles contradictory intent gracefully and keeps producing valid state. NOTE: the built-in B3 detector fires only when target_cluster_ids overlap across turns \u2014 since scenarios use empty target lists, B3 will read 0 even though the intent is contradictory. This scenario instead validates agent robustness (no crashes, valid final state) rather than the contradiction counter.",
+  "session_id": "983535bf-03a8-4cd5-b66a-b8f740a97a4e",
+  "k_initial": 4,
+  "k_final": 5,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.03854570537805557,
+    "silhouette_final": 0.02429521270096302,
+    "trend": [
+      0.03854570537805557,
+      0.024104822427034378,
+      0.02429521270096302
+    ]
+  },
+  "A2": {
+    "turns": 4,
+    "weighted_turns": 8.0,
+    "termination": "converged",
+    "last_action": "show",
+    "ops_per_turn": [
+      [
+        "split"
+      ],
+      [
+        "merge"
+      ],
+      [
+        "split"
+      ],
+      []
+    ]
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "mean_cognitive_load": 1.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.75,
+    "notes": "The session was successful overall, as the system demonstrated perfect compliance despite significant oracle volatility. While the internal coherence suffered due to the fragmented Negative Consumer Product Reviews cluster, the system's performance is largely excused by the unstable and contradictory instructions regarding sentiment-based grouping."
+  },
+  "B2": {
+    "coherence_mean": 0.69,
+    "coherence_min": 0.45,
+    "per_cluster": [
+      {
+        "cluster_id": "e3176e32-be7a-4cc0-825b-823fd802a952",
+        "cluster_name": "Music Album Reviews",
+        "coherence": 0.75,
+        "reasoning": "The cluster centers clearly on music and album critiques, though the inclusion of a review for a portable electronic device (bottom member) is a minor domain drift."
+      },
+      {
+        "cluster_id": "7a35693d-1d92-4d6d-aea6-e691a28a8e76",
+        "cluster_name": "Book and Literature Critiques",
+        "coherence": 0.7,
+        "reasoning": "This cluster effectively captures literary and informational book reviews; however, a stray review about a movie adaptation is off-topic, and the name is slightly too broad given the mix of non-fiction and fiction."
+      },
+      {
+        "cluster_id": "bbade79f-64c0-4866-94e7-81c9996876d1",
+        "cluster_name": "Film and DVD Media Reviews",
+        "coherence": 0.75,
+        "reasoning": "The cluster is well-aligned around visual media and instructional fitness DVDs, though comparing books to movies in some reviews introduces slight topical overlap with literature critics."
+      },
+      {
+        "cluster_id": "8319d7fa-8891-4fe7-a6ac-f061dbec677c",
+        "cluster_name": "Positive Consumer Product Reviews",
+        "coherence": 0.8,
+        "reasoning": "The cluster contains consistent positive consumer sentiment regarding household and tactical products. The name is somewhat generic, leading to a small penalty."
+      },
+      {
+        "cluster_id": "83990680-7533-485e-b99d-34bcca683730",
+        "cluster_name": "Negative Consumer Product Reviews",
+        "coherence": 0.45,
+        "reasoning": "This cluster is highly fragmented; while described as negative feedback for electronics, it contains a highly positive review for a GPS device and general customer service complaints about furniture retail."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The system followed the oracle's fluctuating instructions perfectly across all four turns. It correctly executed the requested splits and merges according to the provided instructions, ending with the appropriate division of product reviews."
+  },
+  "B4": {
+    "contradiction_score": 0.6,
+    "notes": "The oracle exhibited a pattern of indecision, oscillating between splitting and merging the sentiment clusters twice within the session. While the rationale for reverting was explicitly stated, the rapid flip-flopping indicates a lack of stable intent that would cause significant processing churn for a clustering system.",
+    "examples": [
+      "Turn 1 requested a split, turn 2 requested a merge, and turn 3 reversed the merge, effectively undoing the previous instruction without new analytical scope."
+    ]
+  },
+  "wall_time_s": 212.3
+}
+{
+  "scenario": "topic_merge",
+  "description": "Oracle starts with an over-fragmented clustering (k=7) and progressively merges related topic clusters down to a cleaner set. Tests that merge operations fire correctly and coherence improves.",
+  "session_id": "252d4d67-145a-4ca9-9361-c5eb2cb4ae2e",
+  "k_initial": 7,
+  "k_final": 4,
+  "errors": [
+    "turn[2] http=422 body={'detail': 'Engine produced an invalid operation: merge_clusters needs at least 2 distinct clusters'}"
+  ],
+  "A1": {
+    "silhouette_initial": 0.03968624398112297,
+    "silhouette_final": 0.03968624398112297,
+    "trend": [
+      0.03968624398112297
+    ]
+  },
+  "A2": {
+    "turns": 3,
+    "weighted_turns": 6.0,
+    "termination": "converged",
+    "last_action": "show",
+    "ops_per_turn": [
+      [
+        "merge"
+      ],
+      [],
+      [
+        "merge"
+      ],
+      []
+    ]
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      2,
+      1,
+      1
+    ],
+    "mean_cognitive_load": 1.33,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.8,
+    "notes": "The session is a success driven by perfect Oracle compliance and a clear, consistent instruction set. While minor internal coherence issues exist in 'Apparel and Lifestyle Product Reviews', 'Music Albums and Collections', and 'Electronics Reviews' due to slight category drift, the overall performance is high given the system's precise execution of the Oracle's logic."
+  },
+  "B2": {
+    "coherence_mean": 0.675,
+    "coherence_min": 0.55,
+    "per_cluster": [
+      {
+        "cluster_id": "1d49d25e-8157-417e-a39a-fba33b1e972a",
+        "cluster_name": "Apparel and Lifestyle Product Reviews",
+        "coherence": 0.55,
+        "reasoning": "While centered on lifestyle products, the cluster is fragmented by the inclusion of automotive parts and kitchen appliances, which sit outside the defined theme of 'Apparel and Lifestyle'. The name is overly generic for such a broad mix of consumer goods."
+      },
+      {
+        "cluster_id": "e73779e9-124b-4b69-a708-0766a2f9c07e",
+        "cluster_name": "Music Albums and Collections",
+        "coherence": 0.65,
+        "reasoning": "The cluster is generally coherent regarding music media, but it is penalized for including a review of earhook headphones in the bottom members, which is hardware rather than audio content. The name is descriptive but moderately generic."
+      },
+      {
+        "cluster_id": "e5d8a9e2-0ba3-4d14-a519-4e3dbab27778",
+        "cluster_name": "Electronics Reviews",
+        "coherence": 0.65,
+        "reasoning": "The cluster successfully groups electronics reviews, but it is dragged down by the inclusion of a pizza stone review, which belongs to kitchenware. The name 'Electronics Reviews' is highly generic."
+      },
+      {
+        "cluster_id": "ff262459-13d0-4dfc-8d54-688d117390e1",
+        "cluster_name": "Books and Films",
+        "coherence": 0.85,
+        "reasoning": "This cluster maintains strong coherence around media critiques (books and films) and instructional/educational materials, with only minor variations. The name is accurate, though still quite broad."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The system correctly identified the intended clusters for both the electronics and the media-related merges. All operations were executed accurately according to the instructions provided in the oracle's requests across all turns."
+  },
+  "B4": {
+    "contradiction_score": 0.0,
+    "notes": "The oracle provided a consistent, logical progression of instructions to refine the clustering structure. Each request was unambiguous, had clear intent, and concluded with a final declaration of satisfaction.",
+    "examples": [
+      "Turn 1 initiated a merge based on a thematic observation, followed by a Turn 2 merge for related media categories, leading logically to the Turn 3 completion signal."
+    ]
+  },
+  "wall_time_s": 101.8
+}
