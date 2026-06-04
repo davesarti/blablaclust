@@ -211,6 +211,7 @@ class TestReembedForAxis:
             from src.engine.f_semantic_reembed import reembed_for_axis
             result = reembed_for_axis(points, "battery")
 
+        result, _ = result if isinstance(result, tuple) else (result, None)
         assert result.shape == (6, 5)  # D+1 = 4+1
         assert result.dtype == np.float32
 
@@ -274,6 +275,7 @@ class TestReembedForAxis:
             from src.engine.f_semantic_reembed import reembed_for_axis
             result = reembed_for_axis([dp0, dp1], "test", axis_weight=0.75)
 
+        result, _ = result if isinstance(result, tuple) else (result, None)
         assert result.shape == (2, 3)
         assert pytest.approx(float(result[0, 0]), abs=0.01) == 0.5
         assert pytest.approx(float(result[0, 1]), abs=0.01) == 0.0
@@ -298,6 +300,7 @@ class TestReembedForAxis:
             from src.engine.f_semantic_reembed import reembed_for_axis
             result = reembed_for_axis(points, "quality")
 
+        result, _ = result if isinstance(result, tuple) else (result, None)
         assert result.dtype == np.float32
 
     def test_raises_axis_not_discriminative_when_llm_scores_are_uniform(self):
