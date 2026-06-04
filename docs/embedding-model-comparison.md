@@ -123,16 +123,6 @@ allow users to begin configuring a session while embeddings are computed,
 hiding the latency cost entirely at the cost of deferred clustering
 availability.
 
-**Instruct-tuned model for semantic reembedding.** The more impactful upgrade
-for session quality is replacing the current `MiniLM cosine + LLM fallback`
-strategy in `f_semantic_reembed.py` with a single call to an instruction-tuned
-model (`intfloat/multilingual-e5-large-instruct` or `BAAI/bge-large-en-instruct`).
-This would reorient the full embedding space toward the oracle's requested axis
-rather than appending a single scalar dimension — see
-[semantic-reembed-report.md](semantic-reembed-report.md) for full discussion.
-The semantic reembedding upgrade is independent of the initial embedding model
-choice.
-
 ---
 
 ## References

@@ -453,7 +453,74 @@ consapevolezza dell'asse semantico. Possibili estensioni:
 
 ---
 
-## Problemi aperti
+## Riflessione bibliografica e prospettive future
+
+### Limiti dell'approccio ibrido MiniLM + fallback LLM
+
+L'architettura attuale del semantic reembedding costruisce un vettore ibrido
+`(N, D+1)` dove D=384 dimensioni vengono da MiniLM e 1 dimensione viene dallo
+score dell'asse (coseno o LLM). Questo crea un'asimmetria strutturale: il
+clustering lavora su 384 dimensioni topiche + 1 dimensione semantica, il che
+significa che l'asse semantico ha influenza limitata anche quando `axis_weight`
+è alto, perché la geometria complessiva dello spazio rimane dominata dalla
+struttura topica di MiniLM.
+
+Il fallback LLM fallisce frequentemente (cosine variance < 0.01) su assi
+semantici sottili — sentiment, formalità, tono — perché MiniLM (22M parametri)
+non ha imparato a separare queste dimensioni nella sua rappresentazione a 384
+dimensioni. Non è un problema risolvibile con più dati: è un limite di capacità
+architetturale.
+
+Un upgrade del modello di embedding base (es. `BAAI/bge-base-en-v1.5`, 110M
+parametri, 768 dimensioni) migliorerebbe la qualità della strategia cosine e
+ridurrebbe la frequenza del fallback LLM. Abbiamo condotto un test quantitativo
+su 20newsgroups (300 documenti, 6 classi): BGE-base raggiunge NMI=0.77 vs
+MiniLM=0.64 (+20%) e ARI=0.75 vs 0.61 (+24%). Il cambio non è stato applicato
+per via del costo computazionale su CPU (8× più lento all'embedding iniziale);
+i dettagli e la decisione sono documentati in
+[embedding-model-comparison.md](embedding-model-comparison.md).
+
+### Alternativa: modelli instruct-tuned
+
+Sia Fischer & Biemann (2026) — *Perspectives* — che Su et al. (2023) —
+*One Embedder, Any Task: Instruction-Finetuned Text Embeddings* — usano modelli
+di embedding **instruct-tuned** (es. `multilingual-e5-large-instruct`) che
+accettano un'istruzione come prefisso e producono embedding orientati a quella
+dimensione specifica.
+
+La differenza con l'approccio attuale è fondamentale:
+
+- **Fallback LLM attuale**: l'LLM legge ogni testo e produce *uno scalare*
+  (score 0-10). Quel numero viene concatenato all'embedding MiniLM esistente:
+  `[384 dim MiniLM | 1 dim score]`. L'asse semantico entra come singola colonna.
+- **Modello instruct-tuned**: il modello riceve `"Represent this text by
+  sentiment: [testo]"` e produce un *vettore completo* (es. 1024 dimensioni)
+  dove tutta la geometria è già orientata verso l'asse. Documenti semanticamente
+  coerenti rispetto all'asse sono già vicini in tutte le dimensioni, non solo in
+  una. Non si aggiunge una dimensione — si ridisegna lo spazio.
+
+In pratica: il fallback LLM dà un voto a ogni documento e lo usa come
+tiebreaker. Il modello instruct-tuned riorienta completamente la metrica di
+distanza.
+
+Ulteriore vantaggio pratico: le chiamate a un modello di embedding sono 10-50x
+più economiche e veloci rispetto a chiamate a un LLM generativo. Il fallback
+attuale su 1200 punti (sample 200, 8 batch) costa ~$0.01-0.02 e ~16 secondi;
+una chiamata embedding API sull'intero dataset costerebbe una frazione di questo.
+
+### Percorso di implementazione
+
+Non è necessario GPU né training: esistono API che servono modelli
+instruct-tuned con istruzioni custom (Jina `jina-embeddings-v3`, Voyage
+`voyage-3-large`, Together AI con `e5-large-instruct`). Il cambio sarebbe
+localizzato in `f_semantic_reembed.py`: la funzione `reembed_for_axis` potrebbe
+accettare un parametro `embedding_backend` e usare il modello instruct-tuned al
+posto della pipeline cosine+fallback, producendo una matrice `(N, D_new)` invece
+di `(N, D+1)` — con il vantaggio che l'intero spazio riflette l'asse richiesto.
+
+---
+
+
 
 ### 1. Linguaggio libero non interpretato correttamente
 
