@@ -68,6 +68,9 @@ python scripts/run_persona_eval.py \
 
 # Globs work — run all shipped personas at once
 python scripts/run_persona_eval.py --personas 'personas/*.json'
+
+# Override the dataset for all personas (default: amazon_reviews)
+python scripts/run_persona_eval.py --personas 'personas/*.json' --dataset imdb_train
 ```
 
 Each run terminates per-persona on `oracle_satisfied`, `system_stop`, `max_turns`, or
@@ -173,8 +176,8 @@ conversation is not meaningful) — use it only to smoke-test the plumbing.
 ├── scripts/
 │   ├── serve_ui.py                       # auto-seed + serve backend (recommended entrypoint)
 │   ├── cli.py                            # interactive terminal client
-│   ├── run_persona_eval.py               # drive sessions with LLM-oracle personas
-│   ├── run_scenario_eval.py              # drive sessions with scripted scenarios
+│   ├── run_persona_eval.py               # LLM-as-oracle evaluation runner (persona files)
+│   ├── run_scenario_eval.py              # scripted-oracle evaluation runner (scenario files)
 │   ├── run_baseline_eval.py              # non-interactive baseline clustering eval
 │   ├── run_generalization_stability_eval.py  # held-out generalization eval
 │   ├── compare_embeddings.py             # embedding model comparison report
@@ -200,33 +203,34 @@ conversation is not meaningful) — use it only to smoke-test the plumbing.
 │   └── …
 ├── personas/                  # LLM-oracle persona definitions (JSON)
 ├── prompts/                   # One .txt file per LLM prompt (versioned)
-│   ├── f_output.txt
-│   ├── f_next_best_step.txt
-│   ├── f_eval.txt / f_eval_coherence.txt / f_eval_compliance.txt …
-│   ├── f_boundary_repair.txt
+│   ├── f_output.txt           # Intent classification: oracle text → operations
+│   ├── f_next_best_step.txt   # Planner: decide show / ask / stop
+│   ├── f_boundary_repair.txt  # Post-op boundary point validation
 │   ├── f_update_preferences.txt
-│   ├── f_semantic_reembed.txt / semantic_axis_poles.txt
-│   ├── cluster_naming.txt
+│   ├── f_eval.txt / f_eval_coherence.txt / f_eval_compliance.txt …
+│   ├── semantic_reembed.txt   # Axis scoring (directional, pole-anchored)
+│   ├── semantic_axis_poles.txt # LLM-generated axis pole examples
+│   ├── cluster_naming.txt     # LLM cluster name + description generation
 │   ├── parse_clustering_intent.txt
 │   ├── dataset_description.txt
-│   └── llm_oracle.txt
+│   └── llm_oracle.txt         # LLM-as-oracle persona driver
 ├── src/
 │   ├── engine/                # Core clustering logic
 │   │   ├── turn_builder.py          # In-memory staging; single DB commit per turn
 │   │   ├── f_output.py              # Executor: LLM → structured operations
 │   │   ├── f_apply_operations.py    # Dispatch operations to cluster_operations
 │   │   ├── f_next_best_step.py      # Planner: show / ask / stop
-│   │   ├── f_uncertainty.py         # Score data points by cluster ambiguity
+│   │   ├── f_uncertainty.py         # Cluster-level soft-assignment uncertainty
 │   │   ├── f_parse_clustering_intent.py  # Free text → k + clustering axis
-│   │   ├── f_semantic_reembed.py    # Semantic axis re-embedding (cosine + LLM hybrid)
+│   │   ├── f_semantic_reembed.py    # Hybrid axis-weighted embedding pipeline
 │   │   ├── f_boundary_repair.py     # Post-op LLM-guided boundary correction
 │   │   ├── f_cognitive_load.py      # Estimate conversation cognitive load
 │   │   ├── f_update_preferences.py  # Rolling oracle preference summary
 │   │   ├── f_eval.py                # Self-assess clustering quality (A/B metrics)
-│   │   ├── semantic_clustering.py   # Turn-1 semantic axis re-clustering
+│   │   ├── semantic_clustering.py   # Global semantic re-clustering along an axis
 │   │   ├── generalization.py        # Nearest-centroid assignment for held-out data
-│   │   ├── initial_clustering.py    # k-means + soft assignments
-│   │   ├── cluster_operations.py    # merge / split / move / rename executors
+│   │   ├── initial_clustering.py    # GMM (k-means fallback) + soft assignments
+│   │   ├── cluster_operations.py    # merge / split / move / rename / cluster_reembed
 │   │   ├── cluster_naming.py        # LLM-generated cluster names + descriptions
 │   │   └── cognitive_load_caps.py   # Turn / token / cluster thresholds (A3)
 │   ├── eval/                  # LLM-oracle eval harness
