@@ -252,6 +252,8 @@ def main() -> int:
                     help="Output directory. Defaults to reports/<timestamp>-persona/.")
     ap.add_argument("--max-turns", type=int, default=_DEFAULT_MAX_TURNS,
                     help=f"Hard cap on oracle turns per persona (default {_DEFAULT_MAX_TURNS}).")
+    ap.add_argument("--dataset", default=None,
+                    help="Override the dataset name for all personas (e.g. imdb_train).")
     args = ap.parse_args()
 
     persona_paths: List[str] = []
@@ -273,6 +275,8 @@ def main() -> int:
         for path in persona_paths:
             print(f"=== running persona: {path} ===")
             persona = load_persona(path)
+            if args.dataset:
+                persona.dataset = args.dataset
             rec = run_persona(persona, max_turns=args.max_turns)
             records.append(rec)
             f.write(json.dumps(rec, indent=2) + "\n")
