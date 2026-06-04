@@ -18,7 +18,7 @@ and extend, since the decision logic and the execution logic never mix.
 
 | Role | Function | What it does |
 |---|---|---|
-| Sensor | `f_uncertainty` | Reads the DB and scores each data point by how ambiguous its cluster assignment is — feeds signal into the Planner |
+| Sensor | `f_cluster_uncertainty` | Reads soft-assignment posteriors from the DB and computes cluster-level overlap and cohesion scores — feeds signal into the Planner |
 | Planner | `f_next_best_step` | Reads state + uncertainty scores, decides the next action: show / ask / stop |
 | Executor | `f_output` + `f_apply_operations` | Calls the LLM to turn oracle feedback into structured operations, then applies them via `TurnBuilder` |
 | Reembedder | `f_semantic_reembed` | Projects data along a user-specified semantic axis (cosine anchor poles + LLM hybrid) |
@@ -37,21 +37,27 @@ Oracle natural language input
     f_output ──▶ LLM (via src/harness/)
            │                  │
            │        operations (merge / split / move / rename /
-           │                    semantic_reembed)
+           │                    semantic_reembed / cluster_reembed)
            │◀─────────────────┘
            │
+           ├── semantic_reembed ──▶ semantic_clustering (whole dataset,
+           │                        via f_semantic_reembed + GMM/k-means)
+           │
+           └── structural ops ──▶ f_apply_operations ──writes──▶ TurnBuilder (in-memory)
+                                          │
+                                          ├──▶ cluster_reembed ──▶ semantic_reembed_cluster
+                                          │                         (single cluster,
+                                          │                          f_semantic_reembed + GMM)
+                                          │
+                                          ├──▶ f_boundary_repair   (post-merge / post-split /
+                                          │                          post-cluster_reembed)
+                                          │
+                                          ▼
+                                  TurnBuilder.commit() ──writes──▶ clusters + soft_assignments (DB)
+                                                                    (renormalized after every op)
+           │
            ▼
-    f_apply_operations ──writes──▶ TurnBuilder (in-memory)
-           │
-           ├──▶ f_semantic_reembed  (if axis_hint present)
-           │
-           ├──▶ f_boundary_repair   (post-merge / post-split)
-           │
-           ▼
-    TurnBuilder.commit() ──writes──▶ clusters + soft_assignments (DB)
-           │
-           ▼
-    f_uncertainty ──reads──▶ SoftAssignment table (DB)
+    f_cluster_uncertainty ──reads──▶ SoftAssignment table (DB)
            │
            ▼
     f_next_best_step ──decides──▶ show / ask / stop
