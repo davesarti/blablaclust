@@ -1,0 +1,1762 @@
+{
+  "persona": "bilingual_drifter",
+  "description": "Spanglish user who switches between Spanish and English mid-message and gradually shifts intent. Tests language-agnostic intent parsing.",
+  "session_id": "100b8155-855e-4705-bf08-15bc8a5e3166",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 4,
+  "k_final": 1,
+  "n_turns": 3,
+  "terminated_by": "oracle_satisfied",
+  "oracle_total_tokens": {
+    "input": 5144,
+    "output": 479
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.04249956086277962,
+    "silhouette_final": 0.7016980648040771,
+    "trend": [
+      0.04249956086277962,
+      0.7016980648040771
+    ]
+  },
+  "A2": {
+    "turns": 2,
+    "weighted_turns": 4.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      1
+    ],
+    "mean_cognitive_load": 1.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.45,
+    "notes": "The session resulted in a mixed verdict because the perfect oracle compliance was overshadowed by poor internal coherence in the General Discourse and Computing cluster. While the system followed instructions perfectly, the resulting cluster failed to provide meaningful thematic grouping, rendering the output largely ineffective for the oracle's intent."
+  },
+  "B2": {
+    "coherence_mean": 0.25,
+    "coherence_min": 0.25,
+    "per_cluster": [
+      {
+        "cluster_id": "4c705479-5424-459f-832e-3a88d4bfecfa",
+        "cluster_name": "General Discourse and Computing",
+        "coherence": 0.25,
+        "reasoning": "The cluster, notably after the requested merge, is highly fragmented, mixing technical hardware product advertisements with Usenet administration/governance proposals and random political/hobbyist inquiries. It lacks a singular unifying theme and functions more as a 'miscellaneous' catch-all."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The system correctly performed a semantic re-embedding in the first turn and successfully merged the two identified clusters in the second turn. The intent was translated accurately into the appropriate structural operations."
+  },
+  "B4": {
+    "contradiction_score": 0.05,
+    "notes": "The oracle provides clear, consistent guidance that builds linearly from previous states. There is no contradiction; the oracle simply pivoted the clustering strategy in the first turn and followed up with specific refinements in the second.",
+    "examples": [
+      "Turn 1 established a new grouping strategy by product type, and Turn 2 provided explicit, successfully executed merge operations on the resulting clusters."
+    ]
+  },
+  "wall_time_s": 89.9
+}
+{
+  "persona": "boundary_pedant",
+  "description": "Obsessed with point-level boundary cases. Asks to move individual data points between clusters. Tests the 'move' operation path.",
+  "session_id": "efccb373-7147-486d-97c7-f0b8b1fc3f93",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 5,
+  "k_final": 5,
+  "n_turns": 2,
+  "terminated_by": "oracle_satisfied",
+  "oracle_total_tokens": {
+    "input": 4206,
+    "output": 439
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.0509408675134182,
+    "silhouette_final": 0.0509408675134182,
+    "trend": [
+      0.0509408675134182
+    ]
+  },
+  "A2": {
+    "turns": 2,
+    "weighted_turns": 2.5,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      1
+    ],
+    "mean_cognitive_load": 1.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.55,
+    "notes": "The session resulted in a mixed outcome as the clear and consistent oracle instructions were not fully met by the system. While the clustering for Baseball Discussion and Q&A and Medical and Health Alternatives was strong, the performance was hindered by a failure to execute mandated point migrations and the formation of fragmented clusters like Firearms Policy and Waco Siege Debates. Compliance gaps, rather than oracle ambiguity, drive this mediocre score."
+  },
+  "B2": {
+    "coherence_mean": 0.67,
+    "coherence_min": 0.45,
+    "per_cluster": [
+      {
+        "cluster_id": "507fe9d9-1274-4321-90a7-bfd357c6d8d9",
+        "cluster_name": "Baseball Discussion and Q&A",
+        "coherence": 0.9,
+        "reasoning": "The cluster is highly focused on Major League Baseball, with all members centering on player stats, team information, or baseball-related media. The edge cases are entirely consistent with the theme of baseball discourse."
+      },
+      {
+        "cluster_id": "284921bd-47aa-4d13-9ee9-02528892b42a",
+        "cluster_name": "NASA Missions and Automotive Tech",
+        "coherence": 0.55,
+        "reasoning": "The cluster mixes two distinct subjects: NASA astronaut/mission requirements and technical specifications for computer bus protocols (ACCESS.bus). While both appear technical, they represent entirely different domains, leading to fragmentation."
+      },
+      {
+        "cluster_id": "47657aea-3914-4e4f-91e4-5ceef68c9a5b",
+        "cluster_name": "Firearms Policy and Waco Siege Debates",
+        "coherence": 0.45,
+        "reasoning": "This cluster is highly fragmented; it attempts to group political/legal debates regarding firearms and the Waco siege with a long, off-topic rant about alternative medicine and muscle testing."
+      },
+      {
+        "cluster_id": "3945ebea-6d58-4d8e-a161-dbaec47a53a2",
+        "cluster_name": "Medical and Health Alternatives",
+        "coherence": 0.75,
+        "reasoning": "The core theme focuses on health, clinical conditions, and medical advice which remains consistent throughout the majority of members. The edge cases, while meta-discussing scientific definitions or medical insurance, remain broadly within the sphere of the medical/clinical domain."
+      },
+      {
+        "cluster_id": "48cae7b7-e84c-4b06-b2a2-a3013fdef203",
+        "cluster_name": "Graphics Programming and Visualization",
+        "coherence": 0.7,
+        "reasoning": "The cluster is centered on graphics programming, software tools, and hardware visualization techniques. The edge case concerning NASM aerospace photos is slightly off-topic, but the majority of the content remains internally focused on technical graphics concerns."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 0.5,
+    "notes": "In turn 1, the system failed to execute the move of the fuel pump point as requested, and incorrectly moved the point to the very cluster it was supposedly leaving. While it successfully moved the MRI query to the correct cluster, it failed to perform half of the requested point migrations."
+  },
+  "B4": {
+    "contradiction_score": 0.0,
+    "notes": "The oracle provided clear, actionable feedback in the first turn and expressed satisfaction with the results in the second turn. There were no shifts in criteria or contradictory requests throughout the session.",
+    "examples": []
+  },
+  "wall_time_s": 30.9
+}
+{
+  "persona": "brisk_executive",
+  "description": "Time-poor user who gives short, generic complaints and expects the system to figure out the rest. Should terminate in 3-5 turns.",
+  "session_id": "06f2ff38-9b10-4fa0-bdfa-e030fedf14e0",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 4,
+  "k_final": 4,
+  "n_turns": 1,
+  "terminated_by": "oracle_satisfied",
+  "oracle_total_tokens": {
+    "input": 1764,
+    "output": 77
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.04249956086277962,
+    "silhouette_final": 0.04249956086277962,
+    "trend": [
+      0.04249956086277962
+    ]
+  },
+  "A2": {
+    "turns": 1,
+    "weighted_turns": 2.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1
+    ],
+    "mean_cognitive_load": 1.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.65,
+    "notes": "The session is solid but marred by inconsistency, as the clear and non-contradictory instructions from the oracle highlight that the coherence issues in Health News and Medical Discussions and Gun Rights and Policy Debates are system failures rather than input confusion. While the oracle's directives were perfectly satisfied and Baseball Statistics and Discussions remains a strong point, the overall verdict is driven by the lack of internal coherence in half of the clusters."
+  },
+  "B2": {
+    "coherence_mean": 0.65,
+    "coherence_min": 0.5,
+    "per_cluster": [
+      {
+        "cluster_id": "ab5744b8-a688-4342-b89d-1d97d0b05b97",
+        "cluster_name": "Computer Graphics and Imaging Software",
+        "coherence": 0.7,
+        "reasoning": "The cluster focuses on digital image processing, graphics software, and hardware controllers. While the vast majority of items are relevant, the bottom members include a geometry problem regarding hexagon grids and a semi-related discussion on fractal compression history, which drift slightly away from software tools."
+      },
+      {
+        "cluster_id": "f1141d02-3539-43f3-8c3e-20ac01cb66a7",
+        "cluster_name": "Baseball Statistics and Discussions",
+        "coherence": 0.85,
+        "reasoning": "The cluster is highly coherent, centered entirely on baseball, including team news, player statistics, and cultural discussions around the sport. Even the bottom members, while discursive, remain firmly within the domain of baseball fandom."
+      },
+      {
+        "cluster_id": "16464378-ebc6-463b-b157-22998f1b628a",
+        "cluster_name": "Health News and Medical Discussions",
+        "coherence": 0.55,
+        "reasoning": "This cluster is fragmented; while the majority of members concern medical advice or Usenet health groups, there are significant outliers such as a lengthy technical description of the ACCESS.bus peripheral standard and an off-topic administrative/legal discussion regarding a court settlement."
+      },
+      {
+        "cluster_id": "eb559765-a11c-4ab8-b822-16ad68c69f32",
+        "cluster_name": "Gun Rights and Policy Debates",
+        "coherence": 0.5,
+        "reasoning": "This cluster is fragmented, mixing substantive debates on gun control and firearm policy with unrelated adversarial arguments about highway speed limits and personal insults that have no clear thematic connection to the primary subject."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The oracle expressed satisfaction with the current state of the clusters, and the system correctly responded by performing no structural operations. This was a fully compliant response to the instructional turn."
+  },
+  "B4": {
+    "contradiction_score": 0.0,
+    "notes": "The oracle provided a singular, clear affirmation of the current state. There were no prior instructions to contradict or refine, resulting in a perfectly consistent interaction.",
+    "examples": []
+  },
+  "wall_time_s": 21.0
+}
+{
+  "persona": "clarify_baiter",
+  "description": "Uses bare noun phrases that should trigger 'clarify' (semantic axis ambiguity). Then either confirms or pivots. Tests the clarify \u2192 semantic_reembed handshake.",
+  "session_id": "ee4cb3b5-5e50-44c7-bb99-585f196b504d",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 4,
+  "k_final": 4,
+  "n_turns": 5,
+  "terminated_by": "oracle_satisfied",
+  "oracle_total_tokens": {
+    "input": 9474,
+    "output": 423
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.04249956086277962,
+    "silhouette_final": 0.04249956086277962,
+    "trend": [
+      0.04249956086277962
+    ]
+  },
+  "A2": {
+    "turns": 4,
+    "weighted_turns": 8.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "mean_cognitive_load": 1.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.65,
+    "notes": "Despite high oracle contradiction, the system achieved perfect compliance and maintained solid coherence in stronger segments like Computer Graphics and Imaging Resources and Major League Baseball Discussion. While the Health, Space Exploration, and Advice cluster was highly fragmented, the system's ability to remain functionally operational under unstable and contradictory instructions justifies a solid verdict."
+  },
+  "B2": {
+    "coherence_mean": 0.575,
+    "coherence_min": 0.35,
+    "per_cluster": [
+      {
+        "cluster_id": "87a0a570-11f8-472a-9f84-a908c3c4f447",
+        "cluster_name": "Computer Graphics and Imaging Resources",
+        "coherence": 0.75,
+        "reasoning": "The cluster focuses on computer graphics hardware and image processing software, though it includes a few tangentially related technical discussions about algorithms and compression history that sit at the edge of the theme."
+      },
+      {
+        "cluster_id": "a2671cbd-6f88-4841-9c58-9b13f1135b97",
+        "cluster_name": "Major League Baseball Discussion",
+        "coherence": 0.7,
+        "reasoning": "The cluster is primarily focused on Major League Baseball statistics and fan requests, though the inclusion of a lengthy, slightly tangential discussion about game duration and personal lifestyle choices regarding attending games weakens it slightly."
+      },
+      {
+        "cluster_id": "1839ab65-8261-4bbf-a77e-f7f1306ea7b8",
+        "cluster_name": "Health, Space Exploration, and Advice",
+        "coherence": 0.35,
+        "reasoning": "The cluster is heavily fragmented, mixing dedicated health and medical support group discussions with entirely unrelated technical discussions about bus hardware protocols and personal legal anecdotes."
+      },
+      {
+        "cluster_id": "eb91c01c-a90d-4544-b53d-f59f161f87dc",
+        "cluster_name": "Gun Control and Firearm Policy",
+        "coherence": 0.5,
+        "reasoning": "While centered on the Waco incident and gun control/firearm rights, the cluster suffers from significant topic drift, including unrelated rants about criminal sentencing and argumentative meta-discussions about internet forum behavior."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The system correctly identified the oracle's requests as instructional or conversational. It appropriately provided clarifying prompts for general inquiries and correctly performed no structural operations when the turn was purely informational or when the oracle indicated satisfaction with the current state."
+  },
+  "B4": {
+    "contradiction_score": 0.8,
+    "notes": "The oracle exhibits significant drift and instability, initiating with requests for specific clustering criteria (sentiment, then writing style) before abruptly abandoning the task entirely. The sequence shows no logical progression, ending in a dismissal of the feedback process that leaves the clustering state undefined.",
+    "examples": [
+      "Turn 1 ordered clustering by sentiment, turn 3 switched to writing style, and turn 4 negated all previous instructions without resolution."
+    ]
+  },
+  "wall_time_s": 97.2
+}
+{
+  "persona": "contradictory_oracle",
+  "description": "Reverses course mid-session to stress the system's robustness against contradictory intent.",
+  "session_id": "e74a99f5-9eed-4e46-820b-779c4c96dff3",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 4,
+  "k_final": 5,
+  "n_turns": 5,
+  "terminated_by": "oracle_satisfied",
+  "oracle_total_tokens": {
+    "input": 10855,
+    "output": 990
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.04249956086277962,
+    "silhouette_final": 0.04249956086277962,
+    "trend": [
+      0.04249956086277962
+    ]
+  },
+  "A2": {
+    "turns": 2,
+    "weighted_turns": 2.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      1
+    ],
+    "mean_cognitive_load": 1.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.72,
+    "notes": "The session was solid with rough edges, primarily driven by the system's perfect compliance despite a highly contradictory oracle. While the internal coherence suffered from fragmentation in clusters like Consumer Automotive and Space Technology and Firearms Policy and Legislation, this is largely excused by the oracle's confusing and circular instructions. The system successfully navigated the conflicting intent during turn 2, proving its reliability when faced with ambiguous requirements."
+  },
+  "B2": {
+    "coherence_mean": 0.64,
+    "coherence_min": 0.5,
+    "per_cluster": [
+      {
+        "cluster_id": "12683457-80f3-480b-af85-5b79b948675e",
+        "cluster_name": "Computer Graphics and Visualization",
+        "coherence": 0.65,
+        "reasoning": "The cluster is primarily focused on computer, imaging, and visualization software/hardware. It becomes fragmented by including off-topic requests regarding photo radar locations and sports seating charts."
+      },
+      {
+        "cluster_id": "9a305af5-456b-4db5-9ea7-1776e8fbe859",
+        "cluster_name": "Baseball Fan Discussions",
+        "coherence": 0.85,
+        "reasoning": "This set of discussions is consistently related to baseball, covering history, strategy, fan clubs, and management advice. It maintains a strong, unified theme despite the varied nature of the fan interactions."
+      },
+      {
+        "cluster_id": "b044b5ec-fd95-4fb4-879f-e560bfa4a077",
+        "cluster_name": "Firearms Policy and Legislation",
+        "coherence": 0.55,
+        "reasoning": "While centered on the regulation and use of high-powered rockets and firearms policy, the cluster suffers from a significant shift toward political bickering about unrelated historical events and abstract moral debates, rendering it somewhat fragmented."
+      },
+      {
+        "cluster_id": "d42eeaf4-2cb1-4c67-a57a-4103396dc7b6",
+        "cluster_name": "Scientific Methods and Medical Inquiry",
+        "coherence": 0.65,
+        "reasoning": "The cluster focuses on medical inquiry, research ethics, and health newsgroup organization, but is held back by the inclusion of irrelevant, off-topic rants about space radiation and pop-culture references."
+      },
+      {
+        "cluster_id": "605955e6-c445-4d8c-a194-760551a234cd",
+        "cluster_name": "Consumer Automotive and Space Technology",
+        "coherence": 0.5,
+        "reasoning": "This cluster blends serious technical discussions about NASA astronaut requirements and space economics with unrelated consumer vehicle topics, such as automotive window tinting and personal health inquiries."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The system followed the oracle's instructions perfectly. It performed the initial split as requested in turn 1, and correctly interpreted the oracle's second turn as a reversal of the splitting intent, resulting in no further structural changes to the Scientific Methods and Medical Inquiry cluster."
+  },
+  "B4": {
+    "contradiction_score": 0.8,
+    "notes": "The oracle exhibits significant self-contradiction by proactively requesting a sentiment-based sub-clustering of the 'Health Issues and Medical Advice' cluster, only to immediately express uncertainty and attempt to reverse the action in the same turn. The oracle's instructions in turn 2 are logically circular, asking the system to simultaneously proceed with the split while also expressing a desire to abandon it.",
+    "examples": [
+      "turn 1 requested a split of 'Health Issues and Medical Advice' by sentiment, while turn 2 requested to hold off or immediately undo that same split."
+    ]
+  },
+  "wall_time_s": 125.0
+}
+{
+  "persona": "count_flipper",
+  "description": "Cycles through different cluster counts. Tests the K-arithmetic path (split-only vs merge-only) and that flipping K is handled cleanly.",
+  "session_id": "3458a492-de72-4a59-94ec-b07845242697",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 4,
+  "k_final": 5,
+  "n_turns": 5,
+  "terminated_by": "oracle_satisfied",
+  "oracle_total_tokens": {
+    "input": 9090,
+    "output": 507
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.04249956086277962,
+    "silhouette_final": 0.02837030589580536,
+    "trend": [
+      0.04249956086277962,
+      0.037243735045194626,
+      0.038535226136446,
+      0.04880305752158165,
+      0.02837030589580536
+    ]
+  },
+  "A2": {
+    "turns": 5,
+    "weighted_turns": 10.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      2,
+      1,
+      1,
+      1,
+      2
+    ],
+    "mean_cognitive_load": 1.4,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.55,
+    "notes": "The session resulted in a mixed outcome, primarily driven by the inability to satisfy the Oracle's specific cluster count requirement despite high coherence in well-defined sectors like Gun Legislation and Control Debate and Major League Baseball Discussions. While the high Contradiction score provides context for the Oracle's erratic instructions, the system failed to deliver the final structural adjustment, rendering the overall output inconsistently aligned with the provided mandates."
+  },
+  "B2": {
+    "coherence_mean": 0.604,
+    "coherence_min": 0.25,
+    "per_cluster": [
+      {
+        "cluster_id": "2bd03132-ef05-4d08-84c2-aab6b089c564",
+        "cluster_name": "Major League Baseball Discussions",
+        "coherence": 0.82,
+        "reasoning": "The cluster is highly focused on professional baseball analysis, player stats, and team dynamics. A request for an 'mlb.c' program in the top members is technically adjacent to sports software, but does not detract significantly from the coherence."
+      },
+      {
+        "cluster_id": "554bca69-7cbc-4776-97ba-c07c480f232b",
+        "cluster_name": "Space Exploration Resources",
+        "coherence": 0.35,
+        "reasoning": "This cluster is highly fragmented; while it contains significant technical documentation on space exploration and computer graphics, it also contains completely unrelated requests like one for Texas Ranger ticket orders."
+      },
+      {
+        "cluster_id": "c57a33c0-0ec3-40a1-86c7-fbd0e57a471f",
+        "cluster_name": "Computer Graphics and Software",
+        "coherence": 0.75,
+        "reasoning": "The cluster centers clearly on computer graphics software, file conversion, and imaging hardware. The occasional unrelated request or general comment in the bottom list is negligible compared to the strong technical theme."
+      },
+      {
+        "cluster_id": "b83be7af-591c-4845-9ebc-6f07fe53473d",
+        "cluster_name": "Gun Legislation and Control Debate",
+        "coherence": 0.85,
+        "reasoning": "This cluster is tightly focused on the heated political and social debate surrounding gun rights, legislation, and government operations like Waco. The members are consistently on-topic regarding public policy and constitutional debates."
+      },
+      {
+        "cluster_id": "cab5507a-75ec-4e59-adcb-3acc47a11825",
+        "cluster_name": "General Technical and Consumer Topics",
+        "coherence": 0.25,
+        "reasoning": "This cluster is incoherent, mixing a massive USENET voting log for a health newsgroup with unrelated personal advice about car alarms and political commentary on the Branch Davidian siege."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 0.85,
+    "notes": "The system generally followed instructions for splitting and merging to reach the requested cluster counts. In Turn 5, the oracle requested exactly 5 clusters; since the system had already arrived at 4 clusters after Turn 4's operations, the lack of further action in Turn 5 resulted in a failure to meet the commanded state."
+  },
+  "B4": {
+    "contradiction_score": 0.6,
+    "notes": "The oracle exhibits a self-contradictory pattern characterized by frequent reversals of requested cluster counts without logical progression. The instructions show a lack of stability, oscillating between varying numbers of clusters and expressing frustration rather than providing structural guidance.",
+    "examples": [
+      "Turn 2 requested consolidation into 3 groups, but turn 3 immediately reversed this to 5 groups with no explained change in criteria.",
+      "Turn 4 displays internal conflict by referencing a preference for 3 clusters while simultaneously demanding 5."
+    ]
+  },
+  "wall_time_s": 96.5
+}
+{
+  "persona": "curious_explorer",
+  "description": "Explores a couple of structural changes before settling. Should exercise split + rename + accept.",
+  "session_id": "b7f7254c-8ed6-459f-98f3-3c87674dcb49",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 4,
+  "k_final": 5,
+  "n_turns": 2,
+  "terminated_by": "oracle_satisfied",
+  "oracle_total_tokens": {
+    "input": 3754,
+    "output": 414
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.04249956086277962,
+    "silhouette_final": 0.03725394234061241,
+    "trend": [
+      0.04249956086277962,
+      0.03725394234061241
+    ]
+  },
+  "A2": {
+    "turns": 2,
+    "weighted_turns": 2.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      1
+    ],
+    "mean_cognitive_load": 1.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.55,
+    "notes": "The session is mixed as it achieved perfect oracle compliance at the cost of poor structural coherence, particularly within the Aerospace and Automotive Discussions cluster. While the high contradiction score regarding the oracle's intent provides some context for this instability, the overall lack of internal integrity across multiple clusters reflects a failure to organize the data effectively."
+  },
+  "B2": {
+    "coherence_mean": 0.52,
+    "coherence_min": 0.1,
+    "per_cluster": [
+      {
+        "cluster_id": "cf2c7a00-8bab-496d-b8cf-7e5125c5f744",
+        "cluster_name": "Computer Graphics and Visualization",
+        "coherence": 0.65,
+        "reasoning": "The cluster is primarily focused on computer graphics software and hardware; however, it includes some unrelated items such as a request for a Tiger Stadium seating chart and a question about photo radar units, which are off-topic."
+      },
+      {
+        "cluster_id": "e8fc2669-2af3-466e-ab27-3c14ba950c1b",
+        "cluster_name": "Baseball Discussions",
+        "coherence": 0.8,
+        "reasoning": "The cluster is focused on baseball discussions, ranging from movie trivia to software for managing stats; the off-topic edge cases are very minimal."
+      },
+      {
+        "cluster_id": "db95f9da-36c1-4ef8-b828-2be02af750ba",
+        "cluster_name": "Gun Control and Political Ideology",
+        "coherence": 0.5,
+        "reasoning": "This cluster is fragmented, mixing intense political and gun control debates with unrelated discussions about amateur rocketry and specific instructions for mechanics, which do not align with the political theme."
+      },
+      {
+        "cluster_id": "1a616c19-adbf-4fb7-945e-85b44f552d75",
+        "cluster_name": "Medical and Health Discussions",
+        "coherence": 0.55,
+        "reasoning": "The cluster focuses on medical and health discussions but is heavily contaminated with long-winded, meta-discussions regarding the philosophy of science, the definition of pseudo-science, and unrelated historical anecdotes about scientists."
+      },
+      {
+        "cluster_id": "a0a0aded-b58e-4bcf-b1c5-df1ed2d2250f",
+        "cluster_name": "Aerospace and Automotive Discussions",
+        "coherence": 0.1,
+        "reasoning": "The cluster is highly incoherent; it is a repository for administrative Usenet forum-creation voting logs (misc.health.diabetes) alongside unrelated aerospace/automotive topics and medical-legal rants."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The system correctly identified the target cluster based on the context of the user's previous request. It accurately performed the requested rename operation to 'Aerospace and Automotive Discussions' for the cluster containing the relevant content."
+  },
+  "B4": {
+    "contradiction_score": 0.6,
+    "notes": "The oracle exhibits a drift in intent that borders on contradiction. After requesting 'Usenet Newsgroup Administration' to be created specifically for forum organizational tasks, it immediately re-evaluates that same cluster as essentially mislabeled because it contains aerospace and automotive content, effectively abandoning the original taxonomy goal.",
+    "examples": [
+      "Turn 1 explicitly asked to isolate 'forum organizational tasks' into a dedicated cluster, but Turn 2 identifies that same resulting cluster as needing a thematic shift to 'Aerospace and Automotive Discussions' with no acknowledgment of the original intent."
+    ]
+  },
+  "wall_time_s": 42.7
+}
+{
+  "persona": "delete_cluster_requester",
+  "description": "Repeatedly uses 'delete', 'remove', 'get rid of', 'eliminate' for unwanted clusters. The system has no delete op \u2014 the f_output prompt requires this to be rewritten as a merge into the closest neighbour. Tests that rewrite directly.",
+  "session_id": "39240767-523c-45a4-9ba0-0a125ded8fdd",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 5,
+  "k_final": 1,
+  "n_turns": 5,
+  "terminated_by": "oracle_satisfied",
+  "oracle_total_tokens": {
+    "input": 8511,
+    "output": 684
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.0509408675134182,
+    "silhouette_final": 0.0509408675134182,
+    "trend": [
+      0.0509408675134182
+    ]
+  },
+  "A2": {
+    "turns": 5,
+    "weighted_turns": 6.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      1,
+      1,
+      1,
+      2
+    ],
+    "mean_cognitive_load": 1.2,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.25,
+    "notes": "The session is a failure, primarily driven by a near-total lack of oracle compliance despite clear and consistent instructions. By consistently merging requested 'garbage' clusters rather than deleting them, the system fundamentally undermined the oracle\u2019s intent, leading to a sprawling and incoherent General Discussion cluster."
+  },
+  "B2": {
+    "coherence_mean": 0.25,
+    "coherence_min": 0.25,
+    "per_cluster": [
+      {
+        "cluster_id": "f948992f-9a28-4e76-92e4-a8792dceaf7f",
+        "cluster_name": "General Discussion",
+        "coherence": 0.25,
+        "reasoning": "The General Discussion cluster is highly incoherent, acting as a junk drawer for completely unrelated topics including Usenet administrative procedures, medical group proposals, technical hardware specifications, baseball trivia, and political controversy."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 0.2,
+    "notes": "The oracle consistently requested the deletion of clusters described as 'garbage' or a 'mess', but the system interpreted these instructions as commands to merge the targets into new clusters. Consequently, the system performed the exact opposite of the requested structural operation in every turn (turns 1-4). In turn 5, the system finally ceased making structural changes, which was appropriate for the final request."
+  },
+  "B4": {
+    "contradiction_score": 0.2,
+    "notes": "The oracle is consistent in its pattern of identifying clusters as 'garbage' and requesting their removal throughout the session. The final turn is slightly ambiguous, using a deictic reference ('that leftover garbage') which relies on the clustering system's state rather than explicitly naming the cluster.",
+    "examples": [
+      "Turn 5 refers to 'that leftover garbage' with no clear linguistic anchor, forcing the system to infer which remaining cluster the oracle deems 'leftover'."
+    ]
+  },
+  "wall_time_s": 74.6
+}
+{
+  "persona": "explain_only_meta",
+  "description": "Asks meta/instructional questions about the clustering without ever requesting a change. Exercises the action='explain' / feedback_type='instructional' path which no structural persona touches.",
+  "session_id": "54d00af9-5833-4ed0-85c6-772f92bfcf0e",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 5,
+  "k_final": 5,
+  "n_turns": 4,
+  "terminated_by": "oracle_satisfied",
+  "oracle_total_tokens": {
+    "input": 9000,
+    "output": 1178
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.0509408675134182,
+    "silhouette_final": 0.0509408675134182,
+    "trend": [
+      0.0509408675134182
+    ]
+  },
+  "A2": {
+    "turns": 4,
+    "weighted_turns": 0.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "mean_cognitive_load": 1.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.85,
+    "notes": "The session was highly successful, as the oracle provided clear, consistent guidance that allowed the system to maintain nearly flawless compliance. While the Space Missions and Automotive Repair cluster exhibited minor thematic drift, the overall coherence remains strong and the session-wide performance confirms the model effectively captured the oracle's intent."
+  },
+  "B2": {
+    "coherence_mean": 0.75,
+    "coherence_min": 0.65,
+    "per_cluster": [
+      {
+        "cluster_id": "0be1c900-72ad-4691-8d5c-621e4cd4dfc1",
+        "cluster_name": "Professional and Fantasy Baseball",
+        "coherence": 0.85,
+        "reasoning": "The cluster is highly focused on baseball-related discussions, including player analysis, fan questions, and historical baseball film trivia. All members are thematic and relevant to the domain."
+      },
+      {
+        "cluster_id": "54b919e3-c6a8-499e-91e4-3a9549105dbf",
+        "cluster_name": "Space Missions and Automotive Repair",
+        "coherence": 0.65,
+        "reasoning": "The cluster centers on technical problem-solving and diagnostic workflows, effectively bridging space exploration and vehicle maintenance. A minority of edge cases touch on computer peripheral standards, which are technically adjacent but distinct from the core mechanical theme."
+      },
+      {
+        "cluster_id": "17c2ccd6-c08f-4c29-a4d5-ff884700d86c",
+        "cluster_name": "Firearms Policy and Waco Siege",
+        "coherence": 0.8,
+        "reasoning": "This cluster is tight on topics concerning gun regulation, the Second Amendment, and government critique surrounding the Waco siege. Minor edge cases involve meta-discussions about forum flame-wars, which are standard in such contentious debate threads."
+      },
+      {
+        "cluster_id": "731d0713-656d-416f-948a-f32cd5a48b08",
+        "cluster_name": "Medical and Alternative Health Issues",
+        "coherence": 0.7,
+        "reasoning": "The cluster consistently addresses medical symptoms, health treatment inquiries, and debates on diagnostic methodology. An edge case regarding the philosophy of science and pseudo-science is a notable digression from the direct health-related topics."
+      },
+      {
+        "cluster_id": "e0765619-e0fe-4cb2-a5aa-5d4475a7c041",
+        "cluster_name": "Computer Graphics and Visualization",
+        "coherence": 0.75,
+        "reasoning": "The cluster is strongly focused on computer graphics, 3D software workflows, and rendering hardware. The bottom members, such as a request about NASA photographs, are only weakly linked and represent a slight thematic deviation."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The oracle's requests across all four turns were purely instructional, asking for summaries, explanations, and clarifications regarding the model's logic. The system responded by providing the requested information without performing any unnecessary structural changes to the clusters, which is perfectly compliant with the instructions."
+  },
+  "B4": {
+    "contradiction_score": 0.1,
+    "notes": "The oracle provided highly consistent guidance throughout the session, maintaining a focus on understanding the model's internal classification logic. The repetition in turns 2 and 3 was clearly an investigative refinement rather than a contradiction or ambiguity.",
+    "examples": [
+      "Turn 3 repeats the request from Turn 2 for a summary and clarification of cluster sizes, which functions as an escalation of inquiry rather than a contradiction."
+    ]
+  },
+  "wall_time_s": 46.3
+}
+{
+  "persona": "methodical_analyst_it",
+  "description": "Italian-speaking analyst who names operations explicitly and works through the clustering one cluster at a time.",
+  "session_id": "21826f04-a3c8-45e4-87d5-a904ea1813ea",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 5,
+  "k_final": 6,
+  "n_turns": 2,
+  "terminated_by": "oracle_satisfied",
+  "oracle_total_tokens": {
+    "input": 4320,
+    "output": 460
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.0509408675134182,
+    "silhouette_final": 0.03491581976413727,
+    "trend": [
+      0.0509408675134182,
+      0.03491581976413727
+    ]
+  },
+  "A2": {
+    "turns": 2,
+    "weighted_turns": 3.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      2,
+      2
+    ],
+    "mean_cognitive_load": 2.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.72,
+    "notes": "The session is solid, driven by perfect oracle compliance and clear, non-contradictory instructions. While Internal Coherence is hindered by fragmentation in the Alternative and standard medical discussions cluster and minor off-topic noise elsewhere, the overall thematic grouping remains strong and effectively reflects the oracle's intent."
+  },
+  "B2": {
+    "coherence_mean": 0.658,
+    "coherence_min": 0.45,
+    "per_cluster": [
+      {
+        "cluster_id": "cf9addb2-9896-41fa-849f-6972556e6eb1",
+        "cluster_name": "Baseball discussion and statistics",
+        "coherence": 0.75,
+        "reasoning": "The cluster focuses consistently on baseball discussions and fan logistics. While the bottom member is a lengthy personal digression regarding traffic and life balance, it remains framed within the context of attending baseball games, maintaining thematic relevance."
+      },
+      {
+        "cluster_id": "b256eb6c-3cf2-4b14-8af3-b94a45415c80",
+        "cluster_name": "Gun rights and the Waco siege",
+        "coherence": 0.65,
+        "reasoning": "The cluster effectively gathers discussions on the Waco siege and firearm legislation. However, a significant minority of members at the bottom are off-topic, involving unrelated violent provocations or incoherent musings that do not fit the political/historical theme."
+      },
+      {
+        "cluster_id": "e68c108c-0d93-43af-a203-9b64d1510746",
+        "cluster_name": "Alternative and standard medical discussions",
+        "coherence": 0.45,
+        "reasoning": "While the top members address medical debates, the cluster is heavily fragmented by the inclusion of a detailed NRC press release about municipal water filtration and a long, technical discussion on indoor smoking techniques for cooking, which are distinct from the medical domain."
+      },
+      {
+        "cluster_id": "95d20f3b-4e26-471a-99fd-18424e7bb7e0",
+        "cluster_name": "Computer graphics and visualization software",
+        "coherence": 0.6,
+        "reasoning": "The primary theme is computer graphics and visualization software. The coherence is weakened by an off-topic medical research inquiry at the bottom, which belongs in a biological or clinical research context rather than a software engineering cluster."
+      },
+      {
+        "cluster_id": "c4333071-979c-4556-a716-f5d65d0ce486",
+        "cluster_name": "Tematiche aerospaziali",
+        "coherence": 0.7,
+        "reasoning": "The cluster is well-centered on aerospace engineering and rocketry. The coherence is slightly diluted by bottom members discussing hearing aid technology and conventional explosives, which are tangentially related to engineering interests but technically outside the scope of aerospace."
+      },
+      {
+        "cluster_id": "46f1e0c2-5040-4fe5-8be1-ecbb817963d7",
+        "cluster_name": "Ingegneria e manutenzione veicolare",
+        "coherence": 0.8,
+        "reasoning": "The cluster captures automotive repair and industry experiences very well. The bottom members are still focused on vehicle identification and component technology, maintaining a high level of thematic consistency."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The system correctly performed the requested split in the first turn, translating the oracle's intent into the appropriate operations on the specified cluster. The second turn was an acknowledgement rather than a functional request, so the system remained fully compliant by performing no structural changes."
+  },
+  "B4": {
+    "contradiction_score": 0.0,
+    "notes": "The oracle provided clear, logically consistent feedback throughout the session. The instructions in turn 1 were followed, and the evaluation in turn 2 provided a final confirmation of satisfaction without any shifting or contradictory requirements.",
+    "examples": []
+  },
+  "wall_time_s": 43.1
+}
+{
+  "persona": "multi_merge_consolidator",
+  "description": "Starts with k=7 and asks to consolidate four clusters into one in a single turn. Forces the system to emit a SINGLE merge op with \u22653 cluster_ids (the f_output prompt explicitly warns against chaining merges). Also stresses K-arithmetic.",
+  "session_id": "9a04461a-6b90-4a58-b22b-a9e0901de77b",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 7,
+  "k_final": 2,
+  "n_turns": 4,
+  "terminated_by": "oracle_satisfied",
+  "oracle_total_tokens": {
+    "input": 8252,
+    "output": 945
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.05148123577237129,
+    "silhouette_final": 0.05148123577237129,
+    "trend": [
+      0.05148123577237129
+    ]
+  },
+  "A2": {
+    "turns": 4,
+    "weighted_turns": 5.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "mean_cognitive_load": 1.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.75,
+    "notes": "The session is a solid success, driven by flawless Oracle compliance and a perfectly clear instruction set which confirms the system effectively navigated the task. While Internal Coherence is slightly dampened by the fragmented nature of the General Technical and Governance Oversight cluster, this localized issue does not undermine the overall clarity and successful execution of the session."
+  },
+  "B2": {
+    "coherence_mean": 0.7,
+    "coherence_min": 0.45,
+    "per_cluster": [
+      {
+        "cluster_id": "7d1f8f92-3aa0-4c50-8688-573ef99c8d1a",
+        "cluster_name": "Baseball Statistics and Discussion",
+        "coherence": 0.95,
+        "reasoning": "This cluster is highly coherent, focusing consistently on baseball history, player statistics, and team performance discussions among fans."
+      },
+      {
+        "cluster_id": "1758ff31-70b3-40e5-9895-afcbb03fa0fd",
+        "cluster_name": "General Technical and Governance Oversight",
+        "coherence": 0.45,
+        "reasoning": "The cluster is quite fragmented; while it attempts to group technical and governance topics, it conflates specialized image-processing software specs with Usenet administrative voting procedures and medical commentary. The bottom members regarding FBI/Waco history and aerial map requests reflect this lack of a cohesive, defined domain."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The system correctly executed all clustering and merging operations as requested by the oracle in each turn. The final turn was an instructional confirmation, for which an empty operation list is fully compliant."
+  },
+  "B4": {
+    "contradiction_score": 0.0,
+    "notes": "The oracle provided clear, linear instructions that consistently moved toward a specific architectural goal. The process was a logical progression of refinements that effectively reduced cluster density without any reversals or ambiguous mandates.",
+    "examples": []
+  },
+  "wall_time_s": 94.4
+}
+{
+  "persona": "never_satisfied_max_turns",
+  "description": "Always finds something new to criticise and never sets satisfied=true. Stresses max-turns termination, long-session state coherence, and oracle-preference accumulation over many turns.",
+  "session_id": "bae6f995-0663-4875-bb4c-6acc5692af0a",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 5,
+  "k_final": 3,
+  "n_turns": 15,
+  "terminated_by": "max_turns",
+  "oracle_total_tokens": {
+    "input": 41648,
+    "output": 3382
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [
+    "turn[12] http=422 body={'detail': \"Engine produced an invalid operation: cannot merge already-dissolved clusters: ['78562ac4-ceb2-4abb-88af-6b155b0385c7']\"}"
+  ],
+  "A1": {
+    "silhouette_initial": 0.0509408675134182,
+    "silhouette_final": 0.3328622281551361,
+    "trend": [
+      0.0509408675134182,
+      0.3328622281551361
+    ]
+  },
+  "A2": {
+    "turns": 13,
+    "weighted_turns": 15.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      3,
+      3,
+      3,
+      3,
+      4
+    ],
+    "mean_cognitive_load": 2.38,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.65,
+    "notes": "The session is solid with rough edges; while the system demonstrated perfect oracle compliance throughout a clear and consistent workflow, the internal coherence suffered due to content contamination in the Clinical Protocol and Politicized Institutional Commentary clusters. Because the oracle was highly consistent, this coherence deficit represents a failure in the system's ability to filter heterogeneous data rather than a result of confusing instructions."
+  },
+  "B2": {
+    "coherence_mean": 0.583,
+    "coherence_min": 0.45,
+    "per_cluster": [
+      {
+        "cluster_id": "5927e63f-cf46-4653-8a47-d779a5e61331",
+        "cluster_name": "Clinical Protocol",
+        "coherence": 0.45,
+        "reasoning": "While the cluster contains substantial discourse on medical management and Usenet group creation, it is heavily contaminated by unrelated content regarding baseball movies ('Pride of the Yankees'), insurance disputes, and FBI operations, which do not fit the 'Clinical Protocol' theme."
+      },
+      {
+        "cluster_id": "eb1dd486-c245-430c-a940-043592218481",
+        "cluster_name": "Politicized Institutional Commentary",
+        "coherence": 0.55,
+        "reasoning": "The cluster attempts to group formal social/political analysis, but it is frequently interrupted by off-topic anecdotes about sports (baseball) and informal, aggressive forum bickering that lacks the requested institutional depth."
+      },
+      {
+        "cluster_id": "19bc4885-381c-4987-b254-e62131f36cf6",
+        "cluster_name": "Casual and Technical Hobbyist Discourse",
+        "coherence": 0.75,
+        "reasoning": "This cluster successfully captures the intended mix of technical hobbyist hardware requests and gear discussions; while the range of topics is broad (from rocket hobbyist regulations to graphics card programming), these represent consistent variations within the 'Casual and Technical Hobbyist Discourse' theme."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The system consistently followed the oracle's instructions, performing the correct structural operations (rename, move, merge, reembed) on the specified clusters. All requests were interpreted accurately, and the system correctly identified that the final turn was instructional and did not require further structural modification."
+  },
+  "B4": {
+    "contradiction_score": 0.2,
+    "notes": "The oracle is highly consistent and focused on a single persistent goal throughout the session. While the requests become more granular over time, they function as refinements of the original intent rather than contradictions or shifts in criteria.",
+    "examples": [
+      "Turn 11 requested a merge of 'Casual Sports Fan Discourse' and 'DIY Hobbyist discourse', and turn 12 accepted that merge while refining the naming; this is a linear progression of refinement.",
+      "The oracle maintained a single, consistent structural directive across the entire session: the total separation of institutional professional content from non-professional/hobbyist content."
+    ]
+  },
+  "wall_time_s": 306.2
+}
+{
+  "persona": "patient_curator",
+  "description": "Slow, careful curator who makes one small change per turn and verifies each result before moving on. Long but low-amplitude session.",
+  "session_id": "cb1a7926-e8e4-4cc1-a200-617a556ce290",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 6,
+  "k_final": 6,
+  "n_turns": 6,
+  "terminated_by": "system_stop",
+  "oracle_total_tokens": {
+    "input": 14660,
+    "output": 1155
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.055454254150390625,
+    "silhouette_final": 0.03537904843688011,
+    "trend": [
+      0.055454254150390625,
+      0.03537904843688011
+    ]
+  },
+  "A2": {
+    "turns": 6,
+    "weighted_turns": 6.5,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+    ],
+    "mean_cognitive_load": 2.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.78,
+    "notes": "This was a highly compliant session that maintained strong thematic focus across most categories, though it was slightly hampered by inconsistency in Aerospace Technology and Spaceflight and Computer Graphics and Visualization. While the oracle's wavering intent regarding medical clustering created unnecessary noise, the system's perfect execution of instructions warrants a solid verdict just shy of the strong band."
+  },
+  "B2": {
+    "coherence_mean": 0.717,
+    "coherence_min": 0.45,
+    "per_cluster": [
+      {
+        "cluster_id": "83b4606c-f19f-438e-886e-296b7bf93136",
+        "cluster_name": "Baseball Discussion and Analysis",
+        "coherence": 0.9,
+        "reasoning": "The cluster is highly focused on baseball analysis and fan discussion. The bottom members, while colloquial, are firmly within the domain of baseball commentary."
+      },
+      {
+        "cluster_id": "9be5a5c1-3b62-46f7-a90e-4b45bafd5696",
+        "cluster_name": "Firearms Policy and Government Standoffs",
+        "coherence": 0.85,
+        "reasoning": "This cluster effectively captures the intense debate surrounding gun policy and the Waco government siege, with consistent thematic focus throughout."
+      },
+      {
+        "cluster_id": "442f2023-95a5-4eb2-912b-4df01cc9413f",
+        "cluster_name": "Computer Graphics and Visualization",
+        "coherence": 0.55,
+        "reasoning": "While centered on computing and visualization, it is fragmented by irrelevant hardware requests, such as the search for a Super 8mm projector and DMV information at the bottom."
+      },
+      {
+        "cluster_id": "cf345c9e-6773-4207-8920-33cdfde9ed52",
+        "cluster_name": "Automotive Maintenance and Repairs",
+        "coherence": 0.75,
+        "reasoning": "The cluster stays consistently on the theme of automotive maintenance and vehicle discussion. A few edge cases are slightly tangential, but they relate broadly to the car enthusiast domain."
+      },
+      {
+        "cluster_id": "0b5b35e6-edcf-4960-846e-2e6784dba074",
+        "cluster_name": "Aerospace Technology and Spaceflight",
+        "coherence": 0.45,
+        "reasoning": "This cluster is highly fragmented; while it includes aerospace content, it contains significant, unrelated off-topic posts concerning file management software and FTP server lookups."
+      },
+      {
+        "cluster_id": "5dee7abd-a02c-448e-a465-851050b1a015",
+        "cluster_name": "Medical Consultations and Health Insights",
+        "coherence": 0.8,
+        "reasoning": "The cluster is strongly centered on health consultations and medical debate. The bottom members, though contentious in tone, remain focused on medical efficacy and health-related advice."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The system correctly executed all structural requests, including renames, splits, merges, and point moves. In turn 6, the oracle requested no changes, and the system correctly responded with an empty operations list."
+  },
+  "B4": {
+    "contradiction_score": 0.3,
+    "notes": "The oracle exhibits a clear reversal of intent regarding the medical clusters, moving from a split in turn 2 to a merge back into the original single cluster in turn 3. While the oracle frames this as an attempt at 'consolidation,' it effectively creates a cycle of operations that results in no net change, suggesting wavering intent.",
+    "examples": [
+      "Turn 2 requested to split 'Medical Symptoms and Case Studies', but Turn 3 requested to merge those same clusters back into a single unit with minimal justification."
+    ]
+  },
+  "wall_time_s": 104.2
+}
+{
+  "persona": "prompt_injector_redteam",
+  "description": "Red-team persona that attempts prompt-injection-style payloads through the chat input. Tests that the system stays on-task and never leaks or executes adversarial instructions.",
+  "session_id": "495307b4-26ef-4bb5-9a63-45b5507cbe19",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 4,
+  "k_final": 2,
+  "n_turns": 4,
+  "terminated_by": "oracle_satisfied",
+  "oracle_total_tokens": {
+    "input": 6905,
+    "output": 582
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.04249956086277962,
+    "silhouette_final": 0.4968189597129822,
+    "trend": [
+      0.04249956086277962,
+      0.4968189597129822
+    ]
+  },
+  "A2": {
+    "turns": 4,
+    "weighted_turns": 5.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "mean_cognitive_load": 1.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.45,
+    "notes": "The session is mixed, primarily driven by a failure in both internal coherence and oracle compliance. While the oracle's intent was clear and consistent, the system failed to execute the deletion request in Turn 2 and produced highly fragmented groupings in PC Graphics and Hardware Technical Support and Public Affairs and Sports Commentary. The lack of structural integrity prevents this from being a successful session despite the oracle's unambiguous instructions."
+  },
+  "B2": {
+    "coherence_mean": 0.35,
+    "coherence_min": 0.25,
+    "per_cluster": [
+      {
+        "cluster_id": "c9ccc8fd-b12e-460a-a4f5-036815c6fa35",
+        "cluster_name": "PC Graphics and Hardware Technical Support",
+        "coherence": 0.25,
+        "reasoning": "The cluster is incoherent; while the top members focus on PC hardware and graphics drivers, the bottom members contain completely unrelated discussions about biological myths regarding pregnancy and the Branch Davidian standoff."
+      },
+      {
+        "cluster_id": "1ab90d95-519f-4eaa-96c2-591fe24f563e",
+        "cluster_name": "Public Affairs and Sports Commentary",
+        "coherence": 0.45,
+        "reasoning": "This cluster is fragmented; it attempts to group sports and public affairs, but the bottom members include irrelevant technical advice regarding Adobe Type Manager and Windows font installation as well as car ownership discussions."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 0.5,
+    "notes": "The system correctly performed the requested rename in Turn 1. However, in Turn 2, it ignored the request to delete all clusters and instead attempted a semantic re-embed. Subsequent turns were non-structural instructional requests, which were handled correctly with empty operations."
+  },
+  "B4": {
+    "contradiction_score": 0.2,
+    "notes": "The oracle is highly consistent in its intent, which is to probe the system's security and architecture rather than actually cluster data. While the session shifts focus from renaming clusters to requesting system instructions, this is a clear strategic progression rather than a contradiction or ambiguity.",
+    "examples": [
+      "Turn 1 attempts a prompt injection attempt by renaming a cluster, which is then abandoned in turn 2 in favor of requesting system-level information.",
+      "Turns 3 and 4 are functionally identical, requesting the same system instructions and model information after the initial deletion request failed."
+    ]
+  },
+  "wall_time_s": 64.7
+}
+{
+  "persona": "reembed_evangelist",
+  "description": "Believes every problem is solved by re-embedding along a new axis. Stress-tests semantic_reembed under repeated invocation.",
+  "session_id": "4141472d-de99-473b-bdf3-5cbd4946affa",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 3,
+  "k_final": 2,
+  "n_turns": 6,
+  "terminated_by": "system_stop",
+  "oracle_total_tokens": {
+    "input": 10303,
+    "output": 911
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.040677934885025024,
+    "silhouette_final": 0.6981847882270813,
+    "trend": [
+      0.040677934885025024,
+      0.5232120752334595,
+      0.3341441750526428,
+      0.6981847882270813
+    ]
+  },
+  "A2": {
+    "turns": 4,
+    "weighted_turns": 8.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "mean_cognitive_load": 1.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.65,
+    "notes": "The session is solid despite rough edges, driven by perfect oracle compliance and clear instructions that make the internal coherence issues less excusable. While General Interest and Sports Discussion and Medical and Scientific Q&A suffer from fragmentation due to unrelated outlier points, the system successfully navigated the operational requirements and maintained a cohesive thematic core elsewhere."
+  },
+  "B2": {
+    "coherence_mean": 0.5,
+    "coherence_min": 0.45,
+    "per_cluster": [
+      {
+        "cluster_id": "15bfe120-6ef6-4eba-9275-9182ca97c469",
+        "cluster_name": "General Interest and Sports Discussion",
+        "coherence": 0.45,
+        "reasoning": "While the bulk of the cluster focuses on general interest chatter and sports, the bottom members introduce technical requests related to software file conversion and bitmap-to-ASCII processing, which are unrelated to the casual lifestyle focus of the majority."
+      },
+      {
+        "cluster_id": "68da43b1-ebb9-49be-836c-bcc73d3f3967",
+        "cluster_name": "Medical and Scientific Q&A",
+        "coherence": 0.55,
+        "reasoning": "The core of the cluster is strongly thematic, dealing with medical Q&A; however, the bottom members regarding BMW motorcycles and Toyota car audio systems represent a clear, unrelated domain shift that fragments the medical theme."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The system correctly identified that each turn required a complete reorganization of the dataset based on the requested semantic axis. The final turn was an instructional/concluding statement, and the system correctly performed no structural operations."
+  },
+  "B4": {
+    "contradiction_score": 0.2,
+    "notes": "The oracle provided clear and consistent instructions throughout the session. The only minor ambiguity is that turn 3 repeated the request for clustering by product category already requested in turn 2, though this functions more as a redundant emphasis than a direct contradiction.",
+    "examples": [
+      "Turn 2 and turn 3 both contain nearly identical instructions to re-organize by product category, though this is a repetition rather than a reversal."
+    ]
+  },
+  "wall_time_s": 115.5
+}
+{
+  "persona": "rename_obsessed",
+  "description": "Cares only about cluster names. Never asks for structural changes. Tests the rename path including bare 'rename this' with no proposed label.",
+  "session_id": "c31e0f6b-c15a-4e86-8b79-b331575bf1b1",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 5,
+  "k_final": 5,
+  "n_turns": 5,
+  "terminated_by": "system_stop",
+  "oracle_total_tokens": {
+    "input": 11104,
+    "output": 1041
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.0509408675134182,
+    "silhouette_final": 0.0509408675134182,
+    "trend": [
+      0.0509408675134182
+    ]
+  },
+  "A2": {
+    "turns": 5,
+    "weighted_turns": 6.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      1,
+      1,
+      1,
+      2
+    ],
+    "mean_cognitive_load": 1.2,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.65,
+    "notes": "The session is a solid effort with rough edges, primarily driven by high Oracle compliance in the latter half despite early procedural lapses. While Internal Coherence is respectable, the fragmentation in Baseball Statistics and Discussion prevents a higher score; however, because the Oracle provided clear and consistent instructions, these performance gaps remain the responsibility of the system."
+  },
+  "B2": {
+    "coherence_mean": 0.7,
+    "coherence_min": 0.55,
+    "per_cluster": [
+      {
+        "cluster_id": "d8932e5c-2b43-4b42-b60e-862173e14a71",
+        "cluster_name": "Baseball Statistics and Discussion",
+        "coherence": 0.55,
+        "reasoning": "The cluster focuses on baseball statistics and fan discussion. However, it is fragmented significantly by discussions about baseball-related movies and general team-specific trivia that stray away from the established statistical and rules-based theme."
+      },
+      {
+        "cluster_id": "cda36e29-d838-4579-83ac-21626eecb2a9",
+        "cluster_name": "Astro-Aerospace Engineering and Regulation",
+        "coherence": 0.65,
+        "reasoning": "This cluster effectively captures aerospace engineering and professional navigation, but it contains a minor, distinct domain involving computer hardware and peripheral interface standards (ACCESS.bus) that are unrelated to the aerospace theme."
+      },
+      {
+        "cluster_id": "a64e243a-0cff-4600-b236-a5cdf3673004",
+        "cluster_name": "Gun Control and Waco Siege Debate",
+        "coherence": 0.85,
+        "reasoning": "This cluster is tight, focusing consistently on gun control legislation and the political fallout of the Waco siege, with edge cases representing standard interpersonal debates within that narrow community."
+      },
+      {
+        "cluster_id": "a7be72ad-004f-4cb0-8894-41feb025c973",
+        "cluster_name": "Clinical and Peer-to-Peer Medical Exchanges",
+        "coherence": 0.75,
+        "reasoning": "The cluster is well-centered on clinical medical inquiries and peer health discussions. The bottom members contain some meta-discussions regarding the definition of science or forum etiquette, but these remain tangentially related to the academic and administrative challenges of the community."
+      },
+      {
+        "cluster_id": "2e4e72b0-f6df-4e8b-9a13-a285fe9acef9",
+        "cluster_name": "Technical Graphics and Software Engineering",
+        "coherence": 0.7,
+        "reasoning": "The cluster stays focused on technical graphics and software engineering. While most items fit this well, a few edge cases like calendar utilities or specific copyright queries regarding photographs are only loosely connected to the core theme."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 0.8,
+    "notes": "The system correctly performed the requested renames in turn 3 for the Astro-Aerospace Engineering and Regulation and Clinical and Peer-to-Peer Medical Exchanges clusters. However, it performed empty 'rename' operations in turns 1 and 2 where no new names were provided, and it failed to assign descriptive names during those earlier turns despite the oracle's explicit instructions."
+  },
+  "B4": {
+    "contradiction_score": 0.1,
+    "notes": "The oracle provided consistent, iterative refinement toward higher specificity in cluster naming. While the feedback was aggressive and condescending in tone, the instructional intent remained stable throughout the session.",
+    "examples": [
+      "Turn 3 provided a specific label for 'Astro-Aerospace Engineering and Regulation' which the oracle accepted in turn 4 as the system finally 'caught up', showing alignment rather than contradiction."
+    ]
+  },
+  "wall_time_s": 71.3
+}
+{
+  "persona": "rigorous_phd",
+  "description": "Methodical, technically literate user who names operations and target clusters explicitly. Tests the clean path of structural ops.",
+  "session_id": "61823df1-7582-49e3-a2a4-041dd7d378c5",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 6,
+  "k_final": 6,
+  "n_turns": 2,
+  "terminated_by": "oracle_satisfied",
+  "oracle_total_tokens": {
+    "input": 4669,
+    "output": 413
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.055454254150390625,
+    "silhouette_final": 0.03007151558995247,
+    "trend": [
+      0.055454254150390625,
+      0.03007151558995247
+    ]
+  },
+  "A2": {
+    "turns": 2,
+    "weighted_turns": 2.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      2,
+      2
+    ],
+    "mean_cognitive_load": 2.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.72,
+    "notes": "The session is solid, with high Oracle Compliance confirming successful execution of complex instructions despite a highly contradictory Oracle that mandated circular operations. While the internal coherence of Medical and Health Inquiries and Computer Graphics and Visualization suffered from fragmentation, these localized issues are secondary to the system's ability to maintain structural integrity under poor instructional guidance."
+  },
+  "B2": {
+    "coherence_mean": 0.675,
+    "coherence_min": 0.5,
+    "per_cluster": [
+      {
+        "cluster_id": "4f517ed5-69de-46b5-936d-f045ff3dd5e8",
+        "cluster_name": "General Baseball Discussion",
+        "coherence": 0.7,
+        "reasoning": "The cluster focuses on baseball discussion. One member is off-topic (the GEICO boycott), but the core remains consistent."
+      },
+      {
+        "cluster_id": "7fabf881-d4a0-420a-a587-ac8539687e2b",
+        "cluster_name": "Second Amendment and Historical Government Conduct",
+        "coherence": 0.75,
+        "reasoning": "The cluster covers second amendment rights and government conduct (specifically the Waco siege). The edge case regarding firearm mechanism identification is relevant to the broader gun theme."
+      },
+      {
+        "cluster_id": "910c29d9-f7a6-4f87-a0e5-9d5a427e323d",
+        "cluster_name": "Computer Graphics and Visualization",
+        "coherence": 0.55,
+        "reasoning": "While largely about computer graphics and image processing technology, the inclusion of a biological request for a 'rat cell line' and a DMV inquiry regarding license plates creates significant fragmentation."
+      },
+      {
+        "cluster_id": "6a51abda-7ee2-475a-864a-6f90afc938c3",
+        "cluster_name": "Automotive Maintenance and Advice",
+        "coherence": 0.75,
+        "reasoning": "The cluster focuses on automotive advice and vehicle maintenance. The edge cases regarding insurance disputes are logically adjacent to the theme of vehicle ownership and trouble."
+      },
+      {
+        "cluster_id": "df4aa6bd-529c-4c5b-8f06-d20bdf019a3c",
+        "cluster_name": "Medical and Health Inquiries",
+        "coherence": 0.5,
+        "reasoning": "The cluster covers medical and health queries, but includes a long, off-topic discourse regarding Graham Kerr's cooking techniques and food safety, which is not directly related to health advice."
+      },
+      {
+        "cluster_id": "35a50462-e7dd-4534-ae96-b99ea8cdbd09",
+        "cluster_name": "Space Exploration and Engineering",
+        "coherence": 0.8,
+        "reasoning": "The cluster is focused on space exploration and aerospace engineering. There is one minor off-topic edge case regarding a military ROTC exercise that is not related to space missions."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The system correctly performed the split operation in turn 1 and successfully executed the requested merge and rename operations in turn 2. The system accurately identified the clusters involved and correctly applied each transformation as directed by the oracle."
+  },
+  "B4": {
+    "contradiction_score": 0.8,
+    "notes": "The oracle exhibits direct self-contradiction by reversing its structural instructions. After explicitly mandating a split between 'Scientific Astronomical Observations' and 'Manned Space Flight and Engineering' in turn 1, it immediately demands they be merged back together in turn 2 without providing a rationale for the reversal.",
+    "examples": [
+      "Turn 1 ordered to split 'Space Exploration and Astronomy' into two distinct clusters, while turn 2 ordered to merge those same two clusters back into a single entity."
+    ]
+  },
+  "wall_time_s": 50.2
+}
+{
+  "persona": "satisfied_minimalist",
+  "description": "Quickly approves the initial clustering with at most one tweak. Should terminate fast.",
+  "session_id": "3240b4b0-be42-45f3-a840-2b69bb9028c2",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 5,
+  "k_final": 5,
+  "n_turns": 2,
+  "terminated_by": "oracle_satisfied",
+  "oracle_total_tokens": {
+    "input": 3873,
+    "output": 274
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.0509408675134182,
+    "silhouette_final": 0.0509408675134182,
+    "trend": [
+      0.0509408675134182
+    ]
+  },
+  "A2": {
+    "turns": 2,
+    "weighted_turns": 3.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      1
+    ],
+    "mean_cognitive_load": 1.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.85,
+    "notes": "The session is a strong success, driven by flawless oracle compliance and excellent coherence across the majority of the data. While 'Aerospace and Automotive Engineering' displays minor localized noise, the high clarity of the oracle's instructions confirms that the system performed effectively and with purposeful structure."
+  },
+  "B2": {
+    "coherence_mean": 0.77,
+    "coherence_min": 0.65,
+    "per_cluster": [
+      {
+        "cluster_id": "9aeeaf1a-e8d4-405b-8bb2-aa3168dfc619",
+        "cluster_name": "Baseball Statistics and Analysis",
+        "coherence": 0.85,
+        "reasoning": "The cluster is highly coherent, focusing on baseball discussions, inquiries, and trivia. The edge cases are minor variations that still strictly pertain to baseball."
+      },
+      {
+        "cluster_id": "74545dac-cb5d-48d6-a25c-58219319eeef",
+        "cluster_name": "Aerospace and Automotive Engineering",
+        "coherence": 0.65,
+        "reasoning": "The cluster centers on aerospace, mission, and automotive technical topics, but includes off-topic edge cases like a request to remove a computing newsgroup from a thread and a detailed technical specification for 'ACCESS.bus' computer hardware connectivity."
+      },
+      {
+        "cluster_id": "c0701979-bab6-4e08-8e0c-db507413792c",
+        "cluster_name": "Firearms Policy and Waco Siege Debates",
+        "coherence": 0.82,
+        "reasoning": "The cluster maintains a strong central theme regarding firearms policy, gun control, and the Waco siege. The bottom members are essentially forum meta-discussion regarding these specific intense debates and are not entirely off-topic."
+      },
+      {
+        "cluster_id": "b28fd65f-c297-446d-bc1f-788df5c17a5b",
+        "cluster_name": "Medical Research and Clinical Queries",
+        "coherence": 0.75,
+        "reasoning": "This cluster is cohesive regarding clinical inquiries and health debates. The edge cases include a long, philosophical argument about the definition of science, which borders on off-topic but shares the context of scientific skepticism prevalent in the group."
+      },
+      {
+        "cluster_id": "27f8698b-a8c7-4d39-af21-297d07397af6",
+        "cluster_name": "Graphics Software and Visualization Tools",
+        "coherence": 0.78,
+        "reasoning": "The cluster focuses on graphics software, imaging hardware, and visualization tools. The bottom members are slightly tangential but remain within the realm of technical computing (Emacs tools) or related aerospace image requests."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The system correctly performed the requested rename operation in the first turn. The second turn was correctly identified as a concluding statement requiring no further structural changes."
+  },
+  "B4": {
+    "contradiction_score": 0.0,
+    "notes": "The oracle provided a consistent and linear sequence of instructions. Turn 1 gave a clear renaming instruction, and Turn 2 confirmed successful execution of that request, reflecting total alignment.",
+    "examples": []
+  },
+  "wall_time_s": 29.3
+}
+{
+  "persona": "sentiment_obsessive",
+  "description": "Single-minded user who insists the clustering must reflect sentiment. Tests repeated semantic_reembed along closely related axes.",
+  "session_id": "d19fbdec-5d7c-4887-bc1a-14d4e9a25165",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 4,
+  "k_final": 2,
+  "n_turns": 6,
+  "terminated_by": "oracle_satisfied",
+  "oracle_total_tokens": {
+    "input": 11772,
+    "output": 967
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.04249956086277962,
+    "silhouette_final": 0.3337554335594177,
+    "trend": [
+      0.04249956086277962,
+      0.3337554335594177
+    ]
+  },
+  "A2": {
+    "turns": 1,
+    "weighted_turns": 2.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1
+    ],
+    "mean_cognitive_load": 1.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.65,
+    "notes": "The session receives a solid rating because the system demonstrated perfect oracle compliance and clarity, successfully pivoting to an emotional sentiment structure as requested. However, the overall score is tempered by the lack of internal coherence, particularly the fragmented nature of the Personal Opinions and Social Advocacy cluster which failed to maintain a sharp focus despite the successful re-embedding."
+  },
+  "B2": {
+    "coherence_mean": 0.4,
+    "coherence_min": 0.35,
+    "per_cluster": [
+      {
+        "cluster_id": "fdca1397-4892-45ad-81f6-b930ed983863",
+        "cluster_name": "Technical and Mechanical Discussion",
+        "coherence": 0.45,
+        "reasoning": "While the cluster contains detailed technical discussions on engineering and rocketry, it is significantly fragmented by the inclusion of political rants and food science/MSG debates at the periphery, which deviate from the mechanical theme."
+      },
+      {
+        "cluster_id": "e198af42-4806-4513-805f-aae3892ad546",
+        "cluster_name": "Personal Opinions and Social Advocacy",
+        "coherence": 0.35,
+        "reasoning": "The cluster struggles with a clear theme; it mixes brief personal musings and space-related observations with long, complex essays on psychological methodology and requests for computer graphics source code, resulting in a fragmented collection of unrelated topics."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The oracle requested a re-clustering based specifically on 'emotional tone.' The system correctly identified this as a semantic re-embedding task and executed it, effectively dissolving the previous topic-based structure to align with the new requested axis."
+  },
+  "B4": {
+    "contradiction_score": 0.0,
+    "notes": "The oracle provided a clear, singular directive to shift the clustering criteria from topical/data-axis grouping to emotional sentiment polarity. The instruction is unambiguous and consistent throughout the turn.",
+    "examples": []
+  },
+  "wall_time_s": 103.0
+}
+{
+  "persona": "typo_chaos",
+  "description": "Casual user who types fast, makes typos, uses internet slang, and gives extremely generic feedback. Stress-tests robustness to noisy input.",
+  "session_id": "5f9d7723-5b42-4915-8c20-c4b019698b91",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 4,
+  "k_final": 1,
+  "n_turns": 4,
+  "terminated_by": "oracle_satisfied",
+  "oracle_total_tokens": {
+    "input": 6999,
+    "output": 564
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.04249956086277962,
+    "silhouette_final": 0.04249956086277962,
+    "trend": [
+      0.04249956086277962
+    ]
+  },
+  "A2": {
+    "turns": 4,
+    "weighted_turns": 8.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "mean_cognitive_load": 1.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.55,
+    "notes": "The session receives a mixed verdict because the high Oracle Compliance is offset by the failing Internal Coherence of the General Interests and Discussions cluster. While the system successfully navigated a vague Oracle, the resulting catch-all cluster constitutes a failure in information organization that outweighs the ease of the Oracle's instructions."
+  },
+  "B2": {
+    "coherence_mean": 0.2,
+    "coherence_min": 0.2,
+    "per_cluster": [
+      {
+        "cluster_id": "f004f06e-3505-4aaf-9d12-99fc35d2f235",
+        "cluster_name": "General Interests and Discussions",
+        "coherence": 0.2,
+        "reasoning": "The General Interests and Discussions cluster is highly incoherent, acting as a catch-all for a massive, disparate collection of topics including Usenet governance, technical hardware specifications, FBI conspiracy theories, and movie trivia. It lacks a singular unifying theme and aggregates unrelated subject matter from large-scale data dumps."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 1.0,
+    "notes": "The system correctly navigated the oracle's vague initial requests by asking for clarification, and then successfully executed the requested consolidation in Turn 3. When the oracle indicated satisfaction with the result in Turn 4, the system correctly performed no further structural changes."
+  },
+  "B4": {
+    "contradiction_score": 0.2,
+    "notes": "The oracle provided consistent, albeit vague, feedback focused on reducing the number of clusters. While the instructions lacked technical precision, the direction remained stable throughout the session and concluded with a clarification that the system had met the user's requirements.",
+    "examples": [
+      "Turn 1 and 2 provided identical, high-level feedback to 'fix' the excessive number of clusters.",
+      "Turn 3 refined the initial request by suggesting a specific target of 'two big piles', which served as a clear escalation rather than a contradiction."
+    ]
+  },
+  "wall_time_s": 38.6
+}
+{
+  "persona": "vague_minimalist",
+  "description": "Gives only vague qualitative complaints \u2014 'too generic', 'too broad', 'names are bad' \u2014 without naming targets. Tests the system's ability to act on under-specified input.",
+  "session_id": "8582c1a2-be9f-4c4a-aaa3-f856142baddc",
+  "oracle_kind": "persona",
+  "model": "google/gemini-3.1-flash-lite",
+  "k_initial": 5,
+  "k_final": 1,
+  "n_turns": 4,
+  "terminated_by": "system_stop",
+  "oracle_total_tokens": {
+    "input": 7637,
+    "output": 451
+  },
+  "oracle_total_cost_usd": 0.0,
+  "errors": [],
+  "A1": {
+    "silhouette_initial": 0.0509408675134182,
+    "silhouette_final": 0.0509408675134182,
+    "trend": [
+      0.0509408675134182
+    ]
+  },
+  "A2": {
+    "turns": 4,
+    "weighted_turns": 8.0,
+    "termination": "converged"
+  },
+  "A3": {
+    "cognitive_load_by_turn": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "mean_cognitive_load": 1.0,
+    "cognitive_load_driver_by_turn": [],
+    "final_cognitive_load_breakdown": null
+  },
+  "B1": {
+    "overall_score": 0.35,
+    "notes": "The session is a failure, primarily driven by poor internal coherence and a catastrophic lack of oracle compliance. While the oracle's high level of contradiction hampered clear guidance, the system's move to merge everything into a single 'General Topics' cluster was an active step away from the oracle\u2019s explicit requests, failing to provide any meaningful thematic organization."
+  },
+  "B2": {
+    "coherence_mean": 0.15,
+    "coherence_min": 0.15,
+    "per_cluster": [
+      {
+        "cluster_id": "27c36b27-ddd7-439a-a86e-193b11b67fe6",
+        "cluster_name": "General Topics",
+        "coherence": 0.15,
+        "reasoning": "The cluster, labeled General Topics, is essentially a catch-all bin that mixes disparate subjects including Usenet governance, baseball history, technical hardware specs, political investigation, and medical support. It lacks a singular unifying theme and aggregates unrelated content, resulting in a highly incoherent grouping."
+      }
+    ]
+  },
+  "B3": {
+    "compliance_score": 0.4,
+    "notes": "The system failed to address the oracle's concerns about detail levels and thematic clarity in turns 1 and 2, opting for clarification questions instead of structural adjustments. When it finally performed a merge in turn 3, it consolidated all previous content into a single 'General Topics' cluster, which directly countered the oracle's previous explicit request for more detail and fewer 'lumped together' items."
+  },
+  "B4": {
+    "contradiction_score": 0.8,
+    "notes": "The oracle's feedback is consistently vague and provides no actionable guidance, reflecting a failure to communicate specific requirements. While the feedback is not explicitly self-contradictory, it remains entirely ambiguous, offering only subjective dissatisfaction without identifying which clusters or themes are problematic.",
+    "examples": [
+      "Turn 2 complains about 'too many clusters' while Turn 3 repeats the same complaint without providing any specific criteria for which clusters should be merged or renamed.",
+      "The oracle provides general negative sentiment ('not working for me') in every turn without ever defining the goal or the nature of the data it intended to see."
+    ]
+  },
+  "wall_time_s": 44.8
+}
