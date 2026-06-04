@@ -44,7 +44,7 @@ _INITIAL_SYSTEM_PROMPT = (
 # ---------------------------------------------------------------------------
 # HTTP helpers
 # ---------------------------------------------------------------------------
-def _call(method: str, path: str, body=None, timeout: int = 300):
+def _call(method: str, path: str, body=None, timeout: int = 180):
     url = f"{BASE}{path}"
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(
@@ -62,10 +62,6 @@ def _call(method: str, path: str, body=None, timeout: int = 300):
             return e.code, json.loads(body_str)
         except Exception:
             return e.code, body_str
-    except urllib.error.URLError as e:
-        # Includes socket timeouts — return as a synthetic 504 so callers can
-        # treat it like a server error and stop the persona gracefully.
-        return 504, {"detail": f"request timeout/connection error: {e.reason}"}
 
 
 # ---------------------------------------------------------------------------
@@ -277,15 +273,7 @@ def main() -> int:
         for path in persona_paths:
             print(f"=== running persona: {path} ===")
             persona = load_persona(path)
-            try:
-                rec = run_persona(persona, max_turns=args.max_turns)
-            except Exception as exc:
-                print(f"  FATAL: persona crashed ({exc}) — skipping")
-                rec = {
-                    "scenario": persona.name,
-                    "errors": [f"runner_crash: {exc}"],
-                    "terminated_by": "runner_crash",
-                }
+            rec = run_persona(persona, max_turns=args.max_turns)
             records.append(rec)
             f.write(json.dumps(rec, indent=2) + "\n")
             f.flush()
