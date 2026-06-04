@@ -36,12 +36,12 @@ Technical documentation of features developed during the project.
 ## Research and state of the art
 
 Literature review and positioning of BlaBlaClust relative to related work.
-This work is P5 (Arianna Schiavi).
 
 | Document | Author | Description |
 |---|---|---|
 | [related-work.md](related-work.md) | P5 | Academic comparison with 5 related systems (Schild 2021, ClusterLLM, Dial-In LLM, Perspectives); interaction paradigm, embedding strategy, evaluation tables; original contributions |
 | [related-work-radar.ipynb](related-work-radar.ipynb) | P5 | Radar chart comparing all 5 systems across 6 design dimensions with scoring rationale |
+| [evaluation_literature_report.md](evaluation_literature_report.md) | P4 | Literature grounding for every evaluation metric (A1–A3, B1–B4): why ARI/NMI are excluded, academic basis for each metric (Rousseeuw 1987, PARADISE, NASA-TLX, G-Eval, Malaviya 2025), originality table, and recommended framing for the final presentation |
 
 ---
 

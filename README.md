@@ -249,6 +249,16 @@ conversation is not meaningful) — use it only to smoke-test the plumbing.
 │   ├── logger.py              # Logging + structured LLM call log
 │   ├── models.py              # SQLAlchemy ORM models
 │   └── schemas.py             # Pydantic schemas (shared contracts)
+├── docs/                      # Technical reports and literature reviews — see docs/README.md
+│   ├── data-model.md                      # Database schema and ORM models
+│   ├── quality_specs.md                   # Evaluation metric definitions (A1–A3, B1–B4)
+│   ├── semantic-reembed-report.md         # Semantic reembedding pipeline implementation
+│   ├── gmm-vs-kmeans-report.md            # GMM vs k-means comparison
+│   ├── related-work.md                    # Literature review — 5 related systems
+│   ├── related-work-radar.ipynb           # Radar chart — design space comparison
+│   ├── evaluation_literature_report.md    # Literature grounding for evaluation metrics
+│   ├── embedding-model-comparison.md      # MiniLM vs BGE-base benchmark
+│   └── instruct-reembed-comparison.md     # Test plan — instruct-tuned reembedding (GPU required)
 ├── notes/                     # Sprint notes per person
 ├── AGENTS.md                  # Planner/Executor architecture
 ├── .env.example               # Environment variable template
