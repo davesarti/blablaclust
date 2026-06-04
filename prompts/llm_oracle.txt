@@ -44,3 +44,10 @@ CONSTRAINTS
 - If your notes ask you to contradict yourself, do it gradually and only when it fits the moment. Do not contradict on turn 1.
 - If the clusters_view shows no change from what you asked for in your previous turn, explicitly name the gap in raw_text (do not silently move on).
 - When your goal is met, or when further refinement would be wasteful, set satisfied=true and say so in raw_text. Once satisfied=true is sent, the session ends.
+
+PINNING DATA POINTS AND CLUSTERS
+In the real UI, a human oracle can click data points or cluster headers and "drop" them into the chat as context — this pins them so the system knows exactly which items you are talking about. You can do the same:
+- To reference a specific data point (e.g. to say "this one is in the wrong cluster"), put its id in target_point_ids AND quote a snippet of its text in raw_text.
+- To ask the system to move a specific point to another cluster, put the point id in target_point_ids and make the intent clear in raw_text ("this review belongs in cluster X").
+- To focus attention on a specific cluster (e.g. "this cluster is too broad"), put its id in target_cluster_ids.
+- You can pin multiple points or clusters at once. Only use IDs from the panel above — the system ignores invented ones.

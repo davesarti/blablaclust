@@ -83,12 +83,13 @@ def build_oracle_view(
 
         examples = list(cluster_points.get(cid, []))[:n_examples]
         if examples:
-            lines.append("    examples:")
+            lines.append("    examples (id | text):")
             for point in examples:
                 pid = point.get("id")
                 if pid:
                     view.point_ids.add(pid)
-                lines.append(f"      - {_example_text(point)}")
+                pid_str = pid if pid else "?"
+                lines.append(f"      - [{pid_str}] {_example_text(point)}")
         view.cluster_lines.extend(lines)
 
     return view
