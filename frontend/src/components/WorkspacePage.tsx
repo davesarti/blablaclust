@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { useApp } from '../store/AppContext'
-import { patchSessionState, getEvalCached } from '../api/client'
+import { patchSessionState } from '../api/client'
 import ClusterCard from './ClusterCard'
 import ChatPanel from './ChatPanel'
 import AnalyticsPanel from './AnalyticsPanel'
@@ -27,10 +27,6 @@ export default function WorkspacePage() {
   const [marking, setMarking] = useState(false)
 
   const totalSize = sess.clusters.reduce((s, c) => s + c.size, 0)
-
-  useEffect(() => {
-    getEvalCached(sess.sessionId).then((result) => setEvalResult(result)).catch(() => {})
-  }, [sess.sessionId])
 
   async function markConverged() {
     setMarking(true)
