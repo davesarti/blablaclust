@@ -171,3 +171,63 @@ def test_dialogue_history_is_tracked(monkeypatch, persona, view):
     contents = [m["content"] for m in msgs]
     assert "welcome" in contents
     assert "first" in contents
+
+
+# --- parse-retry robustness (a single non-JSON reply must not kill the session) --
+
+def _patch_call_llm_sequence(monkeypatch, texts, usage=None):
+    """Patch call_llm to return each text in `texts` on successive calls.
+
+    After the list is exhausted it keeps returning the last entry, so passing a
+    single bad reply simulates a model that never recovers.
+    """
+    usage = usage or {"input_tokens": 10, "output_tokens": 5,
+                      "cache_read_tokens": 0, "cache_creation_tokens": 0}
+    calls = {"n": 0}
+
+    def _fake(messages, system, max_tokens=2048):
+        i = min(calls["n"], len(texts) - 1)
+        calls["n"] += 1
+        return _FakeResponse(text=texts[i], usage=usage)
+
+    monkeypatch.setattr(oracle_mod, "call_llm", _fake)
+    return calls
+
+
+_VALID_REPLY = json.dumps({
+    "raw_text": "Split cluster A.", "feedback_type": "cluster",
+    "target_cluster_ids": ["c1"], "target_point_ids": [],
+    "satisfied": False, "reasoning": "mixed",
+})
+
+
+def test_parse_retry_recovers_from_one_bad_reply(monkeypatch, persona, view):
+    # Turn 1 reply is prose (unparseable); the corrective retry returns valid JSON.
+    calls = _patch_call_llm_sequence(monkeypatch, ["Sorry — here is my answer:", _VALID_REPLY])
+    o = LLMOracle(persona=persona, session_id="s1", max_turns=5)
+    turn = o.next_turn(view, system_display="", turn_number=1)
+    assert turn.body["raw_text"] == "Split cluster A."
+    assert calls["n"] == 2  # one bad reply + one successful retry
+
+
+def test_parse_retry_accrues_failed_attempt_usage(monkeypatch, persona, view):
+    calls = _patch_call_llm_sequence(
+        monkeypatch, ["prose, not json", _VALID_REPLY],
+        usage={"input_tokens": 7, "output_tokens": 3,
+               "cache_read_tokens": 0, "cache_creation_tokens": 0},
+    )
+    o = LLMOracle(persona=persona, session_id="s1", max_turns=5)
+    o.next_turn(view, system_display="", turn_number=1)
+    usage, _ = o.totals
+    assert calls["n"] == 2
+    # Both the failed attempt and the recovery cost tokens — both are counted.
+    assert usage["input_tokens"] == 14
+    assert usage["output_tokens"] == 6
+
+
+def test_parse_retry_gives_up_after_max_attempts(monkeypatch, persona, view):
+    calls = _patch_call_llm_sequence(monkeypatch, ["never valid"])  # always bad
+    o = LLMOracle(persona=persona, session_id="s1", max_turns=5)
+    with pytest.raises(OracleResponseError):
+        o.next_turn(view, system_display="", turn_number=1)
+    assert calls["n"] == oracle_mod._MAX_PARSE_ATTEMPTS  # tried exactly N times, then gave up

@@ -134,10 +134,24 @@ def run_persona(persona: Persona, max_turns: int) -> Dict[str, Any]:
 
             # 3. Post the turn to the live API.
             s, resp = _call("POST", "/turns", oracle_turn.body)
-            if s >= 400:
+            if s >= 500:
+                # Server error — nothing the oracle can do about it. Stop.
                 record["errors"].append(f"turn[{turn_idx}] http={s} body={resp}")
                 record["terminated_by"] = "api_error"
                 break
+            if s >= 400:
+                # The engine rejected the oracle's request as invalid (e.g. it
+                # named a cluster that an earlier split/merge had dissolved). A
+                # human would just be told "that no longer exists" and pick
+                # another — so feed the error back and let the oracle correct
+                # course next turn instead of ending the whole session here.
+                detail = resp.get("detail") if isinstance(resp, dict) else resp
+                record["errors"].append(f"turn[{turn_idx}] http={s} body={resp}")
+                system_display = (
+                    f"That request couldn't be applied ({detail}). The clustering is "
+                    f"unchanged — pick a cluster currently shown in the panel and try again."
+                )
+                continue
             record["n_turns"] = turn_idx
 
             # 4. Capture the system reply for the next prompt.

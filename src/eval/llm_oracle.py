@@ -10,7 +10,6 @@ payload ready to POST to /turns.
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, Tuple
 
@@ -18,6 +17,7 @@ from src.eval.oracle_view import OracleView, filter_invented_ids, render_notes
 from src.eval.persona import Persona
 from src.harness import (
     ConversationContext,
+    _active_model,
     call_llm,
     estimate_cost_usd,
     hash_prompt,
@@ -29,6 +29,10 @@ from src.logger import log_llm_call
 
 _DEFAULT_FEEDBACK_TYPE = "global"
 _ALLOWED_FEEDBACK_TYPES = {"global", "cluster", "point", "instructional"}
+# The oracle LLM occasionally emits prose instead of the required JSON object;
+# retry with a corrective nudge this many times before giving up (a single
+# malformed reply must not end the session — this is what killed run1 at turn 3).
+_MAX_PARSE_ATTEMPTS = 3
 
 
 @dataclass
@@ -66,10 +70,11 @@ class LLMOracle:
         self.max_turns = max_turns
         self.context = ConversationContext(session_id=session_id)
         # Resolve the oracle's model up front so it's recorded on every turn
-        # even when the persona inherits from env.
-        self._model = persona.model or os.environ.get(
-            "ANTHROPIC_MODEL", "claude-sonnet-4-6"
-        )
+        # even when the persona inherits from env. Use the ACTIVE provider's model
+        # (e.g. OpenRouter's google/gemini-2.5-flash) — defaulting to ANTHROPIC_MODEL
+        # priced the oracle at Claude rates while actually calling Gemini, which made
+        # estimate_cost_usd fall through to $0 (run1 reported cost 0.0).
+        self._model = persona.model or _active_model()
         self._total_usage = {"input_tokens": 0, "output_tokens": 0}
         self._total_cost_usd = 0.0
         self._prompt_name = "llm_oracle"
@@ -106,39 +111,65 @@ class LLMOracle:
         if not messages or messages[0]["role"] != "user":
             messages = [{"role": "user", "content": "Begin the session."}] + messages
 
-        try:
-            response = call_llm(messages, system=system_prompt)
-        except ValueError as exc:
-            # Provider returned no usable text (e.g. OpenRouter finish_reason='length'
-            # with empty content, or a similar empty-output condition). Surface as an
-            # OracleResponseError so the runner records it and moves to the next
-            # persona instead of crashing the whole run.
-            raise OracleResponseError(f"LLM call produced no usable response: {exc}")
-        log_llm_call(
-            session_id=self.session_id,
-            prompt_name=self._prompt_name,
-            prompt_hash=self._prompt_hash,
-            usage=response.usage,
-            cost_usd=estimate_cost_usd(response.usage, self._model),
-        )
+        # Call the oracle LLM, retrying with a corrective nudge when the reply is
+        # not parseable JSON. Every call (including reformat retries) is logged and
+        # its usage accrued, since each one costs tokens. Only the final, valid
+        # reply is added to the dialogue history.
+        base_messages = messages
+        attempt_messages = list(base_messages)
+        oracle_json: Dict[str, Any] | None = None
+        last_response = None
+        last_exc: OracleResponseError | None = None
+        for _attempt in range(_MAX_PARSE_ATTEMPTS):
+            try:
+                response = call_llm(attempt_messages, system=system_prompt)
+            except ValueError as exc:
+                # Provider returned no usable text (e.g. OpenRouter finish_reason=
+                # 'length' with empty content). Surface as OracleResponseError so the
+                # runner records it and moves on instead of crashing the whole run.
+                raise OracleResponseError(f"LLM call produced no usable response: {exc}")
+            last_response = response
+            cost = estimate_cost_usd(response.usage, self._model)
+            log_llm_call(
+                session_id=self.session_id,
+                prompt_name=self._prompt_name,
+                prompt_hash=self._prompt_hash,
+                usage=response.usage,
+                cost_usd=cost,
+            )
+            self._total_usage["input_tokens"] += response.usage.get("input_tokens", 0)
+            self._total_usage["output_tokens"] += response.usage.get("output_tokens", 0)
+            self._total_cost_usd += cost
+            try:
+                oracle_json = self._parse_response(response.text)
+                break
+            except OracleResponseError as exc:
+                last_exc = exc
+                # Re-ask: show the model its unparseable reply and demand JSON only.
+                attempt_messages = base_messages + [
+                    {"role": "assistant", "content": response.text[:800]},
+                    {"role": "user", "content": (
+                        "Your previous reply could not be parsed. Respond with ONLY "
+                        "the JSON object described in the instructions — no prose, no "
+                        "markdown fences, nothing before or after. Begin with '{'."
+                    )},
+                ]
+        if oracle_json is None:
+            assert last_exc is not None  # the loop always runs at least once
+            raise last_exc
 
-        oracle_json = self._parse_response(response.text)
-        cost = estimate_cost_usd(response.usage, self._model)
-        body = self._build_turn_body(oracle_json, view, response.usage, cost)
+        cost = estimate_cost_usd(last_response.usage, self._model)
+        body = self._build_turn_body(oracle_json, view, last_response.usage, cost)
 
-        # Track the oracle's own message in dialogue history so subsequent
+        # Track the oracle's own (valid) message in dialogue history so subsequent
         # turns see what it just said.
         self.context.add_oracle_turn({"raw_text": body["raw_text"]})
-
-        self._total_usage["input_tokens"] += response.usage.get("input_tokens", 0)
-        self._total_usage["output_tokens"] += response.usage.get("output_tokens", 0)
-        self._total_cost_usd += cost
 
         return OracleTurn(
             body=body,
             satisfied=bool(oracle_json.get("satisfied", False)),
             reasoning=str(oracle_json.get("reasoning", "")),
-            usage=response.usage,
+            usage=last_response.usage,
             cost_usd=cost,
             model=self._model,
         )
