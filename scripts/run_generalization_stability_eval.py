@@ -8,13 +8,16 @@ it is "once the oracle is happy, do new data points that arrive into the running
 system keep the clustering coherent?". We answer with three deterministic /
 LLM-assisted signals around an ingestion event:
 
-  1. Reach a converged session. Here we cluster the train split with the real
-     engine (k-means) and treat that snapshot as the converged state. No LLM
-     refinement loop is run (that needs the oracle and is the eval harness's
-     job); the generalization *procedure* — freeze centroids, ingest, re-eval —
-     is identical no matter how convergence was reached. To run against a real
-     oracle-converged session instead, load its snapshot from the DB and pass
-     its centroids to ``ingest_points`` (same call).
+  1. Reach a converged session — REALISTICALLY. We spin up a throwaway in-memory
+     session, cluster the base split with the real engine (GMM, k-means
+     fallback), then drive a full LLM-as-oracle conversation (default persona
+     ``curious_explorer``) through the same engine the live API runs — in-process,
+     no server, demo_database.db untouched. The converged state is therefore
+     oracle-shaped, with real turns and a real A1–B4 eval, not a bare clustering
+     snapshot. The frozen geometry used for generalization is the snapshot at the
+     LAST conversation turn. (Pass ``--no-conversation`` to converge on the bare
+     initial clustering instead, for an A/B comparison.) The throwaway session is
+     closed and discarded at the end.
   2. t0 — pre-ingestion eval: A1 (silhouette) and B2 (cluster coherence) on the
      converged state, plus A4 calibration (per-cluster d²_95 / μ / σ over base
      in-cluster squared distances; temperature-free, frozen for the run).
@@ -76,14 +79,35 @@ from src.engine.generalization import (
     ingest_points,
 )
 from src.engine.initial_clustering import KMEANS_RANDOM_STATE, initial_clustering
+from src.eval.llm_oracle import LLMOracle, OracleResponseError
+from src.eval.oracle_view import build_oracle_view
+from src.eval.persona import load_persona
 from src.harness import DRY_RUN
 from src.models import Base, ChatSession, DataPoint, Dataset, SoftAssignment
+from src.schemas import InputOracle
 
 DATASET_ID = "ds-gen-stability"
 
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 SESSION_ID = "gen-stability-eval"
 BOOTSTRAP_ITERS = 10000
+
+# Default LLM-oracle persona that drives the throwaway session's conversation.
+# curious_explorer exercises real refinement (split + rename, then satisfied),
+# is dataset-agnostic in its goal, and never asks for a semantic re-embed —
+# keeping the converged geometry in the original embedding space so the held-out
+# ingestion stays in the same space. Override with --persona.
+DEFAULT_PERSONA = "personas/curious_explorer.json"
+DEFAULT_MAX_TURNS = 12
+# Transient engine 5xx (e.g. a 502 when the provider returns non-JSON for
+# f_output) are retried this many times before the turn is abandoned. The retry
+# re-rolls the LLM call, which usually succeeds on the second attempt.
+_TURN_RETRIES = 2
+# Shown to the oracle as the system's opening message (mirrors run_persona_eval).
+_INITIAL_SYSTEM_PROMPT = (
+    "Initial clustering is ready. Tell me how you'd like it changed, or "
+    "let me know if it already looks right."
+)
 # Coherence sampling — mirror backend/routers/sessions.py so B2 here matches the
 # live eval endpoint (top-3 most representative + bottom-2 weakest-fitting edge
 # cases; the bottom-2 stress-test the cluster and catch bad new members).
@@ -247,13 +271,28 @@ def _coherence_samples(db, state) -> list[dict]:
 
 
 def _coherence_by_cluster(db, session) -> dict[str, float]:
-    """{cluster_id: coherence} via the B2 judge on the session's latest snapshot."""
+    """{cluster_id: coherence} via the B2 judge on the session's latest snapshot.
+
+    The coherence judge is flaky: a transient provider hiccup makes it return
+    0.0 for every cluster, which a converged clustering essentially never earns
+    genuinely and would corrupt the B2 paired Δ (an all-zero t0 against a real
+    t1 fabricates a huge spurious gain). When every score comes back 0.0 we
+    retry — the same transient-failure guard used elsewhere in this script.
+    """
     state = build_session_state(db, session)
     samples = _coherence_samples(db, state)
     if not samples:
         return {}
-    results = f_eval_coherence(state, samples)
-    return {r["cluster_id"]: float(r["coherence"]) for r in results}
+    scores: dict[str, float] = {}
+    for attempt in range(_TURN_RETRIES + 1):
+        results = f_eval_coherence(state, samples)
+        scores = {r["cluster_id"]: float(r["coherence"]) for r in results}
+        if scores and any(v != 0.0 for v in scores.values()):
+            return scores
+        if attempt < _TURN_RETRIES:
+            print(f"⚠ B2 coherence judge returned all-zeros "
+                  f"(likely a transient failure) — retrying {attempt + 1}/{_TURN_RETRIES}")
+    return scores
 
 
 # ---------------------------------------------------------------------------
@@ -352,6 +391,223 @@ def _report_b2(c0: dict[str, float], c1: dict[str, float]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Throwaway-session conversation (in-process oracle, no live server)
+# ---------------------------------------------------------------------------
+# The converged state must be *realistic* — shaped by an oracle, with turns and
+# an eval — not a bare initial_clustering snapshot. We drive an LLM-as-oracle
+# conversation entirely in-process: the same engine the live API runs, called as
+# plain functions against the in-memory DB. No HTTP server, no demo_database.db.
+def _last_backend(log_path) -> str:
+    """Read the actual clustering backend (gmm | kmeans) from the engine log.
+
+    initial_clustering picks GMM and silently falls back to k-means on
+    convergence failure; the only source of truth for which ran is the log line
+    it just wrote. Returns 'unknown' if the log can't be read.
+    """
+    try:
+        from pathlib import Path
+        lines = Path(log_path).read_text().splitlines()
+        if lines:
+            import json as _json
+            return _json.loads(lines[-1]).get("backend", "unknown")
+    except Exception:
+        pass
+    return "unknown"
+
+
+def _view_in_process(db, session):
+    """Build the oracle's cluster-panel view from the in-memory DB.
+
+    Mirrors run_persona_eval's _fetch_view but reads the DB directly instead of
+    GET /sessions/{sid}/state + /clusters/{cid}/points. Shows up to 3 real
+    member texts per active cluster so the oracle reasons over actual content.
+    """
+    state = build_session_state(db, session).model_dump()
+    cluster_ids = [c["id"] for c in state.get("clusters") or []]
+    cluster_points: dict[str, list[dict]] = {}
+    if cluster_ids:
+        latest_turn = (
+            db.query(func.max(SoftAssignment.turn_number))
+            .filter(SoftAssignment.cluster_id.in_(cluster_ids))
+            .scalar()
+        )
+        if latest_turn is not None:
+            rows = (
+                db.query(SoftAssignment)
+                .filter(
+                    SoftAssignment.cluster_id.in_(cluster_ids),
+                    SoftAssignment.turn_number == latest_turn,
+                )
+                .all()
+            )
+            best: dict[str, tuple[str, float]] = {}
+            for a in rows:
+                cur = best.get(a.data_point_id)
+                if cur is None or a.probability > cur[1]:
+                    best[a.data_point_id] = (a.cluster_id, a.probability)
+            members: dict[str, list[tuple[str, float]]] = {cid: [] for cid in cluster_ids}
+            for pid, (cid, prob) in best.items():
+                members[cid].append((pid, prob))
+            needed: set[str] = set()
+            for cid in members:
+                members[cid].sort(key=lambda it: it[1], reverse=True)
+                for pid, _ in members[cid][:3]:
+                    needed.add(pid)
+            text_by_id = {
+                dp.id: (dp.text or dp.id)
+                for dp in db.query(DataPoint).filter(DataPoint.id.in_(needed)).all()
+            }
+            for cid in cluster_ids:
+                cluster_points[cid] = [
+                    {"id": pid, "data": {"text": text_by_id.get(pid, pid)}}
+                    for pid, _ in members[cid][:3]
+                ]
+    return build_oracle_view(state, cluster_points, n_examples=3)
+
+
+def _run_oracle_conversation(db, session, persona, max_turns: int) -> dict:
+    """Drive the session to convergence with an in-process LLM oracle.
+
+    Returns a record dict: {n_turns, terminated_by, final_turn, oracle_cost_usd,
+    oracle_model, errors}. The session is mutated in place (turns persisted to
+    the in-memory DB). Never raises — provider/engine errors degrade to a
+    termination reason so the generalization assessment can still run.
+    """
+    # Import the engine entry point lazily. Importing backend.main first resolves
+    # the backend.main <-> routers circular import; it also touches the demo DB's
+    # schema (idempotent migration) but never its data or our throwaway session.
+    import backend.main  # noqa: F401  — side effect: makes routers importable
+    from backend.routers.turns import create_turn
+    from fastapi import HTTPException
+
+    oracle = LLMOracle(persona=persona, session_id=session.id, max_turns=max_turns)
+    rec = {
+        "n_turns": 0,
+        "terminated_by": "max_turns",
+        "final_turn": 0,
+        "oracle_cost_usd": 0.0,
+        "oracle_model": oracle.model,
+        "errors": [],
+    }
+    system_display = _INITIAL_SYSTEM_PROMPT
+
+    for turn_idx in range(1, max_turns + 1):
+        view = _view_in_process(db, session)
+        try:
+            oracle.observe_system(system_display)
+            oracle_turn = oracle.next_turn(view, system_display, turn_idx)
+        except OracleResponseError as exc:
+            rec["errors"].append(f"oracle_parse[{turn_idx}] {exc}")
+            rec["terminated_by"] = "oracle_parse_error"
+            break
+
+        # Execute the oracle's turn through the engine. Transient 5xx (e.g. a 502
+        # when the provider returns non-JSON for f_output — a flaky-provider
+        # artifact, not an invalid request) are retried; the retry re-rolls the
+        # LLM call and usually succeeds. 4xx mean the engine rejected the request
+        # as invalid (e.g. a cluster dissolved by an earlier split) → feed the
+        # error back so the oracle corrects course next turn, like a human would.
+        result = None
+        outcome = "ok"  # "ok" | "feedback" | "stop"
+        for attempt in range(_TURN_RETRIES + 1):
+            try:
+                result = create_turn(InputOracle(**oracle_turn.body), db=db)
+                outcome = "ok"
+                break
+            except HTTPException as exc:
+                db.rollback()
+                if exc.status_code and exc.status_code >= 500:
+                    if attempt < _TURN_RETRIES:
+                        rec["errors"].append(
+                            f"turn[{turn_idx}] http={exc.status_code} transient — "
+                            f"retry {attempt + 1}/{_TURN_RETRIES}"
+                        )
+                        continue
+                    rec["errors"].append(
+                        f"turn[{turn_idx}] http={exc.status_code} {exc.detail} (gave up)"
+                    )
+                    rec["terminated_by"] = "engine_error"
+                    outcome = "stop"
+                    break
+                rec["errors"].append(f"turn[{turn_idx}] http={exc.status_code} {exc.detail}")
+                system_display = (
+                    f"That request couldn't be applied ({exc.detail}). The clustering is "
+                    f"unchanged — pick a cluster currently shown and try again."
+                )
+                outcome = "feedback"
+                break
+            except Exception as exc:  # noqa: BLE001 — any other engine failure
+                db.rollback()
+                if attempt < _TURN_RETRIES:
+                    rec["errors"].append(
+                        f"turn[{turn_idx}] {type(exc).__name__} transient — "
+                        f"retry {attempt + 1}/{_TURN_RETRIES}"
+                    )
+                    continue
+                rec["errors"].append(f"turn[{turn_idx}] {type(exc).__name__}: {exc} (gave up)")
+                rec["terminated_by"] = "engine_error"
+                outcome = "stop"
+                break
+
+        if outcome == "feedback":
+            continue
+        if outcome == "stop":
+            break
+
+        rec["n_turns"] = turn_idx
+        rec["final_turn"] = result.turn_number
+
+        so = result.system_output.model_dump() if hasattr(result.system_output, "model_dump") else dict(result.system_output)
+        display = so.get("display") or {}
+        system_display = (display.get("content") if isinstance(display, dict) else str(display)) or ""
+
+        if so.get("action") == "stop":
+            rec["terminated_by"] = "system_stop"
+            break
+        if oracle_turn.satisfied:
+            rec["terminated_by"] = "oracle_satisfied"
+            break
+
+    _, rec["oracle_cost_usd"] = oracle.totals
+    return rec
+
+
+def _session_eval(session_id: str, db):
+    """Run the full A1–B4 session eval in-process (the live endpoint's logic).
+
+    Returns the EvalResponse model, or None on failure. A1's silhouette *trend*
+    is read by the endpoint from the real clustering log, which won't contain our
+    throwaway session — so A1 here may be empty; the meaningful silhouette signal
+    is the generalization A1 reported separately below.
+
+    The B2 coherence judge is flaky: a transient provider hiccup makes it return
+    0.0 for every cluster (which also drags B1 down), indistinguishable in the
+    output from a genuinely incoherent clustering. A real converged clustering
+    is essentially never B2==0.0, so we retry the whole eval when that happens —
+    the same transient-failure guard applied to the conversation's 5xx turns.
+    """
+    import backend.main  # noqa: F401
+    from backend.routers.sessions import eval_session
+    last = None
+    for attempt in range(_TURN_RETRIES + 1):
+        try:
+            ev = eval_session(session_id, force=True, db=db)
+        except Exception as exc:  # noqa: BLE001
+            print(f"⚠ session eval attempt {attempt + 1} failed: {type(exc).__name__}: {exc}")
+            last = None
+            continue
+        last = ev
+        b2 = ev.B2.coherence_mean
+        if b2 not in (None, 0.0):
+            return ev
+        if attempt < _TURN_RETRIES:
+            print(f"⚠ session eval B2 coherence came back {b2} "
+                  f"(likely a transient judge failure) — retrying "
+                  f"{attempt + 1}/{_TURN_RETRIES}")
+    return last
+
+
+# ---------------------------------------------------------------------------
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", default="data/20newsgroups_train.csv",
@@ -365,6 +621,14 @@ def main() -> None:
                         help="cap rows per split (quick smoke runs)")
     parser.add_argument("--b2-every-batch", action="store_true",
                         help="run the B2 judge after every batch, not just t0/final")
+    parser.add_argument("--persona", default=DEFAULT_PERSONA,
+                        help=f"LLM-oracle persona JSON driving the throwaway "
+                             f"session's conversation (default {DEFAULT_PERSONA})")
+    parser.add_argument("--max-turns", type=int, default=DEFAULT_MAX_TURNS,
+                        help=f"hard cap on oracle turns (default {DEFAULT_MAX_TURNS})")
+    parser.add_argument("--no-conversation", action="store_true",
+                        help="skip the oracle conversation and converge on the bare "
+                             "initial clustering (legacy behaviour, for A/B comparison)")
     args = parser.parse_args()
 
     if DRY_RUN:
@@ -388,14 +652,16 @@ def main() -> None:
     base_emb = _embed(base_texts, model)
     new_emb = _embed(new_texts, model)
 
-    # ── Converged session in a throwaway in-memory DB ────────────────────────
+    # ── Throwaway in-memory session (no live server, demo_database.db untouched) ─
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False},
                            poolclass=StaticPool)
     Base.metadata.create_all(bind=engine)
     db = sessionmaker(bind=engine, autoflush=False, autocommit=False)()
     db.add(Dataset(id=DATASET_ID, name="generalization", description=""))
+    # Start ACTIVE: the engine refuses turns on a converged/closed session, and we
+    # want a real oracle conversation to drive it to convergence.
     session = ChatSession(id=SESSION_ID, dataset_id=DATASET_ID,
-                          embedding_model=EMBEDDING_MODEL, status="converged")
+                          embedding_model=EMBEDDING_MODEL, status="active")
     db.add(session)
 
     base_points = []
@@ -414,12 +680,69 @@ def main() -> None:
     for a in assignments:
         db.add(a)
     db.commit()
-    print(f"\nConverged: {len(base_points)} points → k={args.k} "
-          f"(k-means, seed={KMEANS_RANDOM_STATE}, fit silhouette={sil:.4f}).")
+    backend = _last_backend(logger._clustering_log_path)
+    print(f"\nInitial clustering: {len(base_points)} points → k={args.k} "
+          f"(backend={backend}, seed={KMEANS_RANDOM_STATE}, fit silhouette={sil:.4f}).")
 
-    # Freeze the convergence GMM parameters ONCE.
-    snap0 = _snapshot_at(db, 0)
-    emb0 = {f"base-{i}": e for i, e in enumerate(base_emb)}
+    # ── Drive the throwaway session to convergence with an LLM oracle ─────────
+    converged_turn = 0
+    if args.no_conversation:
+        print("\n--no-conversation: converging on the bare initial clustering "
+              "(legacy behaviour).")
+        session.status = "converged"
+        db.commit()
+    else:
+        persona = load_persona(args.persona)
+        print(f"\nDriving a throwaway conversation with persona "
+              f"'{persona.name}' (max {args.max_turns} turns)…")
+        if DRY_RUN:
+            print("  ⚠ HARNESS_DRY_RUN=true — the oracle's replies are MOCKED; the "
+                  "conversation is not meaningful. Run without dry-run for a real session.")
+        convo = _run_oracle_conversation(db, session, persona, args.max_turns)
+        # The converged snapshot is the LATEST turn that actually wrote soft
+        # assignments — NOT necessarily the last conversation turn. A turn with no
+        # operations (e.g. the oracle just acknowledging) advances the turn number
+        # but writes no new snapshot, so its turn has no rows to freeze from.
+        converged_turn = (
+            db.query(func.max(SoftAssignment.turn_number)).scalar() or 0
+        )
+        # Mark converged so the session eval + reporting read it as a finished run.
+        session.status = "converged"
+        db.commit()
+        print(f"  conversation done: {convo['n_turns']} turns, "
+              f"terminated_by={convo['terminated_by']}, "
+              f"oracle_cost=${convo['oracle_cost_usd']:.4f}, "
+              f"errors={len(convo['errors'])}  (converged snapshot at turn {converged_turn})")
+        for e in convo["errors"][:5]:
+            print(f"    · {e}")
+
+    # ── Session eval (A1–B4) on the converged state ──────────────────────────
+    ev = _session_eval(SESSION_ID, db)
+    if ev is not None:
+        print("\nSESSION EVAL (the converged throwaway session)")
+        print(f"    k_final: {ev.k_final}")
+        print(f"    A2 turns to convergence: {ev.A2.turns}  "
+              f"(weighted {ev.A2.weighted_turns}, termination={ev.A2.termination})")
+        print(f"    A3 mean cognitive load:  {ev.A3.mean_cognitive_load}")
+        print(f"    B1 overall: {ev.B1.overall_score:.3f}   "
+              f"B2 coherence mean: {ev.B2.coherence_mean}   "
+              f"B3 compliance: {ev.B3.compliance_score:.3f}   "
+              f"B4 contradiction: {ev.B4.contradiction_score:.3f}")
+
+    print("\n" + "─" * 70)
+    print("GENERALIZATION ASSESSMENT — does this converged state hold as new data arrives?")
+    print("─" * 70)
+
+    # Freeze the convergence GMM parameters ONCE, from the CONVERGED snapshot
+    # (the latest snapshot turn the conversation produced, not the bare initial
+    # clustering at turn 0). Embeddings are read from the whole dataset (a single
+    # in-memory dataset) to avoid a 1000+-element SQL IN clause.
+    snap0 = _snapshot_at(db, converged_turn)
+    emb0 = {
+        dp.id: dp.embedding
+        for dp in db.query(DataPoint).filter(DataPoint.dataset_id == DATASET_ID).all()
+        if dp.embedding is not None and dp.id in snap0
+    }
     centroid_ids, centroids, diag_vars, log_weights = gmm_params_from_snapshot(emb0, snap0)
 
     # A4 calibration: per-cluster Mahalanobis-d² reference built ONCE from the
@@ -448,7 +771,7 @@ def main() -> None:
     batches = np.array_split(np.arange(len(new_emb)), max(1, args.batches))
     drift: list[tuple[int, float, int, float]] = []  # (turn, mean_sil, n, ood_rate)
     a4_batches: list[tuple[list[str], dict]] = []
-    last_turn = 0
+    last_turn = converged_turn
     for b, idx in enumerate(batches):
         if len(idx) == 0:
             continue
@@ -523,6 +846,14 @@ def main() -> None:
           "converged structure.")
     print("=" * 70)
 
+    # ── Close the throwaway session ──────────────────────────────────────────
+    # The in-memory DB is discarded on close — the session, its turns, clusters
+    # and the ingested points vanish with it. Nothing was ever written to
+    # demo_database.db.
+    session.status = "closed"
+    db.commit()
+    print(f"\nThrowaway session '{SESSION_ID}' closed and discarded "
+          f"(in-memory DB — demo_database.db was never touched).")
     db.close()
 
 

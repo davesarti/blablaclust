@@ -81,6 +81,69 @@ centralised in one file to make it easy to run a sweep: vary the caps, re-run th
 suite, and measure the effect on A2 (turns to convergence) and B-metrics (clustering
 quality) to find better-calibrated values.
 
+### Generalization stability eval
+
+Answers the brief's *generalization* question — **once the oracle is happy, do new data
+points that arrive keep the clustering coherent?** — on a *realistic* converged state.
+
+The script (`scripts/run_generalization_stability_eval.py`) runs end-to-end in a single
+terminal, **no server required** and **without touching `demo_database.db`**:
+
+1. Spins up a **throwaway in-memory session** and clusters the `--base` split (GMM, with
+   k-means fallback).
+2. Drives a full **LLM-as-oracle conversation** (default persona `curious_explorer`)
+   through the real engine, in-process, until the oracle is satisfied — so the converged
+   state is oracle-shaped, with real turns and a real A1–B4 eval, not a bare clustering.
+3. **Ingests the `--new` split** as a stream of new arrivals, assigning each against the
+   *frozen* convergence geometry, and reports paired Δ + bootstrap 95% CIs on **A1**
+   (silhouette) and **B2** (coherence), plus the **A4** Mahalanobis OOD rate.
+4. **Closes and discards** the throwaway session (the in-memory DB vanishes on exit).
+
+> Labels are out of scope — the script reads only `title,text` from every CSV. Generalization
+> is consistency under growth, not accuracy against a hidden category.
+
+```bash
+# Real LLM judges/oracle require a non-dry-run provider (set in .env).
+# 20 Newsgroups (k=6)
+PYTHONPATH=. python scripts/run_generalization_stability_eval.py \
+    --base data/20newsgroups_train.csv --new data/20newsgroups_frozen.csv --k 6
+
+# Amazon reviews (k=4)
+PYTHONPATH=. python scripts/run_generalization_stability_eval.py \
+    --base data/train.csv --new data/frozen_eval.csv --k 4
+
+# IMDB reviews (k=4)
+PYTHONPATH=. python scripts/run_generalization_stability_eval.py \
+    --base data/imdb_train.csv --new data/imdb_frozen.csv --k 4
+```
+
+Useful flags:
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--k` | `6` | Number of clusters for the initial clustering. |
+| `--persona` | `personas/curious_explorer.json` | LLM oracle that drives the throwaway conversation. |
+| `--max-turns` | `12` | Hard cap on oracle turns. |
+| `--batches N` | `1` | Split the new arrivals into N successive ingestions to trace a drift curve. |
+| `--limit N` | none | Cap rows per split for a quick smoke run. |
+| `--no-conversation` | off | Skip the oracle conversation and converge on the bare initial clustering (legacy A/B baseline). |
+
+```bash
+# Quick smoke run (small slice, short conversation)
+PYTHONPATH=. python scripts/run_generalization_stability_eval.py \
+    --base data/train.csv --new data/frozen_eval.csv --k 4 --limit 120 --max-turns 5
+
+# Drift curve over 4 successive ingestion batches
+PYTHONPATH=. python scripts/run_generalization_stability_eval.py \
+    --base data/train.csv --new data/frozen_eval.csv --k 4 --batches 4
+```
+
+**Reading the report:** generalization *holds* when A1's paired Δ CI spans 0 (or is
+positive), A4's OOD rate stays near its ~5% baseline, and B2 does not drop. A decline on
+any of these means the new data is breaking the converged structure. With
+`HARNESS_DRY_RUN=true` the LLM judges/oracle are mocked (B2 collapses to 0.0 and the
+conversation is not meaningful) — use it only to smoke-test the plumbing.
+
 ## Project structure
 
 ```
