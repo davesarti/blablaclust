@@ -18,7 +18,7 @@ from src.engine.cognitive_load_caps import (
     TOKEN_BUDGET,
 )
 from src.harness import ConversationContext
-from src.harness_claude import count_tokens
+from src.harness.harness_claude import count_tokens
 from src.schemas import ChatSessionState, CognitiveLoad
 
 # When multiple signals tie at the composite max, this priority decides the
