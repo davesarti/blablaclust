@@ -64,17 +64,3 @@ Quantitative tests on design alternatives that informed implementation decisions
 | Document | Superseded by |
 |---|---|
 | [semantic-reembed-proposal.md](semantic-reembed-proposal.md) | [semantic-reembed-report.md](semantic-reembed-report.md) |
-
----
-
-## Sprint notes
-
-Per-person sprint notes are in [`notes/`](../notes/). P5 notes:
-
-| Sprint | Highlights |
-|---|---|
-| [sprint-1-p5.md](../notes/p5/sprint-1-p5.md) | Logger (`src/logger.py`), CLI (`scripts/cli.py`) |
-| [sprint-2-p5.md](../notes/p5/sprint-2-p5.md) | HTML UI prototype (`ui/index.html`), serve script |
-| [sprint-3-p5.md](../notes/p5/sprint-3-p5.md) | `log_clustering_run`, UI enhancements, palette redesign |
-| [sprint-4-p5.md](../notes/p5/sprint-4-p5.md) | Semantic reembedding feature + fixes + Ridge vs NN experiment |
-| [sprint-5-p5.md](../notes/p5/sprint-5-p5.md) | Eval harness (LLM-as-oracle, personas, scenarios), literature review, embedding experiments |
