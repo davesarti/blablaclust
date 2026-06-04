@@ -1,371 +1,344 @@
 # Evaluation Methodology — Literature Review & Analysis
 
 *BlaBlaClust · Conversational Clustering System*
-*Report preparato per la presentazione finale del corso AI Design*
+*Report for the final presentation of the AI Design course*
 
 ---
 
 ## Executive Summary
 
-La metodologia di evaluation di BlaBlaClust non ha un precedente diretto in letteratura perché combina tre problemi separati — valutare il clustering senza ground truth, valutare la qualità del dialogo, e valutare la fedeltà di un sistema interattivo guidato da preferenze soggettive — in un framework unico. Ogni singola scelta metodologica ha una base nella letteratura; la loro combinazione è contributo originale.
+BlaBlaClust's evaluation methodology has no direct precedent in the literature because it combines three separate problems — evaluating clustering without ground truth, evaluating dialogue quality, and evaluating the faithfulness of an interactive system driven by subjective preferences — into a single framework. Every individual methodological choice has a basis in the literature; their combination is an original contribution.
 
-Il punto più innovativo è il meccanismo **B4 → B1** (oracle contradiction come "contesto di perdono" per il verdict sintetico): esiste un precedente teorico in NLP (valutazione condizionata alla difficoltà dell'input), ma nessun precedente nell'evaluation di sistemi di clustering conversazionale.
+The most innovative element is the **B4 → B1** mechanism (oracle contradiction as "forgiveness context" for the synthetic verdict): a theoretical precedent exists in NLP (evaluation conditioned on input difficulty), but no precedent exists in the evaluation of conversational clustering systems.
 
 ---
 
-## 1. Il Problema di Base: perché ARI e NMI non bastano
+## 1. The Core Problem: Why ARI and NMI Are Not Enough
 
-### Cosa sono ARI e NMI
+### What ARI and NMI Are
 
-**Adjusted Rand Index (ARI)** e **Normalized Mutual Information (NMI)** sono le metriche standard per valutare la qualità di un clustering *quando esiste una partizione di riferimento* (ground truth). Entrambe misurano quanto il clustering prodotto si avvicina alla classificazione "vera".
+**Adjusted Rand Index (ARI)** and **Normalized Mutual Information (NMI)** are the standard metrics for evaluating clustering quality *when a reference partition exists* (ground truth). Both measure how closely the produced clustering matches the "true" classification.
 
-Formalmente, ARI corregge l'Rand Index per il caso casuale:
+Formally, ARI corrects the Rand Index for the random case:
 
 ```
 ARI = (RI - E[RI]) / (max(RI) - E[RI])
 ```
 
-NMI normalizza la mutual information tra la partizione ottenuta e quella di riferimento.
+NMI normalizes the mutual information between the obtained partition and the reference one.
 
-### Perché BlaBlaClust le esclude
+### Why BlaBlaClust Excludes Them
 
-**La scelta di non usare ARI/NMI è metodologicamente corretta e ha una motivazione empirica forte.**
+**The decision not to use ARI/NMI is methodologically sound and has strong empirical motivation.**
 
-Su Amazon Reviews, k-means con k=2 produce due cluster separati per topic (elettronica vs abbigliamento), non per sentiment. Se il ground truth fosse "positivo / negativo", ARI e NMI darebbero punteggi vicini a zero — ma il clustering non è sbagliato, è semplicemente orientato su un asse diverso da quello dell'analista. L'errore non è del sistema: è del presupposto che esista una risposta "giusta".
+On Amazon Reviews, k-means with k=2 produces two clusters separated by topic (electronics vs. clothing), not by sentiment. If the ground truth were "positive / negative", ARI and NMI would return near-zero scores — yet the clustering is not wrong; it is simply oriented along a different axis than what the analyst wants. The problem is not the system's: it is the assumption that a "correct" answer exists at all.
 
-Il fatto che **l'oracle sia l'unico obiettivo** è un'assunzione centrale e non banale. In letteratura, questa posizione è esplicita nella review di Bontempelli et al. (2020):
+The fact that **the oracle is the sole objective** is a central and non-trivial assumption. In the literature, this position is stated explicitly in Bontempelli et al. (2020):
 
 > *"The quality of an interactive clustering solution must be assessed in terms of its alignment with the expert's intent, not in terms of its distance from a predefined ground truth partition."*
 
-Questo è esattamente il fondamento di BlaBlaClust.
+This is precisely the foundation of BlaBlaClust.
 
 ---
 
-## 2. Family A — Metriche Matematiche
+## 2. Family A — Mathematical Metrics
 
 ### A1 — Silhouette Score
 
-**Come funziona**
+**How it works**
 
-Il silhouette score di un punto `i` è definito come:
+The silhouette score of a point `i` is defined as:
 
 ```
 s(i) = (b(i) - a(i)) / max(a(i), b(i))
 ```
 
-dove `a(i)` è la distanza media di `i` da tutti gli altri punti del proprio cluster (coesione intra-cluster), e `b(i)` è la distanza media di `i` dal cluster più vicino diverso dal proprio (separazione inter-cluster). Il valore è in `[-1, 1]`: +1 indica un punto ben assegnato, 0 indica un punto sul confine tra due cluster, -1 indica un punto probabilmente assegnato al cluster sbagliato.
+where `a(i)` is the mean distance from `i` to all other points in its own cluster (intra-cluster cohesion), and `b(i)` is the mean distance from `i` to the nearest different cluster (inter-cluster separation). The value lies in `[-1, 1]`: +1 indicates a well-assigned point, 0 indicates a point on the boundary between two clusters, and -1 indicates a likely misassigned point.
 
-**Riferimento in letteratura**
+**Literature reference**
 
-> Rousseeuw, P.J. — *"Silhouettes: A Graphical Aid to the Interpretation and Validation of Cluster Analysis"* — Journal of Computational and Applied Mathematics, Vol. 20, pp. 53–65, 1987. (>18.700 citazioni)
+> Rousseeuw, P.J. — *"Silhouettes: A Graphical Aid to the Interpretation and Validation of Cluster Analysis"* — Journal of Computational and Applied Mathematics, Vol. 20, pp. 53–65, 1987. (>18,700 citations)
 
-È la metrica fondante dell'evaluation di clustering senza ground truth. Un'analisi comparativa di 30 indici interni (Arbelaitz et al., 2013, Pattern Recognition) la conferma tra le più affidabili su cluster convessi.
+This is the foundational metric for ground-truth-free clustering evaluation.
 
-**Come BlaBlaClust la usa**
+**How BlaBlaClust uses it**
 
-A1 è classificata come **"secondary diagnostic, never optimized against"**. Il motivo è esplicito: l'oracle può legittimamente volere un clustering a bassa silhouette (es. "angry tone" vs "satisfied tone" su Amazon — stesso topic, asse diverso). Un sistema che aumenta il silhouette ma ignora le preferenze oracle è un fallimento, non un successo.
+A1 is classified as a **"secondary diagnostic, never optimized against"**. The reason is explicit: the oracle may legitimately want a low-silhouette clustering (e.g. "angry tone" vs "satisfied tone" on Amazon — same topic, different axis). A system that increases silhouette while ignoring oracle preferences is a failure, not a success.
 
-Questo è un punto metodologico sofisticato: A1 viene **riportata** ma non viene **minimizzata come loss**. Viene usata per misurare la qualità geometrica del clustering iniziale e per il test di generalizzazione (variazione di A1 prima/dopo ingestione di nuovi punti).
+This is a methodologically nuanced choice: A1 is **reported** but never **used as a loss**. It is used to measure the geometric quality of the initial clustering and for the generalization test (measuring how A1 changes before and after ingesting new points).
 
-**Limitazione nota**
+**Known limitation**
 
-La silhouette è sensibile alla dimensionalità degli embedding (MiniLM produce vettori a 384 dimensioni — il "curse of dimensionality" riduce la discriminabilità delle distanze euclidee). I valori bassi osservati (0.03–0.06 su Amazon senza asse semantico) sono attesi per embedding ad alta dimensione su dati testuali eterogenei.
+Silhouette is sensitive to embedding dimensionality (MiniLM produces 384-dimensional vectors — the curse of dimensionality reduces the discriminability of Euclidean distances). The low values observed (0.03–0.06 on Amazon without a semantic axis) are expected for high-dimensional embeddings on heterogeneous text data.
 
 ---
 
 ### A2 — Turns to Convergence (Weighted)
 
-**Come funziona**
+**How it works**
 
-A2 conta il numero di turni oracle fino alla terminazione della sessione, pesando ogni feedback per il suo "peso semantico":
+A2 counts the number of oracle turns until session termination, weighting each feedback turn by its "semantic weight":
 
-| Tipo di feedback | Peso |
+| Feedback type | Weight |
 |---|---|
-| `global` (riformulazione dell'intero clustering) | 2.0 |
-| `cluster` (operazione su uno o più cluster) | 1.0 |
-| `point` (spostamento di un punto singolo) | 0.5 |
-| `instructional` (commento senza azione) | 0.0 |
+| `global` (full clustering reformulation) | 2.0 |
+| `cluster` (operation on one or more clusters) | 1.0 |
+| `point` (moving a single data point) | 0.5 |
+| `instructional` (comment without action) | 0.0 |
 
-La terminazione ha due codici: `converged` (successo — il Planner non ha più suggerimenti) e `cognitive_overload` (fallimento — A3 ha raggiunto il cap di 5). Solo le sessioni `converged` entrano nel calcolo della distribuzione "turns to convergence"; le `cognitive_overload` vengono riportate separatamente come tasso di fallimento.
+Termination has two codes: `converged` (success — the Planner has no further suggestions) and `cognitive_overload` (failure — A3 has hit the cap of 5). Only `converged` sessions enter the turns-to-convergence distribution; `cognitive_overload` sessions are reported separately as a failure rate.
 
-**Analogia principale in letteratura**
+**Primary literature analogy**
 
 > Walker, M.A., Litman, D.J., Kamm, C.A., Abella, A. — *"PARADISE: A Framework for Evaluating Spoken Dialogue Agents"* — ACL 1997
 
-PARADISE è il framework fondante per l'evaluation di sistemi dialogici task-oriented. Definisce la performance come:
+PARADISE is the foundational framework for evaluating task-oriented dialogue systems. It defines performance as:
 
 ```
 performance = α * task_success - Σ βi * cost_i
 ```
 
-dove i `cost_i` includono il numero di turni, il numero di parole usate, e il numero di query all'utente. BlaBlaClust adotta lo stesso principio (efficienza = meno turni pesati per raggiungere convergenza) e lo estende con il weighting differenziato per tipo di feedback. Questo weighting non ha precedente diretto in PARADISE né nelle sue evoluzioni.
+where `cost_i` includes turn count, word count, and number of user queries. BlaBlaClust adopts the same principle (efficiency = fewer weighted turns to reach convergence) and extends it with differentiated weighting by feedback type. This weighting has no direct precedent in PARADISE or its successors.
 
-**Analogia secondaria**
+**Originality**
 
-> Deriu, J., et al. — *"Survey on Evaluation Methods for Dialogue Systems"* — Artificial Intelligence Review, 2021
-
-Questa survey sistematica classifica A2 esattamente nella categoria "objective task-based metric from logs" — la categoria più affidabile per sistemi task-oriented, perché non richiede soggetti umani e non è soggetta a bias di risposta.
-
-**Originalità**
-
-Il weighting differenziato (`global` pesa 4× rispetto a `point`) non ha un precedente diretto nella letteratura di evaluation dialogica. È motivato dalla seguente intuizione: un feedback globale ("I want to completely reorganize the clusters") richiede una risposta molto più complessa di "move this point to cluster B" e quindi pesa di più nella misura dell'effort cognitivo oracle. Questa è un'assunzione che dovrebbe essere validata empiricamente (human study).
+The differentiated weighting (`global` weighs 4× more than `point`) has no direct precedent in dialogue evaluation literature. The motivation is: a global feedback turn ("I want to completely reorganize the clusters") requires a far more complex system response than "move this point to cluster B", and therefore carries more weight in measuring oracle cognitive effort. This is an assumption that should be validated empirically in a human study.
 
 ---
 
 ### A3 — Cognitive Load Score
 
-**Come funziona**
+**How it works**
 
-A3 è un proxy deterministico del carico cognitivo del sistema (non dell'utente umano). Viene calcolato come:
+A3 is a deterministic proxy of the system's cognitive load (not the human user's). It is computed as:
 
 ```
 score = max(
-  round(turns / 20 * 5),            # cap a 5 dopo 20 turni
-  round(tokens_pre_trim / 8000 * 5), # cap a 5 dopo 8k token
-  round(active_clusters / 10 * 5)   # cap a 5 dopo 10 cluster
+  round(turns / 20 * 5),             # caps at 5 after 20 turns
+  round(tokens_pre_trim / 8000 * 5), # caps at 5 after 8k tokens
+  round(active_clusters / 10 * 5)    # caps at 5 after 10 clusters
 )
 ```
 
-Il valore risultante è in `[1, 5]`. Il Planner ferma la sessione quando score = 5 (terminazione `cognitive_overload`). Il campo `cognitive_load_driver` registra quale dei tre segnali ha saturato per primo.
+The resulting value is in `[1, 5]`. The Planner halts the session when score = 5 (termination code `cognitive_overload`). The `cognitive_load_driver` field records which of the three signals saturated first.
 
-**Riferimento teorico in letteratura**
+**Theoretical reference**
 
-> Hart, S.G., Staveland, L.E. — *"Development of NASA-TLX (Task Load Index)"* — Human Mental Workload (Hancock & Meshkati, eds.), Elsevier, 1988
+> Hart, S.G., Staveland, L.E. — *"Development of NASA-TLX (Task Load Index): Results of Empirical and Theoretical Research"* — Human Mental Workload (Hancock & Meshkati, eds.), Elsevier, 1988
 
-Il NASA Task Load Index è la misura standard del workload cognitivo in HCI. È un questionario a sei sottoscale (mental demand, physical demand, temporal demand, performance, effort, frustration) compilato dall'utente dopo un task. A3 è concettualmente ispirato a NASA-TLX ma operazionalizzato in modo **deterministico da segnali osservabili** invece che da auto-report dell'utente.
+The NASA Task Load Index is the standard measure of cognitive workload in HCI. It is a six-subscale questionnaire (mental demand, physical demand, temporal demand, performance, effort, frustration) completed by the user after a task. A3 is conceptually inspired by NASA-TLX but operationalized **deterministically from observable signals** rather than from user self-report.
 
-Questa è una scelta necessaria ma che introduce una limitazione: A3 misura il **carico cognitivo del sistema** (quanto la conversazione sta diventando pesante per l'LLM), non il **carico cognitivo dell'utente umano** (quanto l'interfaccia sia stancante da usare). La distinzione è esplicitata nella quality spec del progetto.
+This introduces a necessary but important limitation: A3 measures the **system's cognitive load** (how heavy the conversation is becoming for the LLM), not the **human user's cognitive load** (how tiring the interface is to use). This distinction is made explicit in the project's quality spec.
 
-**Supporto empirico per i proxy scelti**
+**Originality**
 
-> Schmidhuber, J., Schlögl — *"Cognitive Load and Productivity Implications in Human-Chatbot Interaction"* — arXiv:2111.01400, 2021
-
-Studia il carico cognitivo in interazioni con chatbot per task complessi. Trova che il carico aumenta con il numero di turni e la complessità del contesto — i due segnali principali di A3 (turn count e token size). Questo supporta empiricamente la scelta dei proxy anche se non li valida formalmente.
-
-**Originalità**
-
-La formalizzazione di un cognitive load score deterministico per un sistema di clustering conversazionale non ha precedenti diretti in letteratura. Il lavoro più vicino usa NASA-TLX su soggetti umani; A3 produce invece un segnale automatico per la pipeline di evaluation automatizzata.
+Formalizing a deterministic cognitive load score for a conversational clustering system has no direct precedent in the literature. The closest work uses NASA-TLX with human subjects; A3 instead produces an automatic signal for the automated evaluation pipeline.
 
 ---
 
 ## 3. Family B — LLM-as-Judge
 
-La Family B usa LLM separati come giudici. Tutti i giudici sono **out-of-band**: non partecipano mai al loop conversazionale live, evitando che il sistema si auto-valuti.
+Family B uses separate LLMs as judges. All judges are **out-of-band**: they never participate in the live conversational loop, preventing the system from grading itself.
 
-### Fondamenti: LLM-as-Judge in letteratura
+### Foundations: LLM-as-Judge in the Literature
 
-Il paradigma di usare un LLM come giudice al posto di valutatori umani è emerso nel 2023 e ha rapidamente dominato il campo dell'evaluation NLP.
+The paradigm of using an LLM as a judge in place of human raters emerged in 2023 and has rapidly come to dominate the NLP evaluation landscape.
 
 > Zheng, L., et al. — *"Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena"* — NeurIPS 2023 (Datasets and Benchmarks)
 > arXiv: 2306.05685
 
-MT-Bench e Chatbot Arena dimostrano che GPT-4 come giudice raggiunge oltre l'80% di concordanza con giudizi umani su task di conversazione multi-turno. Identificano tre bias sistemici che qualsiasi implementazione di LLM-as-judge deve considerare:
+MT-Bench and Chatbot Arena demonstrate that GPT-4 as a judge achieves over 80% agreement with human judgments on multi-turn conversation tasks. They identify three systematic biases that any LLM-as-judge implementation must account for:
 
-1. **Position bias**: il giudice tende a preferire la risposta presentata per prima (se il task è comparativo)
-2. **Verbosity bias**: risposte più lunghe vengono preferite indipendentemente dalla qualità
-3. **Self-enhancement bias**: un LLM preferisce le proprie risposte quando è esso stesso il giudice
+1. **Position bias**: the judge tends to prefer the response presented first (in comparative tasks)
+2. **Verbosity bias**: longer responses are preferred regardless of quality
+3. **Self-enhancement bias**: an LLM tends to prefer its own responses when it is the judge
 
-BlaBlaClust non fa scoring comparativo (non confronta due sessioni l'una con l'altra), quindi il position bias non si applica direttamente. Il verbosity bias è rilevante per B2 (cluster coherence): un giudice che riceve descrizioni verbose potrebbe over-score cluster ben descritti. Il self-enhancement bias è mitigato dal fatto che il giudice è un modello separato dalla sessione live (es. Gemini come giudice su sessioni condotte con Claude).
+BlaBlaClust does not perform comparative scoring (it does not rank two sessions against each other), so position bias does not apply directly. Verbosity bias is relevant for B2 (cluster coherence): a judge receiving verbose cluster descriptions may over-score well-described but poorly-formed clusters. Self-enhancement bias is mitigated by using a different model as judge than the one driving the live session (e.g. Gemini as judge on sessions conducted with Claude).
 
 ---
 
 ### B2 — Cluster Coherence
 
-**Come funziona**
+**How it works**
 
-Il giudice B2 riceve i top-3 e i bottom-2 membri di ogni cluster (per testo) e assegna un punteggio di coerenza tematica in `[0, 1]`. I bottom-2 hanno un ruolo esplicito: testare i "confini" del cluster, non solo il suo centro.
+The B2 judge receives the top-3 and bottom-2 members (by text) of each cluster and assigns a thematic coherence score in `[0, 1]`. The bottom-2 serve an explicit role: stress-testing the cluster's boundaries, not just its centre.
 
-Vengono riportati:
-- `coherence_mean`: media dei punteggi su tutti i cluster
-- `coherence_min`: punteggio del cluster peggiore (un singolo cluster mal formato abbassa l'intera sessione)
+Reported aggregates:
+- `coherence_mean`: average score across all clusters
+- `coherence_min`: score of the worst-performing cluster (a single malformed cluster penalizes the entire session)
 
-**Analogia in letteratura**
+**Literature analogy**
 
 > Liu, Y., et al. — *"G-Eval: NLG Evaluation using GPT-4 with Better Human Alignment"* — EMNLP 2023
 > ACL Anthology: 2023.emnlp-main.153
 
-G-Eval è il framework metodologico più diretto. Propone di usare GPT-4 con chain-of-thought per valutare output NLG (summarization, dialogue, data-to-text) su dimensioni come coerenza, fedeltà, fluenza. La correlazione Spearman con giudici umani è 0.514 sulla summarization (superiore a metriche automatiche come BERTScore). B2 adotta lo stesso approccio: il giudice "ragiona" sulla coerenza prima di assegnare il punteggio.
+G-Eval is the closest methodological precedent. It proposes using GPT-4 with chain-of-thought to evaluate NLG outputs (summarization, dialogue, data-to-text) on dimensions such as coherence, faithfulness, and fluency. The Spearman correlation with human judges is 0.514 on summarization — higher than automatic metrics such as BERTScore. B2 adopts the same approach: the judge explicitly reasons about coherence before assigning a score.
 
-**La scelta bottom-2**
+**The bottom-2 design choice**
 
-La scelta di includere i bottom-2 (i punti più lontani dal centroide del cluster) non ha un precedente esplicito in G-Eval, ma è ispirata ai metodi di **stress testing** nei benchmark NLP: invece di mostrare solo esempi rappresentativi, si mostra anche il "caso peggiore" per verificare i confini del costrutto. Questo è un contributo metodologico originale di BlaBlaClust.
+Including the bottom-2 members (the points farthest from the cluster centroid) has no explicit precedent in G-Eval, but draws from **stress-testing** methods in NLP benchmarks: rather than showing only representative examples, the worst-case members are included to probe the construct's boundaries. This is an original methodological contribution of BlaBlaClust.
 
-**Limitazione**
+**Limitation**
 
-B2 è non-deterministico: due run consecutive con lo stesso giudice sullo stesso dataset hanno prodotto Δ con segno opposto (sprint 4 p2, §10). Questo non è un bug — è la varianza intrinseca dell'LLM come giudice. La conclusione corretta è riportare il CI (che attraversa 0) piuttosto che il point estimate.
+B2 is non-deterministic: two consecutive runs with the same judge on the same dataset have produced Δ values with opposite signs (sprint 4 p2, §10). This is not a bug — it is the intrinsic variance of the LLM as a judge. The correct conclusion is to report a CI (which spans zero) rather than a point estimate.
 
 ---
 
 ### B3 — Oracle Compliance
 
-**Come funziona**
+**How it works**
 
-Il giudice B3 riceve l'elenco dei turni oracle (con le richieste in linguaggio naturale) e le operazioni effettivamente eseguite dal sistema, e valuta la fedeltà della traduzione richiesta → operazione in `[0, 1]`.
+The B3 judge receives the list of oracle turns (with natural-language requests) and the operations actually executed by the system, and scores the fidelity of the request → operation translation in `[0, 1]`.
 
-**Analogia in letteratura**
+**Literature analogy**
 
-B3 è concettualmente analogo alle metriche di **faithfulness/grounding** in NLP, che misurano quanto le informazioni nell'output siano supportate dall'input. In translation e summarization, questo è comunemente chiamato **factual consistency** o **source faithfulness**.
+B3 is conceptually analogous to **faithfulness / grounding** metrics in NLP, which measure how well the information in an output is supported by its input. In translation and summarization, this is commonly referred to as **factual consistency** or **source faithfulness**.
 
-Il paper più diretto è:
+The most directly relevant work is:
 
 > Malaviya, C., et al. — *"Contextualized Evaluations: Judging LLM Responses to Underspecified Queries"* — TACL 2025
 > ACL Anthology: 2025.tacl-1.41
 
-Questo lavoro dimostra che fornire **contesto** al giudice LLM migliora la concordanza con i giudici umani del 3–10%. Nel contesto di B3, il "contesto" rilevante è lo stato del clustering al momento della richiesta oracle — l'operazione corretta dipende da ciò che il sistema "sa" in quel momento. BlaBlaClust passa questo contesto al giudice in modo esplicito.
+This work demonstrates that providing **context** to the LLM judge improves agreement with human judges by 3–10%. In the context of B3, the relevant context is the state of the clustering at the moment of the oracle's request — the correct operation depends on what the system "knows" at that point. BlaBlaClust passes this context to the judge explicitly.
 
-**Limitazione nota (caveat esplicito nella quality spec)**
+**Known limitation (explicit caveat in the quality spec)**
 
-B3 riceve i `target_cluster_ids` forniti dall'oracle. In sessioni dove l'oracle non specifica ID espliciti (es. `contradictory_oracle.json`), il punteggio di matching operazione-target è 0 anche quando l'intent testuale era chiaro. In questi casi, B3 misura **robustezza del sistema a istruzioni ambigue**, non fedeltà. Questo caveat è documentato nel quality spec e deve essere riportato nel paper.
+B3 receives the `target_cluster_ids` provided by the oracle. In sessions where the oracle does not specify explicit IDs (e.g. `contradictory_oracle.json`), the operation-target matching score is 0 even when the textual intent was clear. In those cases, B3 measures the **system's robustness to ambiguous instructions**, not its faithfulness. This caveat is documented in the quality spec and must be reported in the paper.
 
 ---
 
 ### B4 — Oracle Contradiction
 
-**Come funziona**
+**How it works**
 
-Il giudice B4 analizza l'intera storia di feedback oracle e valuta quanto fosse difficile per il sistema interpretare correttamente le istruzioni. Valuta: auto-contraddizioni, drift nei criteri di giudizio, target vaghi, ambiguità. Il punteggio è in `[0, 1]` dove valori più alti indicano un oracle più difficile (più contraddittorio).
+The B4 judge analyses the full oracle feedback history and scores how difficult it would have been for the system to correctly interpret the instructions. It evaluates: self-contradictions, drift in evaluation criteria, vague targets, and ambiguity. The score is in `[0, 1]`, where higher values indicate a harder (more contradictory) oracle.
 
-B4 non misura la qualità del sistema — misura la **difficoltà dell'input**. Il suo ruolo è quello di contesto per B1.
+B4 does not measure system quality — it measures **input difficulty**. Its role is to provide context for B1.
 
-**Analogia in letteratura**
+**Literature analogy**
 
-> Malaviya, C., et al. — *"Contextualized Evaluations"* — TACL 2025 (già citato)
+> Malaviya, C., et al. — *"Contextualized Evaluations"* — TACL 2025 (cited above)
 
-La paper dimostra empiricamente che non tener conto del grado di underspecification della query porta a valutazioni ingiuste: sistemi che hanno risposto in modo ragionevole a query ambigue vengono penalizzati come se avessero ricevuto istruzioni chiare. B4 è la formalizzazione di questo principio nel contesto dell'evaluation di clustering conversazionale.
+This work demonstrates empirically that ignoring the degree of underspecification of a query leads to unfair evaluations: systems that responded reasonably to ambiguous instructions are penalized as if they had received clear ones. B4 is the formalization of this principle in the context of conversational clustering evaluation.
 
-**Analogia parziale**
+**Originality**
 
-> Zhan, R., et al. — *"Difficulty-Aware Machine Translation Evaluation"* — ACL-IJCNLP 2021 (Short Papers)
-> ACL Anthology: 2021.acl-short.5
-
-Propone di pesare le istanze di test per difficoltà: le frasi che la maggior parte dei sistemi fatica a tradurre correttamente vengono considerate più informative. L'intuizione speculare si applica a B4: se l'input era difficile (oracle contraddittorio), un risultato imperfetto deve essere valutato con minor rigore.
-
-**Originalità**
-
-Il meccanismo B4 come "contesto di perdono" in un sistema di clustering conversazionale non ha un precedente diretto nella letteratura. Il principio esiste (valutazione condizionata alla difficoltà dell'input), ma la sua applicazione specifica a un oracle interattivo con feedback iterativo è contributo originale di BlaBlaClust.
+The B4 mechanism as a "forgiveness context" in a conversational clustering system has no direct precedent in the literature. The principle exists (evaluation conditioned on input difficulty), but its specific application to an interactive oracle with iterative feedback is an original contribution of BlaBlaClust.
 
 ---
 
-### B1 — Overall Verdict (Sintesi per Reasoning)
+### B1 — Overall Verdict (Reasoning-Based Synthesis)
 
-**Come funziona**
+**How it works**
 
-B1 è il giudice sintetico che combina B2, B3 e B4 **non tramite formula, ma tramite chain-of-thought**. Il giudice riceve i tre punteggi e ragiona sulla loro combinazione, producendo un punteggio finale in `[0, 1]`.
+B1 is the synthetic judge that combines B2, B3, and B4 **not through a formula, but through chain-of-thought**. The judge receives the three scores and reasons about their combination, producing a final score in `[0, 1]`.
 
-La logica di ragionamento è:
-- Se l'oracle era chiaro (B4 basso) e la coerenza (B2) o la compliance (B3) sono bassi → il sistema ha fallito → B1 basso
-- Se l'oracle era contraddittorio (B4 alto) e coerenza/compliance sono bassi → il sistema ha eseguito istruzioni difficili fedelmente → B1 parzialmente perdonato
-- Se coerenza e compliance sono entrambi alti → B1 alto indipendentemente da B4
+The reasoning logic is:
+- If the oracle was clear (B4 low) and coherence (B2) or compliance (B3) are low → the system failed → B1 low
+- If the oracle was contradictory (B4 high) and coherence/compliance are low → the system faithfully executed difficult instructions → B1 partially forgiven
+- If both coherence and compliance are high → B1 high regardless of B4
 
-**Analogia in letteratura**
+**Literature analogy**
 
 > Liu, Y., et al. — *"G-Eval: NLG Evaluation using GPT-4 with Better Human Alignment"* — EMNLP 2023
 
-G-Eval usa chain-of-thought per valutare output NLG, producendo punteggi con maggiore correlazione con i giudici umani rispetto a metriche formula-based. La scelta di BlaBlaClust di usare reasoning invece di una formula media (es. `B1 = 0.5 * B2 + 0.3 * B3 + 0.2 * (1-B4)`) è esattamente la stessa scelta metodologica di G-Eval, con la stessa motivazione: *una formula non può distinguere "sistema cattivo" da "oracle difficile"*.
+G-Eval uses chain-of-thought to evaluate NLG outputs, producing scores with higher correlation to human judges than formula-based metrics. BlaBlaClust's decision to use reasoning rather than a weighted average (e.g. `B1 = 0.5 * B2 + 0.3 * B3 + 0.2 * (1-B4)`) is exactly the same methodological choice as G-Eval, with the same motivation: *a formula cannot distinguish "bad system" from "difficult oracle"*.
 
-**Originalità**
+**Originality**
 
-Il meccanismo di forgiveness condizionale (B4 come peso sul giudizio di B1) non ha un equivalente diretto in G-Eval né in MT-Bench. È la parte più originale dell'intero framework di evaluation.
-
----
-
-## 4. Procedura di Generalizzazione
-
-**Come funziona**
-
-La generalizzazione non è una nuova metrica ma una procedura che ri-applica A1 e B2 su due snapshot: prima dell'ingestione di nuovi dati (t0) e dopo (t1). I centroidi del clustering converso sono **congelati** — i nuovi punti vengono assegnati al centroide più vicino senza ri-ottimizzare. Si riportano `Δ A1` e `Δ B2` con bootstrap 95% CI.
-
-Il "successo" della generalizzazione è operazionalizzato come: il Δ CI attraversa 0 (nessuna degradazione significativa), non come "accuracy contro un test set" — scelta metodologica deliberata e corretta per clustering unsupervised.
-
-**Analogia in letteratura**
-
-La procedura è ispirata a due principi distinti:
-
-1. **Domain generalization / distribution shift testing** (ampiamente documentato in ML): la capacità di un modello addestrato su una distribuzione di mantenersi su una distribuzione diversa. Qui la "distribuzione diversa" è il batch di nuovi punti.
-
-2. **Nearest-centroid classification** (voronoi assignment): il metodo di assegnazione dei nuovi punti è il più semplice possibile — Euclidean nearest centroid — senza re-fitting del k-means. Questo è equivalente a un 1-NN classifier nello spazio degli embedding, una tecnica standard.
-
-Non esiste un precedente diretto di "generalizzazione di un clustering conversazionale" con questa procedura esatta. È una formalizzazione originale della domanda "la struttura appresa regge quando arrivano nuovi dati?"
+The conditional forgiveness mechanism (B4 as a weight on B1's judgment) has no direct equivalent in G-Eval or MT-Bench. It is the most original element of the entire evaluation framework.
 
 ---
 
-## 5. Validazione del Framework: il Human Study
+## 4. Generalization Procedure
 
-**Stato attuale**
+**How it works**
 
-La quality spec prevede un human study (N ≈ 5–10) per validare i giudici LLM. Il protocollo è:
+Generalization is not a new metric but a procedure that re-applies A1 and B2 at two snapshots: before ingesting new data (t0) and after (t1). The centroids of the converged clustering are **frozen** — new points are assigned to the nearest centroid without re-optimizing. `Δ A1` and `Δ B2` are reported with bootstrap 95% CIs.
 
-- I rater umani ricevono lo stesso payload del giudice (cluster finali + storia feedback oracle)
-- Valutano `coherence` con la stessa rubrica 1–5
-- Si riporta la correlazione Spearman tra punteggio umano e punteggio B2
-- Threshold: correlazione < 0.6 invalida il giudice per quella metrica
+The "success" of generalization is operationalized as: the Δ CI spans zero (no significant degradation), not as "accuracy against a held-out test set" — a deliberate and methodologically correct choice for unsupervised clustering.
 
-Questo protocollo è esattamente quello raccomandato da Zheng et al. (2023) e Liu et al. (2023) per validare un LLM-as-judge: si valida la concordanza su un sottoinsieme prima di applicare il giudice a scala.
+**Literature analogies**
 
-**Limitazione corrente**
+The procedure draws from two distinct principles:
 
-Il human study non è stato eseguito. I numeri B1–B4 attuali hanno una **validazione LLM-only**. Questo è un limite da dichiarare esplicitamente nel paper. La qualità del framework di evaluation è sound metodologicamente; la sua calibrazione empirica attende il human study.
+1. **Distribution shift testing** (well-established in ML): the ability of a model trained on one distribution to maintain performance on a different one. Here, the "different distribution" is the batch of new incoming points.
+
+2. **Nearest-centroid classification** (Voronoi assignment): the assignment method for new points is the simplest possible — Euclidean nearest centroid, without re-fitting k-means. This is equivalent to a 1-NN classifier in embedding space, a standard technique.
+
+No direct precedent exists for "generalization of a conversational clustering" with this exact procedure. It is an original formalization of the question: "does the learned structure hold when new data arrives?"
 
 ---
 
-## 6. Riepilogo: Originalità vs. Stato dell'Arte
+## 5. Framework Validation: the Human Study
 
-| Componente | Base in letteratura | Estensione originale |
+**Current state**
+
+The quality spec calls for a human study (N ≈ 5–10) to validate the LLM judges. The protocol is:
+
+- Human raters receive the same payload as the judge (final clusters + oracle feedback history)
+- They score `coherence` using the same 1–5 rubric
+- Spearman correlation between human and B2 judge scores is reported
+- Threshold: correlation < 0.6 invalidates the judge for that metric
+
+This protocol is exactly the one recommended by Zheng et al. (2023) and Liu et al. (2023) for validating an LLM-as-judge: agreement is validated on a subset before applying the judge at scale.
+
+**Current limitation**
+
+The human study has not been conducted. The current B1–B4 numbers have **LLM-only validation**. This is a limitation that must be stated explicitly in the paper. The evaluation framework is methodologically sound; its empirical calibration awaits the human study.
+
+---
+
+## 6. Summary: Originality vs. State of the Art
+
+| Component | Literature basis | Original extension |
 |---|---|---|
-| A1 (Silhouette) | Rousseeuw 1987 (standard) | Usata come diagnostic, non come obiettivo |
-| A2 (Turns to convergence) | PARADISE 1997 (weighted dialogue cost) | Weighting per tipo di feedback oracle |
-| A3 (Cognitive load) | NASA-TLX 1988 (concettuale) | Proxy deterministico da segnali osservabili |
-| B2 (Cluster coherence) | G-Eval 2023 (LLM scoring) | Bottom-2 stress test + min come aggregato |
-| B3 (Oracle compliance) | Faithfulness metrics NLP | Applicazione a traduzione richiesta → operazione |
-| B4 (Oracle contradiction) | Malaviya 2025 (context-aware eval) | Formalizzazione per oracle interattivo |
-| B1 (Overall verdict) | G-Eval 2023 (chain-of-thought) | Forgiveness condizionale via B4 |
-| Generalizzazione | Distribution shift testing | Procedura label-free per clustering conversazionale |
-| Dual termination codes | — | `converged` vs `cognitive_overload` con driver tracking |
+| A1 (Silhouette) | Rousseeuw 1987 (standard) | Used as diagnostic, not as objective |
+| A2 (Turns to convergence) | PARADISE 1997 (weighted dialogue cost) | Per-feedback-type weighting |
+| A3 (Cognitive load) | NASA-TLX 1988 (conceptual) | Deterministic proxy from observable signals |
+| B2 (Cluster coherence) | G-Eval 2023 (LLM scoring) | Bottom-2 stress test + min as aggregate |
+| B3 (Oracle compliance) | NLP faithfulness metrics | Applied to request → operation translation |
+| B4 (Oracle contradiction) | Malaviya 2025 (context-aware eval) | Formalized for interactive oracle |
+| B1 (Overall verdict) | G-Eval 2023 (chain-of-thought) | Conditional forgiveness via B4 |
+| Generalization | Distribution shift testing | Label-free procedure for conversational clustering |
+| Dual termination codes | — | `converged` vs `cognitive_overload` with driver tracking |
 
 ---
 
-## 7. Implicazioni per la Presentazione
+## 7. Implications for the Presentation
 
-### Cosa sottolineare
+### What to emphasize
 
-1. **La scelta di non usare ARI/NMI è motivata e corretta**: citare Bontempelli 2020 ("the quality must be assessed in terms of alignment with expert's intent").
+1. **The decision not to use ARI/NMI is principled**: cite Bontempelli 2020 ("the quality must be assessed in terms of alignment with expert's intent").
 
-2. **B1 via reasoning non è una scelta arbitraria**: citare G-Eval (Liu 2023). Una formula non può distinguere "sistema cattivo" da "oracle difficile".
+2. **B1 via reasoning is not an arbitrary choice**: cite G-Eval (Liu 2023). A formula cannot distinguish "bad system" from "difficult oracle".
 
-3. **Il meccanismo B4 ha un precedente teorico**: citare Malaviya 2025 (context-aware evaluation) e Zhan 2021 (difficulty-aware evaluation).
+3. **The B4 mechanism has a theoretical precedent**: cite Malaviya 2025 (context-aware evaluation).
 
-4. **A2 si posiziona rispetto a PARADISE**: il weighting per tipo di feedback è un'estensione originale di un paradigma noto.
+4. **A2 positions itself relative to PARADISE**: per-feedback-type weighting is an original extension of a well-known paradigm.
 
-### Cosa ammettere proattivamente
+### What to acknowledge proactively
 
-1. **Il human study non è stato eseguito**: i numeri B1–B4 sono validati LLM-only. "Sappiamo come validarli, il protocollo è scritto, non lo abbiamo fatto per mancanza di tempo."
+1. **The human study was not conducted**: B1–B4 numbers are LLM-only validated. "We know how to validate them, the protocol is written, we did not have time to run it."
 
-2. **B2 è non-deterministico**: due run sullo stesso dataset hanno dato Δ con segno opposto. "Il CI che attraversa 0 è il risultato corretto. Non si può fare un claim direzionale da un singolo run del giudice."
+2. **B2 is non-deterministic**: two runs on the same dataset produced Δ values with opposite signs. "The CI spanning zero is the correct result. A directional claim cannot be made from a single judge run."
 
-3. **A3 misura il carico del sistema, non dell'utente**: "Chiamarlo cognitive load è un po' impreciso — è più correttamente un proxy del carico computazionale-contestuale del sistema LLM."
+3. **A3 measures system load, not user load**: "Calling it cognitive load is slightly imprecise — it is more accurately a proxy for the LLM system's contextual-computational load."
 
 ---
 
-## Riferimenti
+## References
 
 1. Rousseeuw, P.J. (1987). *Silhouettes: A Graphical Aid to the Interpretation and Validation of Cluster Analysis.* Journal of Computational and Applied Mathematics, 20, 53–65.
 
-2. Arbelaitz, O., et al. (2013). *An Extensive Comparative Study of Cluster Validity Indices.* Pattern Recognition, 46, 243–256.
+2. Hart, S.G., Staveland, L.E. (1988). *Development of NASA-TLX: Results of Empirical and Theoretical Research.* In Human Mental Workload, Elsevier.
 
-3. Hart, S.G., Staveland, L.E. (1988). *Development of NASA-TLX: Results of Empirical and Theoretical Research.* In Human Mental Workload, Elsevier.
+3. Walker, M.A., Litman, D.J., Kamm, C.A., Abella, A. (1997). *PARADISE: A Framework for Evaluating Spoken Dialogue Agents.* ACL 1997.
 
-4. Walker, M.A., Litman, D.J., Kamm, C.A., Abella, A. (1997). *PARADISE: A Framework for Evaluating Spoken Dialogue Agents.* ACL 1997.
+4. Bontempelli, A., et al. (2020). *Interactive Clustering: A Comprehensive Review.* ACM Computing Surveys, 53(1).
 
-5. Deriu, J., et al. (2021). *Survey on Evaluation Methods for Dialogue Systems.* Artificial Intelligence Review.
+5. Zheng, L., et al. (2023). *Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena.* NeurIPS 2023. arXiv:2306.05685.
 
-6. Bontempelli, A., et al. (2020). *Interactive Clustering: A Comprehensive Review.* ACM Computing Surveys, 53(1).
+6. Liu, Y., et al. (2023). *G-Eval: NLG Evaluation using GPT-4 with Better Human Alignment.* EMNLP 2023. ACL Anthology: 2023.emnlp-main.153.
 
-7. Zheng, L., et al. (2023). *Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena.* NeurIPS 2023. arXiv:2306.05685.
-
-8. Liu, Y., et al. (2023). *G-Eval: NLG Evaluation using GPT-4 with Better Human Alignment.* EMNLP 2023. ACL Anthology: 2023.emnlp-main.153.
-
-9. Malaviya, C., et al. (2025). *Contextualized Evaluations: Judging LLM Responses to Underspecified Queries.* TACL 2025. ACL Anthology: 2025.tacl-1.41.
-
-10. Zhan, R., et al. (2021). *Difficulty-Aware Machine Translation Evaluation.* ACL-IJCNLP 2021 (Short Papers). ACL Anthology: 2021.acl-short.5.
-
-11. Schmidhuber, J., Schlögl (2021). *Cognitive Load and Productivity Implications in Human-Chatbot Interaction.* arXiv:2111.01400.
+7. Malaviya, C., et al. (2025). *Contextualized Evaluations: Judging LLM Responses to Underspecified Queries.* TACL 2025. ACL Anthology: 2025.tacl-1.41.
