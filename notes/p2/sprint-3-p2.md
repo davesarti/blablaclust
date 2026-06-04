@@ -1,471 +1,113 @@
 # Sprint 3 — P2 (Data & Embeddings)
 
-## What I built
-
-Sprint 3 for P2 covered three issues against the clustering code plus one
-sprint-omnibus task, plus several additional fixes applied after the initial
-sprint: end-to-end wiring of variable-arity split, broken import fixes, a
-missing `tiktoken` dependency resolved, a critical correctness bug in
-`merge_clusters` (every merge was pulling the entire dataset into the new
-cluster), a top-level side-effect hazard in the dataset sampling script, a
-cross-team audit that produced two issues for P3, fresh test coverage for the
-dataset-processing layer (validated by mutation testing), a small
-deduplication chore in the clusters router, and — covering P5's slice while
-she's on evaluation — a round of UI improvements (dynamic dataset label +
-typography refresh) plus a new issue (#47) to surface token/cost/cognitive
-load in the UI.
-
-### 1. Centralised cluster naming — one LLM call instead of N
-
-`src/engine/cluster_naming.py` + `prompts/cluster_naming.txt`.
-
-`name_clusters` previously issued **one LLM call per cluster**: with k clusters
-that meant k separate prompts, each unaware of the others. This was slow and
-let names drift inconsistent across clusters (one cluster called "Shipping
-problems", another "Delivery issues" for the same kind of theme).
-
-It now builds a **single prompt** describing every cluster — each block tagged
-`[Cluster id: ...]` with its representative reviews — and makes **one call**.
-The response is a JSON object keyed by cluster id (`{ id → {name, description} }`),
-which the LLM produces with all clusters in view at once, so labels come out
-more consistent and latency drops from k round-trips to one.
-
-Naming stays **best-effort**, same contract as before:
-- a failed/unparseable call → all clusters keep their `Cluster N` placeholder;
-- a partial or malformed response (missing id, non-dict entry) → only those
-  clusters keep the placeholder, the rest are named.
-
-The public signature of `name_clusters` is unchanged, so the two existing
-callers (`backend/routers/clusters.py` and P3's `f_apply_operations.py`)
-needed no modification.
-
-### 2. Configurable split arity — `k` parameter on `split_cluster`
-
-`src/engine/cluster_operations.py`.
-
-`split_cluster` hardcoded `k=2` when calling `initial_clustering`, and had no
-`k` parameter at all — so callers could never split a cluster into more than
-two sub-clusters, even though `initial_clustering` already supports arbitrary k.
-
-Added `k: int = 2` to the signature and wired it through. The function now:
-- rejects `k < 2` up front with a clear `ValueError` (before any DB query);
-- requires the cluster to hold at least `k` points (the old "need at least 2"
-  check is now "need at least k");
-- passes `k` straight to `initial_clustering`.
-
-The default of 2 keeps every existing caller behaving exactly as before.
-
-### 3. Naming as a first-class step in merge and split
-
-`src/engine/cluster_operations.py`.
-
-Naming was previously bolted on by the caller *after* a cluster was created
-(P3 explicitly called `name_clusters` in `f_apply_operations` after each
-split, and a merged cluster was never named at all). The "first-class naming"
-issue asked to push naming into the operations themselves.
-
-Added `auto_name: bool = True` to both `merge_clusters` and `split_cluster`.
-When True (the default), the operation calls `name_clusters` internally on
-the cluster(s) it creates, using the pooled points (for merge) or the
-k-means subset (for split) as representative examples. Best-effort: a failed
-LLM call keeps the generic placeholder (`"Merge of A + B"` /
-`"<parent> - part N"`), the operation never aborts on naming.
-
-This filled the real gap on merge (no naming before) and let P3 remove
-the duplicate `name_clusters` call from `f_apply_operations`.
-
-The issue's other half — using cluster names to *drive* split/merge
-*decisions* — lives in P4's `prompts/f_output.txt` and P3's orchestration,
-outside my files. P3 and P4 picked up their slices (commits `b334364` and
-`64fd820`); the prompt now instructs the model to use cluster name +
-description as signals (e.g. only merge when "redundant across ALL meaningful
-dimensions"). With those three slices the issue is closed across the team.
-
-### 4. Structured logging of every clustering run (Sprint 3 task)
-
-`src/engine/clustering_log.py` (new) + `src/engine/initial_clustering.py`
-+ `tests/conftest.py` (new).
-
-Sprint 3 asked for one JSONL line per clustering run with `seed`, `k`,
-`backend`, `silhouette`, `n_points`. New helper `log_clustering_run` (mirrors
-P5's `log_llm_call` shape) appends to `logs/clustering_runs.jsonl`;
-`initial_clustering` calls it at the end, computing silhouette on the spot
-from `model.labels_` (None when `k < 2` or `k >= n_points`). Logging is
-best-effort — an `OSError` is swallowed so a broken log file can never abort
-a clustering run.
-
-Covers both initial clustering and the runs triggered internally by
-`split_cluster` (which goes through `initial_clustering`). Diagnostic
-functions (`silhouette_for_k`, `sweep_k`) stay silent — they're for
-k-selection, not real runs.
-
-The helper originally lived in `src/engine/clustering_log.py` (separate file
-because the central logger is P5-owned). A follow-up issue
-(`notes/p2/issue-for-p5-logger.md`) asked P5 to absorb it into
-`src/logger.py`; **P5 has now done this**: `clustering_log.py` is gone,
-`log_clustering_run` lives in `src/logger.py`, and `initial_clustering`
-imports from there. Tests and `conftest.py` were updated accordingly.
-
-A new `tests/conftest.py` autouse fixture redirects the log path to a
-per-test tmp file, so the suite never pollutes `logs/clustering_runs.jsonl`.
-
-### 5. End-to-end wiring of variable-arity split
-
-`prompts/f_output.txt` + `src/engine/f_apply_operations.py` + `tests/test_f_apply_operations.py`.
-
-The `k` parameter added to `split_cluster` in item 2 was never reachable end-to-end:
-the LLM prompt had no `k` field in the split operation schema, and
-`f_apply_operations` didn't pass it through even if the LLM had produced one.
-
-Added `"k": 2` to the split operation schema in `f_output.txt` with a
-constraint explaining when to use k > 2 ("only when the oracle explicitly
-asks to split into a specific number of groups"). Updated `f_apply_operations`
-to read `k=int(op.get("k", 2))` and pass it to `split_cluster`. Updated the
-affected mock assertions in `test_f_apply_operations.py` and added a new test
-`test_split_passes_k_to_split_cluster` covering the k > 2 path.
-
-This touched P3/P4 files (`f_output.txt`, `f_apply_operations.py`) with the
-team's implicit consent — the capability existed in P2 but was unreachable.
-
-### 6. Fix broken imports in dataset_processing scripts
-
-`src/dataset_processing/generate_embeddings.py` + `src/dataset_processing/verify_database.py`.
-
-Both scripts imported `text_cleaning` as `from dataset_processing.text_cleaning import clean_text`,
-which only resolved when `PYTHONPATH` included `src/`. Running them from the
-project root crashed with `ModuleNotFoundError`. Fixed to
-`from src.dataset_processing.text_cleaning import clean_text`, consistent with
-`dataset_load_utils.py`. Verified both scripts import cleanly with
-`PYTHONPATH=. python -c "import src.dataset_processing.<script>"`.
-
-### 7. Install missing `tiktoken` dependency
-
-`tiktoken>=0.7.0` was listed in `requirements.txt` but not installed in the
-local conda environment. `harness_openrouter.py` imports it at module level,
-so every LLM call (including `name_clusters`) silently failed with
-`ModuleNotFoundError: No module named 'tiktoken'` — cluster naming appeared
-to run but produced no names. Fixed with `pip install tiktoken`.
-
-### 8. Fix merge_clusters pulling the entire dataset into the new cluster
-
-`src/engine/cluster_operations.py` + `tests/test_cluster_operations.py`.
-
-Live UI testing surfaced a critical correctness bug: merging two clusters
-ended up assigning **all** points (1200/1200) to the new cluster, with the
-other un-merged clusters dropping to 0 size. Root cause in the carry-forward
-step of `merge_clusters`: for un-pooled points the code summed the
-probabilities of the merged clusters and folded that mass onto the new
-cluster (`merged_mass = sum(prob[cid] for cid in merge_set)`). In high-dim
-sentence-transformer space the softmax over k=5 clusters is very flat
-(~0.20 each), so the sum of two merged probs routinely exceeded any
-un-merged cluster's prob — and the new cluster became the argmax for every
-point in the dataset.
-
-Fix: drop the merged mass entirely on carry-forward. Pooled points still
-get 1.0 on the new cluster, un-pooled points keep their original argmax.
-Probabilities for un-pooled points no longer sum to 1, but the snapshot is
-internally consistent and the hard partition (what the UI reads) is
-preserved. Added regression test
-`test_merge_preserves_argmax_on_flat_soft_assignments` that reproduces the
-5-cluster scenario and fails under the old fold. Verified end-to-end on the
-exact live repro (sizes 483/234/188/165/130, merge of c4+c5) — new cluster
-ends up with 295 points (= 165+130), others unchanged.
-
-Bonus collateral: with the fix, `merged_point_ids` (passed to
-`name_clusters`) now contains only the actually pooled points instead of
-every point in the dataset. So the LLM gets clean representative texts and
-produces sensible names like "Shipping Problems" instead of generic labels
-derived from the whole dataset.
-
-### 9. Sample-dataset script: guard side effects + rename
-
-`src/dataset_processing/download_dataset.py` →
-`src/dataset_processing/sample_amazon_dataset.py` (committed in `862a691`).
-
-The script had two problems:
-1. All sampling / CSV writes happened at module top-level — importing it
-   would immediately read `data/amazon_review_polarity_csv/train.csv` and
-   overwrite `data/train.csv` + `data/frozen_eval.csv`.
-2. The name "download_dataset" was misleading: nothing is downloaded, it
-   only samples a CSV already on disk.
-
-Wrapped the body in `def main()` + `if __name__ == "__main__": main()`,
-extracted magic numbers (`SAMPLE_SIZE`, `TRAIN_SIZE`, `RANDOM_STATE`,
-`MIN_TEXT_LEN`) as module constants, and renamed the file. Verified with
-two tests: (1) importing the module does NOT change the mtime of
-`data/train.csv` or `data/frozen_eval.csv`; (2) running it as
-`python -m src.dataset_processing.sample_amazon_dataset` correctly
-produces 1200 train + 300 frozen rows. No callers anywhere in the repo, so
-the rename is safe.
-
-### 10. Cross-team audit — issues opened for P3
-
-Read-only audit of P3-owned engine files (`f_apply_operations`, `f_eval`,
-`f_next_state`, `f_next_best_step`, `f_uncertainty`, `f_output`,
-`f_parse_clustering_intent`) looking for bugs that interact with P2 code or
-block end-to-end correctness. Produced two GitHub issues:
-
-- **#42 — `f_eval.py` crashes on Gemini.** `json.loads(msg.text)` skips
-  the `extract_json_text` helper that every other `f_*` uses to strip
-  markdown fences. Gemini (our current OpenRouter default) wraps JSON in
-  fences → JSONDecodeError. One-line fix.
-- **#43 — Cluster descriptions wiped or never set on rename / merge / split.**
-  Rename always passes `new_description=""` because the prompt never asks
-  for one; merged clusters start with `description=""` and depend entirely
-  on the LLM call succeeding; split children skip naming when the oracle
-  provides `new_names`, so they keep an empty description forever. Three
-  bugs, separate fixes proposed for each.
-
-Also noted but not filed: `f_uncertainty` is computed every turn but its
-result is no longer read by `f_next_best_step` (the "ask" rule was
-removed), and `f_next_state.py` is now dead code (never called by
-`turns.py`, would double the LLM call if anyone used it). Logged in this
-note as candidates for a follow-up issue if P3 confirms.
-
-### 11. Test coverage for the dataset-processing layer
-
-`tests/test_text_cleaning.py` (new) + `tests/test_dataset_load_utils.py` (new).
-
-Two P2 files had zero test coverage — exactly the silent-regression risk the
-cleaning + ingest pipeline is prone to. Added:
-
-- **`test_text_cleaning.py`** (25 tests) — every private helper in isolation
-  (`_normalize_unicode`, `_fix_double_quotes`, `_collapse_repeated_chars`,
-  `_collapse_whitespace`) plus `clean_fields` / `clean_text` end-to-end on
-  representative dirty strings. Edge cases: empty input, decomposed unicode
-  (NFC), CSV-escaped quotes, long runs of the same character, whitespace
-  across the title+text join.
-- **`test_dataset_load_utils.py`** (18 tests) — runs against an in-memory
-  SQLite DB (StaticPool, same pattern as `test_cluster_operations.py`).
-  Covers header validation (missing → `ValueError`, extra columns OK),
-  empty-text skip, non-int / missing label skip, field cleaning on insert,
-  and **transaction rollback** in `process_csv_upload` (both on an embedding
-  failure via monkeypatch and on bad headers — nothing persists).
-
-Validated with **mutation testing**: temporarily broke each behaviour in the
-source (collapse threshold, quote fix, whitespace strip, rollback, empty-text
-skip, header raise) and confirmed at least one test fails for every mutation.
-The tests have teeth, not just green checkmarks.
-
-### 12. Deduplicate session lookup in clusters.py
-
-`backend/routers/clusters.py`.
-
-`run_initial_clustering` and `suggest_k` each reimplemented the
-`_get_session_or_404` helper inline (3 identical lines apiece). Replaced both
-with a call to the existing helper, so all four session lookups in the file
-now go through one code path. Net −4 lines, zero behaviour change — verified
-the app still loads via `backend.main` and the 8 `test_turns_endpoint.py`
-tests pass.
-
-### 13. UI improvements (covering P5's slice)
-
-`ui/index.html` — **uncommitted**. P5 is busy on evaluation, so I picked up
-the "UI improvements" issue. Audited the 4 requested points against the real
-code first — two were already done:
-
-| Point | State |
-|---|---|
-| 1. Home / New session button | **Already existed** (`← BACK` in the header → `goBackToWelcome()`) |
-| 2. Typography refresh | **Partially done** (see below) |
-| 3. Loading indicator | **Already existed** (rotating "Vibing…/Noodling…" messages wired to the clustering call) |
-| 4. Dynamic dataset label | **Done** |
-
-What I actually changed:
-- **#4** — replaced the hardcoded "1,500 reviews / Amazon Electronics" welcome
-  stat with `loadWelcomeStats()`, which reads `GET /datasets` and shows the
-  real dataset name(s). UI-only (the endpoint exposes names, not per-row
-  counts); XSS-safe via `textContent`; falls back to "Iterative clustering"
-  if the call fails.
-- **#2 (partial)** — imported **Inter** from Google Fonts (with system-stack
-  fallback for offline), bumped the base font 13px → 15px, line-height
-  1.5 → 1.55, the smallest micro-labels 9px → 10px, cluster-grid gap
-  10 → 16px, and chat padding/gap. Verified live with screenshots: Inter +
-  15px applied, layout holds with no overflow.
-
-Verified by running the app and screenshotting both the welcome screen
-(label now reads "amazon_reviews | Iterative clustering") and the workspace
-(cluster cards well-spaced, Inter at 15px).
-
-**Deliberately NOT done** (out of the chosen scope):
-- The "distinctive palette / accent colour" part of #2 — kept the existing
-  sage-green paper palette; only did the content refresh.
-- Base font left at 15px rather than the issue's suggested 17–18px (the
-  panels are fixed-width and 16px+ risked overflow).
-- `ui/DESIGN.md` not updated with the new font/size guidelines.
-
-### 14. Opened issue #47 — wire token/cost/cognitive load to the UI
-
-While in the UI I noticed the sidebar always shows "0 tokens / $0.0000". The
-UI is fully wired to display `token_usage`, `cost_usd`, and
-`cognitive_load_score`, and the `SystemTurn` schema carries all three — but
-`backend/routers/turns.py` discards `f_output`'s usage (`raw, _usage = ...`)
-and never calls the imported `estimate_cost_usd`, so the fields stay empty.
-Filed as **#47** (assigned to me), ~15-min backend fix. Touches `turns.py`
-(P3/P1 router) — heads-up flagged in the issue.
-
-### 15. Second dataset (20 Newsgroups) — adaptivity proof
-
-`src/dataset_processing/sample_20newsgroups.py` (new) +
-`data/20newsgroups_train.csv` + `data/20newsgroups_frozen.csv`.
-
-Added a second dataset to prove the system is genuinely dataset-agnostic and
-not tuned to Amazon sentiment. Curated 6 well-separated newsgroups
-(`comp.graphics`, `rec.autos`, `rec.sport.baseball`, `sci.med`, `sci.space`,
-`talk.politics.guns`) via `sklearn.datasets.fetch_20newsgroups`, stripped
-headers/footers/quotes, and wrote 1200 train + 300 frozen rows in the
-`label,title,text` schema. `title` is left empty on purpose so the category
-label isn't leaked into the embedding (`clean_text` concatenates title+text).
-
-Verified live end-to-end: uploaded via `POST /datasets/upload`, generated
-1200 embeddings, ran k=6 clustering. The system recovered all six topics with
-topic-appropriate names ("Space Exploration", "Baseball Game Analysis", …) —
-not sentiment labels — and **87.9% purity** against the known ground-truth
-categories (per-cluster 69–99%). Amazon (`amazon_reviews`) is untouched; the
-two datasets coexist in the DB isolated by `dataset_name`.
-
-Known follow-ups surfaced by this work, filed as issues for the team: #48
-(prompts still say "customer reviews" — P4), #49 (verify merge/split/move on
-20NG — P3), #50 (eval scenarios for 20NG — P5), #51 (datasets API should
-expose per-dataset counts — P1), #52 (generalization mapping function on the
-frozen splits — me).
-
-### 16. Silhouette computed twice in the initial-clustering POST
-
-`src/engine/initial_clustering.py` + `backend/routers/clusters.py`
-+ `src/engine/cluster_operations.py`.
-
-`POST /clusters` fit k-means **twice** on the full ~1200-point dataset: once
-inside `initial_clustering` (for the structured log) and again via
-`silhouette_for_k` in the router, purely to return the score in the HTTP
-response. The two values could also diverge if the seed weren't fixed.
-
-Changed `initial_clustering` to return `(clusters, assignments, silhouette)`
-— it already computed the score internally — and the router now reads it
-directly, dropping the `silhouette_for_k` call entirely. One k-means run per
-clustering, single source of truth. Updated `split_cluster` (ignores the
-third value) and the affected tests; added
-`test_returns_silhouette_matching_the_log` (returned value == logged value)
-and `test_returns_none_silhouette_for_k1`. `silhouette_for_k` stays defined
-as a public diagnostic but is no longer on the POST path.
-
-## Results
-
-| Check | Result |
-|---|---|
-| `test_cluster_naming.py` (12 tests) | all pass |
-| `test_cluster_operations.py` (25 tests: 18 pre-existing + 7 new) | all pass |
-| `test_clustering_log.py` (7 tests, new) | all pass |
-| `test_f_apply_operations.py` (P3, uses changed P2 functions) | all pass (39 tests) |
-| Single LLM call regardless of cluster count | verified (mock asserts 1 call) |
-| `split_cluster(k=3)` on a 6-point cluster | 3 children, parent dissolved |
-| `split_cluster(k=1)` / `k` exceeding point count | raise `ValueError` |
-| `merge_clusters` / `split_cluster` self-name children | verified (mock asserts call) |
-| `initial_clustering` writes all 5 required log fields | verified |
-| Test suite leaves real `logs/clustering_runs.jsonl` untouched | verified |
-| `split_cluster(k=4)` wired end-to-end from LLM prompt to k-means | verified |
-| `generate_embeddings.py` / `verify_database.py` import from project root | verified |
-| `tiktoken` installed — `name_clusters` LLM calls succeed | verified |
-| `merge_clusters` no longer collapses dataset into one cluster | verified live (5-cluster repro: 295/470/245/190 vs old 1199/1/0/0/0) |
-| New regression test `test_merge_preserves_argmax_on_flat_soft_assignments` | passes; fails on old code |
-| Live merge naming with Gemini after fix | produces "Shipping Problems" + description |
-| `sample_amazon_dataset.py` import does NOT touch CSVs on disk | verified (mtime unchanged) |
-| `sample_amazon_dataset.py` run as `__main__` produces 1200/300 split | verified |
-| `test_text_cleaning.py` (25 tests, new) | all pass |
-| `test_dataset_load_utils.py` (18 tests, new) | all pass |
-| Mutation testing on text_cleaning + dataset_load_utils | 6/6 mutations caught |
-| `clusters.py` session-lookup dedup — app loads + endpoint tests | verified (8 tests pass) |
-| 20 Newsgroups adaptivity (k=6 vs. ground truth) | 87.9% purity, topic-based names |
-| 20NG `title` left empty (no label leak into embedding) | verified (1200/1200) |
-| Amazon dataset intact after adding 20NG | verified (CSVs untouched, isolated by `dataset_name`) |
-| `initial_clustering` returns silhouette matching the log | verified (test + live POST) |
-| `POST /clusters` fits k-means once (was twice) | verified (silhouette_for_k removed from path) |
-
-Full P2-relevant suite: **60+ tests pass** in the vibe-coders env across
-`test_text_cleaning`, `test_dataset_load_utils`, `test_cluster_operations`,
-`test_cluster_naming`, `test_clustering_log`, `test_initial_clustering`,
-`test_f_parse_clustering_intent`, and `test_turns_endpoint` (the silhouette
-refactor added two `test_initial_clustering` cases; all green).
-
-## What I changed in other people's files
-
-- **`prompts/f_output.txt`** (P4) — added `"k": 2` to the split operation
-  schema and a constraint explaining when to set k > 2. Necessary to make
-  variable-arity split reachable end-to-end (P2's `split_cluster(k)` was
-  unreachable without this).
-- **`src/engine/f_apply_operations.py`** (P3) — wired `k=int(op.get("k", 2))`
-  into the `split_cluster` call. Same reason.
-- **`tests/test_f_apply_operations.py`** (P3) — updated two existing mock
-  assertions to include `k=2` and added `test_split_passes_k_to_split_cluster`.
-
-## What I need from others
-
-- **P5** — ~~absorb `src/engine/clustering_log.py` into `src/logger.py`~~
-  **DONE.** `clustering_log.py` no longer exists; `log_clustering_run`
-  lives in `src/logger.py`; `initial_clustering` imports from there.
-- **P4** — `prompts/cluster_naming.txt` changed shape this sprint (now
-  takes `{clusters_block}` and returns an id-keyed JSON object). If P4
-  keeps a prompt-versioning registry, the hash for this prompt needs
-  refreshing.
-- **P3 (open issues)** — #42 (`f_eval` Gemini crash, one-line fix) and
-  #43 (cluster descriptions wiped on rename / never set on merge & split
-  with inline names). Both have fixes proposed in the issue body.
-- **Cosmetic, P3/P4** — `f_output.txt` shows merge ops can include a
-  `"new_name"` field, but `f_apply_operations` doesn't pass it to
-  `merge_clusters` (which now auto-names from pooled content anyway).
-  Either drop the field from the prompt or honour it — currently the LLM
-  produces a name that is silently discarded.
+## What I did this sprint
+
+Hardened the clustering layer, added a second dataset, and covered P5's UI slice
+while she was on evaluation.
+
+**Clustering & naming**
+- **One LLM call for naming** (`cluster_naming.py`) — `name_clusters` built one
+  prompt per cluster (k round-trips, inconsistent labels across clusters). Now a
+  single prompt describes every cluster (`[Cluster id: ...]` blocks) and makes
+  **one call** returning `{id → {name, description}}`. Same best-effort contract,
+  same public signature (callers unchanged).
+- **Configurable split arity** (`cluster_operations.py`) — added `k` to
+  `split_cluster` (was hardcoded k=2); rejects `k<2` up front, requires ≥k points,
+  passes k to `initial_clustering`. Default 2 keeps existing callers unchanged.
+- **First-class naming in merge/split** — added `auto_name=True` to
+  `merge_clusters`/`split_cluster` so they name the clusters they create from the
+  pooled/subset points. Filled the real gap on merge (never named before) and let
+  P3 drop the duplicate `name_clusters` call.
+- **Structured logging of clustering runs** — `log_clustering_run` (one JSONL line
+  per run: `seed`, `k`, `backend`, `silhouette`, `n_points`), called from
+  `initial_clustering`, best-effort. A `conftest.py` autouse fixture redirects the
+  log to a tmp file so the suite never pollutes the real log. (P5 later absorbed
+  the helper into `src/logger.py`.)
+- **Critical fix — `merge_clusters` collapsed the whole dataset** — live testing
+  showed a merge assigning all 1200 points to the new cluster. Root cause: the
+  carry-forward summed the merged clusters' probabilities onto the new cluster, and
+  in flat high-dim softmax (~0.20 each at k=5) that sum beat every other cluster's
+  prob → new cluster became the argmax for every point. Fix: drop the merged mass
+  on carry-forward (pooled points get 1.0, un-pooled keep their argmax). Regression
+  test reproduces the 5-cluster case; verified live (295 points, not 1199).
+- **Silhouette computed once, not twice** — `POST /clusters` fit k-means twice
+  (once for the log, once via `silhouette_for_k` for the response). Now
+  `initial_clustering` returns the silhouette it already computed; router reads it
+  directly. One run per clustering, single source of truth.
+
+**Second dataset — 20 Newsgroups (adaptivity proof)**
+- `sample_20newsgroups.py` + CSVs. Curated 6 well-separated newsgroups
+  (graphics, autos, baseball, med, space, guns), headers/footers/quotes stripped,
+  1200 train + 300 frozen. `title` left empty so the category never leaks into the
+  embedding. Verified live: k=6 recovers all six topics with topic-appropriate
+  names and **87.9% purity** vs ground truth. Amazon untouched; datasets isolated
+  by `dataset_name`.
+
+**Fixes & hygiene**
+- Fixed broken `text_cleaning` imports in `generate_embeddings.py` /
+  `verify_database.py` (crashed from project root).
+- Renamed misleading `download_dataset.py` → `sample_amazon_dataset.py` and
+  wrapped its top-level side effects in `main()` (importing it used to overwrite
+  the CSVs on disk).
+- Deduplicated the session lookup in `clusters.py` (4 lookups → one
+  `_get_session_or_404`).
+- **Test coverage for the data layer** — `test_text_cleaning.py` (25 tests) +
+  `test_dataset_load_utils.py` (18 tests, in-memory SQLite, covers rollback).
+  Validated by **mutation testing**: 6/6 deliberate mutations caught.
+
+**UI (covering P5's slice, `ui/index.html`)** — dynamic dataset label from
+`GET /datasets` (was hardcoded "1,500 reviews"), Inter font + typography refresh.
+Deliberately skipped the palette/accent rework (out of chosen scope).
+
+## What blocked me
+
+- **`tiktoken` missing in the local env** — listed in `requirements.txt` but not
+  installed; `harness_openrouter.py` imports it at module level, so every LLM call
+  (including naming) silently failed with `ModuleNotFoundError`. Naming *appeared*
+  to run but produced no names. Fixed with `pip install tiktoken`.
+- **Cross-team dependencies** — making variable-arity split reachable end-to-end
+  needed edits to P4's `f_output.txt` (split-op `k` field) and P3's
+  `f_apply_operations.py` (pass `k` through); done with the team's consent. Using
+  cluster names to *drive* merge/split decisions was P3/P4's slice (commits
+  `b334364`, `64fd820`).
+
+## What I'm doing next
+
+- The generalization mapping function (#52) — codify a finished clustering into a
+  reusable assignment for held-out items.
+- Coordinate with P3 on the `f_uncertainty` / `f_next_state` dead-code findings
+  from the audit (noted, not yet filed).
+- Follow up that P5 absorbs `clustering_log` into `src/logger.py` (issue filed).
 
 ## Commits
 
 - `5e0f300` — refactor: name all clusters in a single LLM call
-- `2fdb8f6` — feat: add k parameter to split_cluster
+- `2fdb8f6` — feat: add `k` parameter to `split_cluster`
 - `af10bdd` — feat: auto-name clusters created by merge and split
-- `7f1002f` — docs: issue for P5 to absorb clustering_log into src/logger.py
-- `6bc7cfd` — structured logging of every clustering run
-- `6612273` — feat: wire k parameter through split op end-to-end
-- `ea627e7` — fix: correct text_cleaning imports in dataset_processing scripts
-- `22a5b0e` — fix: drop merged mass in merge_clusters to preserve un-pooled argmax
-- `862a691` — rename download_dataset.py → sample_amazon_dataset.py with main() guard
+- `6bc7cfd` — feat: structured logging of every clustering run
+- `7f1002f` — docs: issue for P5 to absorb `clustering_log` into `src/logger.py`
+- `6612273` — feat: wire `k` parameter through the split op end-to-end
+- `ea627e7` — fix: correct `text_cleaning` imports in dataset_processing scripts
+- `22a5b0e` — fix: drop merged mass in `merge_clusters` to preserve un-pooled argmax
+- `862a691` — refactor: rename `download_dataset.py` → `sample_amazon_dataset.py` + `main()` guard
 
-All pushed to `origin/main`. (Items 11–12 — the new tests and the
-`clusters.py` dedup — are now committed too.)
+## Issues
 
-**Pending commit** (verified, not yet pushed — grouped into 4 themed commits):
-1. silhouette perf fix (item 16) — `initial_clustering.py`, `clusters.py`,
-   `cluster_operations.py`, `test_cluster_operations.py`,
-   `test_initial_clustering.py`
-2. 20 Newsgroups dataset (item 15) — `sample_20newsgroups.py` +
-   `data/20newsgroups_{train,frozen}.csv`
-3. UI improvements (item 13) — `ui/index.html`
-4. these sprint notes
-
-### GitHub issues opened during this sprint
-
-- **#42** — `f_eval.py crashes on Gemini` (P3)
-- **#43** — `Cluster descriptions get wiped or never set on rename / merge / split` (P3, with optional slice for P4)
-- **#47** — `Wire token usage, cost, and cognitive load through to the UI` (me; ~15-min `turns.py` fix)
-- **#48** — `Make prompts dataset-agnostic (remove Amazon/review framing)` (P4)
-- **#49** — `Verify the conversational loop (merge/split/move) on a non-Amazon dataset` (P3)
-- **#50** — `Add eval scenarios for 20_newsgroups` (P5)
-- **#51** — `Expose per-dataset metadata (record count) from the datasets API` (P1)
-- **#52** — `Generalization mapping function: assign held-out items via the codified clustering` (me)
-- UI improvements issue (home button, loading, dynamic label, restyle) —
-  worked under item 13; mostly addressed, restyle/palette deferred.
-
-## To do / still open
-
-P2-relevant items still outstanding, roughly in priority order:
-
-1. **Commit `ui/index.html`** (item 13) and decide whether to close the UI
-   issue now (with a note that the palette restyle is deferred) or keep it
-   open for the accent-colour pass before the demo.
-2. **#47** — wire token/cost/cognitive load in `turns.py` (the sidebar still
-   shows "0 tokens / $0.0000"). ~15 min, mine.
-3. **Optional UI follow-ups** (deferred from the UI issue): distinctive
-   palette / accent colour, base font 17–18px, update `ui/DESIGN.md`.
-4. **Bigger project gaps that touch P2** (from the full-project audit, see
-   `project_remaining_tasks.pdf` on Desktop): generalization mapping function
-   on `frozen_eval.csv`, hierarchy (drill-in/zoom-out) on the clustering
-   side, optional HDBSCAN backend, instructional re-embedding. These are the
-   real deliverable-movers for the final hand-in, not the UI polish.
+- **Opened & resolved by me:** #30 (guard `silhouette_score` against pathological
+  inputs), #31 (silhouette computed twice in `POST /clusters`), #32 (use
+  `_get_session_or_404` consistently), #33 (unit tests for `text_cleaning` +
+  `dataset_load_utils`), #34 (`download_dataset.py` side-effect + rename), #37 (UI
+  improvements), #49 (verify the loop on a non-Amazon dataset), #52 (generalization
+  mapping function).
+- **Resolved by me (opened by a teammate):** #20 (centralize cluster naming — P1),
+  #21 (naming conventions on split/merge — P1), #22 (surface silent/cached failures
+  — P1), #23 (broken imports in dataset scripts — P1), #25 (`split_cluster` always
+  splits into 2 — P1), #36 (naming prompt in merge/split — P1), #40 (`merge_clusters`
+  folds merged mass — P3).
+- **Opened by me, assigned to a teammate:** #26 (cluster naming drives split/merge
+  — P3/P4), #29 (move `log_clustering_run` into `src/logger.py` — P5), #42 (`f_eval`
+  crashes on Gemini — P3), #43 (descriptions wiped on rename/merge/split — P3), #48
+  (make prompts dataset-agnostic — P4), #50 (eval scenarios for 20NG — P5), #51
+  (expose per-dataset record counts — P1).
+- **Opened by me, resolved in sprint 4:** #47 (wire token/cost/cognitive load to
+  the UI).
