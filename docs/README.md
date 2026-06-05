@@ -19,6 +19,7 @@ system, then read the implementation reports for the features you are evaluating
 |---|---|---|
 | [data-model.md](data-model.md) | P1 | Database schema, ORM models, entity relationships |
 | [quality_specs.md](quality_specs.md) | P1/P3 | Evaluation metric definitions (A1–A3, B1–B4) and acceptance thresholds |
+| [api-interface.md](api-interface.md) | P1 | Full HTTP/JSON API reference: all endpoints, request/response schemas, error codes |
 
 ---
 
@@ -29,8 +30,10 @@ Technical documentation of features developed during the project.
 | Document | Author | Description |
 |---|---|---|
 | [semantic-reembed-report.md](semantic-reembed-report.md) | P5 | Full implementation of the semantic reembedding pipeline (`f_semantic_reembed.py`): architecture, cosine strategy, LLM fallback, hybrid matrix, test results, future directions |
+| [semantic-reembed-diagrams.ipynb](semantic-reembed-diagrams.ipynb) | P5 | Slide-ready matplotlib diagrams: pipeline flowchart, MiniLM embedding space, variance check, hybrid matrix construction |
 | [gmm-vs-kmeans-report.md](gmm-vs-kmeans-report.md) | P2 | Comparison of GMM and k-means clustering algorithms; rationale for the final choice |
 | [generalization-stability-report.md](generalization-stability-report.md) | P4 | Online generalization (robustness under in-distribution growth) across the 6 user sessions: A1 / A4 / B2 paired Δ with bootstrap + Wilson CIs, forest plots, per-session and cohort-level analysis, failure cases |
+| [final_experimental_report.md](final_experimental_report.md) | P4 | End-to-end experimental results: B2 vs no-dialogue baseline, persona quality (B1–B4), real-user session overlay, silhouette evolution — all with CIs and forest plots |
 
 ---
 
@@ -64,4 +67,4 @@ Quantitative tests on design alternatives that informed implementation decisions
 
 | Document | Superseded by |
 |---|---|
-| [semantic-reembed-proposal.md](semantic-reembed-proposal.md) | [semantic-reembed-report.md](semantic-reembed-report.md) |
+| `semantic-reembed-proposal.md` *(deleted)* | [semantic-reembed-report.md](semantic-reembed-report.md) |
