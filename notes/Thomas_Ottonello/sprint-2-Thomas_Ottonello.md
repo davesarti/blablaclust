@@ -1,4 +1,4 @@
-# Sprint 2 — P2 (Initial Clustering & Cluster Naming)
+# Sprint 2 — P2 (Initial Clustering & Cluster Naming) - Thomas Ottonello
 
 ## What I did this sprint
 

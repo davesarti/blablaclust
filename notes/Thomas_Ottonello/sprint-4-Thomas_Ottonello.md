@@ -1,4 +1,4 @@
-# Sprint 4 — P2 (Data & Embeddings)
+# Sprint 4 — P2 (Data & Embeddings) - Thomas Ottonello
 
 ## What I did this sprint
 
