@@ -8,8 +8,8 @@
 | `src/schemas.py` | ✅ updated — `token_usage` and `cost_usd` on `SystemTurn` (issue #12) |
 | `src/engine/f_uncertainty.py` | ✅ rewritten — cluster-level uncertainty (issue #45) |
 | `src/engine/f_next_best_step.py` | ✅ updated — cluster-level Rule 2, stop threshold fix (issue #44, #45) |
-| `src/harness.py` | ✅ updated — cognitive load formula fix (issue #44) |
-| `backend/routers/turns.py` | ✅ updated — LLM reply always used, session.status closed on stop (issue #44) |
+| `src/harness.py` | ✅ updated — cognitive load formula fix (issue #44); lazy anthropic imports |
+| `backend/routers/turns.py` | ✅ updated — LLM reply always used, session.status closed on stop (issue #44); JSON display guard |
 | `tests/test_f_next_best_step.py` | ✅ updated — tests for new ClusterUncertainty API |
 
 ---
@@ -49,6 +49,29 @@ The old Rule 2 asked the oracle to classify individual data points with opaque U
 ## Architectural decisions
 
 - `BoundaryPoint` / `f_uncertainty()` kept as legacy API for backwards compatibility with existing tests — new code uses `f_cluster_uncertainty()`.
+
+---
+
+### Lazy anthropic imports (`491376d`)
+
+`harness.py` importava `anthropic` al top-level, il che causava `ImportError` se il
+pacchetto non era installato anche solo importando il modulo in un contesto senza
+API key. Spostato a import lazy dentro `call_claude`/`call_claude_async` — il
+modulo è ora importabile anche senza `anthropic` nell'environment.
+
+### Rimozione ask per-punto su uncertainty (`d042219`)
+
+Rimosso il comportamento precedente di Rule 2 che chiedeva all'oracle di classificare
+singoli data point via UUID. Con 1200 punti, presentare UUID è inutilizzabile. Questo
+commit è il precursore necessario alla riscrittura cluster-level (`18b9eed`).
+
+### JSON display guard in turns.py (`50a0335`, `2026-05-28`)
+
+Modelli small/free (es. `openai/gpt-oss-20b`) mettono a volte JSON strutturato
+nel campo `display` invece di prosa leggibile — il JSON grezzo appariva nella chat
+dell'oracle. Fix: se `raw_display` inizia con `{` o `[` oppure fa il parse come JSON
+valido, si usa il messaggio di `f_next_best_step` (sempre in inglese leggibile) come
+fallback. Aggiunge 17 righe a `backend/routers/turns.py`.
 
 ---
 
