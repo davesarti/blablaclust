@@ -252,8 +252,12 @@ conversation is not meaningful) — use it only to smoke-test the plumbing.
 ├── docs/                      # Technical reports and literature reviews — see docs/README.md
 │   ├── data-model.md                      # Database schema and ORM models
 │   ├── quality_specs.md                   # Evaluation metric definitions (A1–A3, B1–B4)
+│   ├── api-interface.md                   # Full HTTP/JSON API reference (all endpoints + schemas)
 │   ├── semantic-reembed-report.md         # Semantic reembedding pipeline implementation
+│   ├── semantic-reembed-diagrams.ipynb    # Slide diagrams: pipeline flowchart, embedding space, hybrid matrix
 │   ├── gmm-vs-kmeans-report.md            # GMM vs k-means comparison
+│   ├── generalization-stability-report.md # Online generalization across 6 user sessions (A1/A4/B2 + forest plots)
+│   ├── final_experimental_report.md       # End-to-end results: B2 vs baseline, persona quality, real-user overlay
 │   ├── related-work.md                    # Literature review — 5 related systems
 │   ├── related-work-radar.ipynb           # Radar chart — design space comparison
 │   ├── evaluation_literature_report.md    # Literature grounding for evaluation metrics
