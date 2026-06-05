@@ -11,6 +11,8 @@ Documents are grouped below by type. Each entry shows the author, status,
 and a one-line summary. **Start with the design documents** to understand the
 system, then read the implementation reports for the features you are evaluating.
 
+> The final technical report (paper-style writeup) is at [`../technical_report.md`](../technical_report.md) in the repo root.
+
 ---
 
 ## System design
