@@ -77,13 +77,6 @@ Each run terminates per-persona on `oracle_satisfied`, `system_stop`, `max_turns
 on an error (`oracle_parse_error` / `api_error`). The end-of-session `/sessions/{sid}/eval`
 metrics (A1–A3, B1–B4) are folded into each row automatically.
 
-**A3 cognitive-load caps** (`src/engine/cognitive_load_caps.py`) — the three thresholds
-(20 turns, 16 000 tokens, 25 clusters) are arbitrary engineering estimates of where LLM
-output quality is expected to degrade, not empirically validated. They are intentionally
-centralised in one file to make it easy to run a sweep: vary the caps, re-run the eval
-suite, and measure the effect on A2 (turns to convergence) and B-metrics (clustering
-quality) to find better-calibrated values.
-
 ### Generalization stability eval
 
 Answers the brief's *generalization* question — **once the oracle is happy, do new data

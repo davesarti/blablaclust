@@ -177,23 +177,7 @@ no-dialogue baseline?"*
 ---
 
 ## Slide 6 — Plan for next week
-
-The loop, `f_eval`, the quality spec, the three datasets, the generalization
-result, the **no-dialogue baseline arm**, **bootstrap CIs on the eval
-aggregates** and the **LLM-as-oracle harness with 3 personas** are **done**.
-The final week is about **the human study** and **the write-up**:
-
-- **Human study** (N ≈ 5–10, scripted protocol, consent) to validate the
-  simulated oracle. Protocol still to write — the prof flagged "3 friends with
-  no protocol" as a risk.
-- **Prompts dataset-agnostic** (#48) — remove residual "customer reviews" framing
-  so naming/intent aren't biased toward Amazon (still pending).
-- **Write-up**: fold the **baseline-vs-conversational comparison** with CIs,
-  the online generalization result, the topic-vs-sentiment contrast, and the
-  persona-eval finding into the final report; honest discussion that the
-  dialogue serves oracle preference (B3=1.0), not the automated metric.
-- Optional if time allows: hierarchy, a second backend (HDBSCAN). UMAP/t-SNE
-  is already shipped.
+Project delivered.
 
 ---
 
