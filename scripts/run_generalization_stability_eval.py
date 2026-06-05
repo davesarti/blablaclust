@@ -45,12 +45,23 @@ A1 (silhouette) is deterministic and needs no LLM. B2 (coherence) calls the
 LLM judge; with ``HARNESS_DRY_RUN=true`` the judge is mocked and B2 collapses to
 0.0 (use it only to smoke-test the plumbing). Run without dry-run for real B2.
 
+Two modes:
+  Mode A (default) — build a converged session from --base in a throwaway in-memory DB
+    via initial_clustering + an LLM-oracle conversation, then ingest --new.
+  Mode B (--session-id) — clone an EXISTING session out of --db-url
+    (default demo_database.db) into an in-memory DB, then ingest --new against its
+    frozen geometry. The base read, initial_clustering, and oracle conversation are
+    skipped. The source DB is opened read-only; all writes (the +1 snapshot, the
+    status flip) land on the clone and vanish when the run ends.
+
 Usage:
     PYTHONPATH=. python scripts/run_generalization_stability_eval.py            # 20NG, k=6
     PYTHONPATH=. python scripts/run_generalization_stability_eval.py \
         --base data/train.csv --new data/frozen_eval.csv --k 2                  # Amazon
     PYTHONPATH=. python scripts/run_generalization_stability_eval.py --batches 4  # drift curve
     PYTHONPATH=. python scripts/run_generalization_stability_eval.py --limit 400  # quick smoke
+    PYTHONPATH=. python scripts/run_generalization_stability_eval.py \
+        --session-id <existing-session-id> --new data/frozen_eval.csv            # Mode B
 """
 
 from __future__ import annotations
@@ -83,7 +94,7 @@ from src.eval.llm_oracle import LLMOracle, OracleResponseError
 from src.eval.oracle_view import build_oracle_view
 from src.eval.persona import load_persona
 from src.harness import DRY_RUN
-from src.models import Base, ChatSession, DataPoint, Dataset, SoftAssignment
+from src.models import Base, ChatSession, Cluster, DataPoint, Dataset, SoftAssignment, Turn
 from src.schemas import InputOracle
 
 DATASET_ID = "ds-gen-stability"
@@ -108,11 +119,13 @@ _INITIAL_SYSTEM_PROMPT = (
     "Initial clustering is ready. Tell me how you'd like it changed, or "
     "let me know if it already looks right."
 )
-# Coherence sampling — mirror backend/routers/sessions.py so B2 here matches the
-# live eval endpoint (top-3 most representative + bottom-2 weakest-fitting edge
-# cases; the bottom-2 stress-test the cluster and catch bad new members).
-N_TOP_COHERENCE = 3
-N_BOTTOM_COHERENCE = 2
+# Coherence sampling — 10 per cluster (6 top + 4 bottom), preserving the live
+# endpoint's 3:2 representative-to-edge-case ratio. The bottom slice stress-tests
+# the cluster and catches bad new members; the top slice anchors the judge on
+# what the cluster is actually about. Larger than the live endpoint's 3+2 by
+# explicit request — B2 here is a richer signal than the production read.
+N_TOP_COHERENCE = 6
+N_BOTTOM_COHERENCE = 4
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +218,81 @@ def _hard_silhouette(db, snapshot: dict[str, dict[str, float]]) -> dict[str, flo
     y = LabelEncoder().fit_transform(labels)
     sil = silhouette_samples(X, y)
     return dict(zip(point_ids, (float(s) for s in sil)))
+
+
+# ---------------------------------------------------------------------------
+# Clone a real session into an in-memory DB so the ingestion phase never writes
+# to demo_database.db. Copies dataset, session, turns, clusters, the points the
+# session actually assigned, and every SoftAssignment row for those clusters
+# (full history — eval_session needs Turn + multi-turn snapshots for A2/A3).
+# ---------------------------------------------------------------------------
+def _clone_session_to_memory(real_db_url: str, session_id: str):
+    """Returns (in_mem_db, cloned_session, converged_turn).
+
+    The real DB is opened, read, and closed; the ingestion phase writes only to
+    the in-memory clone. The dataset may be larger than what the session touched
+    — we copy only points with at least one SoftAssignment in this session.
+    """
+    real_engine = create_engine(real_db_url, connect_args={"check_same_thread": False})
+    real_db = sessionmaker(bind=real_engine, autoflush=False, autocommit=False)()
+    try:
+        session = real_db.query(ChatSession).filter_by(id=session_id).one_or_none()
+        if session is None:
+            raise SystemExit(f"session '{session_id}' not found in {real_db_url}")
+        dataset = real_db.query(Dataset).filter_by(id=session.dataset_id).one()
+        turns = real_db.query(Turn).filter_by(session_id=session_id).all()
+        clusters = real_db.query(Cluster).filter_by(session_id=session_id).all()
+        cluster_ids = [c.id for c in clusters]
+        if not cluster_ids:
+            raise SystemExit(f"session '{session_id}' has no clusters — nothing to generalize from")
+        assigned_pids = {
+            pid for (pid,) in real_db.query(SoftAssignment.data_point_id)
+            .filter(SoftAssignment.cluster_id.in_(cluster_ids)).distinct()
+        }
+        points = real_db.query(DataPoint).filter(DataPoint.id.in_(assigned_pids)).all()
+        assignments = (
+            real_db.query(SoftAssignment)
+            .filter(SoftAssignment.cluster_id.in_(cluster_ids))
+            .all()
+        )
+        converged_turn = (
+            real_db.query(func.max(SoftAssignment.turn_number))
+            .filter(SoftAssignment.cluster_id.in_(cluster_ids))
+            .scalar()
+        ) or 0
+
+        # Snapshot the column values BEFORE closing the source session — once it's
+        # closed, attribute access on the ORM objects will fail (detached instance).
+        def _vals(obj, cls):
+            return {c.name: getattr(obj, c.name) for c in cls.__table__.columns}
+
+        dataset_vals = _vals(dataset, Dataset)
+        session_vals = _vals(session, ChatSession)
+        turn_vals = [_vals(t, Turn) for t in turns]
+        cluster_vals = [_vals(c, Cluster) for c in clusters]
+        point_vals = [_vals(p, DataPoint) for p in points]
+        assignment_vals = [_vals(a, SoftAssignment) for a in assignments]
+    finally:
+        real_db.close()
+
+    mem_engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(bind=mem_engine)
+    db = sessionmaker(bind=mem_engine, autoflush=False, autocommit=False)()
+    db.add(Dataset(**dataset_vals))
+    db.add(ChatSession(**session_vals))
+    for v in point_vals:
+        db.add(DataPoint(**v))
+    for v in cluster_vals:
+        db.add(Cluster(**v))
+    for v in turn_vals:
+        db.add(Turn(**v))
+    for v in assignment_vals:
+        db.add(SoftAssignment(**v))
+    db.commit()
+    cloned = db.query(ChatSession).filter_by(id=session_id).one()
+    return db, cloned, int(converged_turn)
 
 
 # ---------------------------------------------------------------------------
@@ -629,6 +717,15 @@ def main() -> None:
     parser.add_argument("--no-conversation", action="store_true",
                         help="skip the oracle conversation and converge on the bare "
                              "initial clustering (legacy behaviour, for A/B comparison)")
+    parser.add_argument("--session-id",
+                        help="Run generalization on an EXISTING session in --db-url. "
+                             "Skips initial_clustering + oracle conversation: clones the "
+                             "session into an in-memory DB, then ingests --new as new "
+                             "arrivals against its frozen geometry. --base, --k, "
+                             "--persona, --max-turns, --no-conversation are ignored in "
+                             "this mode. The real DB is never mutated.")
+    parser.add_argument("--db-url", default="sqlite:///./data/demo_database.db",
+                        help="Source DB for --session-id (read-only; copied into memory).")
     args = parser.parse_args()
 
     if DRY_RUN:
@@ -640,84 +737,121 @@ def main() -> None:
     from pathlib import Path
     logger._clustering_log_path = Path(tempfile.gettempdir()) / "gen_stability_clustering.jsonl"
 
-    print("Loading + cleaning splits (title,text only — no labels)…")
-    base_texts = _read_texts(args.base, args.limit)
+    # --new is required in both modes (the stream of arrivals to ingest).
+    print("Loading + cleaning new arrivals (title,text only — no labels)…")
     new_texts = _read_texts(args.new, args.limit)
-    print(f"  base (→ converged): {len(base_texts)} rows")
-    print(f"  new  (→ ingested):  {len(new_texts)} rows")
+    print(f"  new (→ ingested): {len(new_texts)} rows")
 
-    print(f"Loading {EMBEDDING_MODEL} and embedding (one-time, ~60-90s on CPU)…")
-    from sentence_transformers import SentenceTransformer
-    model = SentenceTransformer(EMBEDDING_MODEL)
-    base_emb = _embed(base_texts, model)
-    new_emb = _embed(new_texts, model)
-
-    # ── Throwaway in-memory session (no live server, demo_database.db untouched) ─
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False},
-                           poolclass=StaticPool)
-    Base.metadata.create_all(bind=engine)
-    db = sessionmaker(bind=engine, autoflush=False, autocommit=False)()
-    db.add(Dataset(id=DATASET_ID, name="generalization", description=""))
-    # Start ACTIVE: the engine refuses turns on a converged/closed session, and we
-    # want a real oracle conversation to drive it to convergence.
-    session = ChatSession(id=SESSION_ID, dataset_id=DATASET_ID,
-                          embedding_model=EMBEDDING_MODEL, status="active")
-    db.add(session)
-
-    base_points = []
-    for i, emb in enumerate(base_emb):
-        dp = DataPoint(id=f"base-{i}", dataset_id=DATASET_ID,
-                       text=base_texts[i], embedding=emb.tolist())
-        db.add(dp)
-        base_points.append(dp)
-    db.flush()
-
-    clusters, assignments, sil = initial_clustering(
-        base_points, k=args.k, session_id=SESSION_ID, turn_number=0
-    )
-    for c in clusters:
-        db.add(c)
-    for a in assignments:
-        db.add(a)
-    db.commit()
-    backend = _last_backend(logger._clustering_log_path)
-    print(f"\nInitial clustering: {len(base_points)} points → k={args.k} "
-          f"(backend={backend}, seed={KMEANS_RANDOM_STATE}, fit silhouette={sil:.4f}).")
-
-    # ── Drive the throwaway session to convergence with an LLM oracle ─────────
-    converged_turn = 0
-    if args.no_conversation:
-        print("\n--no-conversation: converging on the bare initial clustering "
-              "(legacy behaviour).")
-        session.status = "converged"
-        db.commit()
-    else:
-        persona = load_persona(args.persona)
-        print(f"\nDriving a throwaway conversation with persona "
-              f"'{persona.name}' (max {args.max_turns} turns)…")
-        if DRY_RUN:
-            print("  ⚠ HARNESS_DRY_RUN=true — the oracle's replies are MOCKED; the "
-                  "conversation is not meaningful. Run without dry-run for a real session.")
-        convo = _run_oracle_conversation(db, session, persona, args.max_turns)
-        # The converged snapshot is the LATEST turn that actually wrote soft
-        # assignments — NOT necessarily the last conversation turn. A turn with no
-        # operations (e.g. the oracle just acknowledging) advances the turn number
-        # but writes no new snapshot, so its turn has no rows to freeze from.
-        converged_turn = (
-            db.query(func.max(SoftAssignment.turn_number)).scalar() or 0
+    if args.session_id:
+        # ── MODE B: clone an existing session out of the real DB ──────────────
+        ignored = [k for k, v in [
+            ("--base", args.base != parser.get_default("base")),
+            ("--k", args.k != parser.get_default("k")),
+            ("--persona", args.persona != DEFAULT_PERSONA),
+            ("--max-turns", args.max_turns != DEFAULT_MAX_TURNS),
+            ("--no-conversation", args.no_conversation),
+        ] if v]
+        if ignored:
+            print(f"⚠ --session-id given → ignoring {', '.join(ignored)} "
+                  f"(no clustering / conversation runs in this mode).")
+        print(f"\nCloning session '{args.session_id}' from {args.db_url} into memory…")
+        db, session, converged_turn = _clone_session_to_memory(args.db_url, args.session_id)
+        # Real sessions store embedding_model="default" (see backend/routers/sessions.py);
+        # resolve to the actual model name the engine uses everywhere.
+        embedding_model_name = (
+            EMBEDDING_MODEL if session.embedding_model == "default" else session.embedding_model
         )
-        # Mark converged so the session eval + reporting read it as a finished run.
-        session.status = "converged"
+        n_points = db.query(DataPoint).count()
+        n_clusters = db.query(Cluster).filter_by(session_id=session.id).count()
+        print(f"  cloned: dataset={session.dataset_id}, status={session.status}, "
+              f"embedding_model={embedding_model_name}, "
+              f"{n_points} points, {n_clusters} clusters, converged_turn={converged_turn}")
+        if session.status != "converged":
+            print(f"  ⚠ session.status={session.status!r} (not 'converged') — "
+                  f"using its latest snapshot at turn {converged_turn} anyway.")
+
+        print(f"\nLoading {embedding_model_name} and embedding new arrivals…")
+        from sentence_transformers import SentenceTransformer
+        model = SentenceTransformer(embedding_model_name)
+        new_emb = _embed(new_texts, model)
+    else:
+        # ── MODE A: build a throwaway converged session from --base ───────────
+        print("Loading + cleaning base split…")
+        base_texts = _read_texts(args.base, args.limit)
+        print(f"  base (→ converged): {len(base_texts)} rows")
+
+        print(f"Loading {EMBEDDING_MODEL} and embedding (one-time, ~60-90s on CPU)…")
+        from sentence_transformers import SentenceTransformer
+        model = SentenceTransformer(EMBEDDING_MODEL)
+        base_emb = _embed(base_texts, model)
+        new_emb = _embed(new_texts, model)
+
+        # Throwaway in-memory session (no live server, demo_database.db untouched).
+        engine = create_engine("sqlite://", connect_args={"check_same_thread": False},
+                               poolclass=StaticPool)
+        Base.metadata.create_all(bind=engine)
+        db = sessionmaker(bind=engine, autoflush=False, autocommit=False)()
+        db.add(Dataset(id=DATASET_ID, name="generalization", description=""))
+        # Start ACTIVE: the engine refuses turns on a converged/closed session, and we
+        # want a real oracle conversation to drive it to convergence.
+        session = ChatSession(id=SESSION_ID, dataset_id=DATASET_ID,
+                              embedding_model=EMBEDDING_MODEL, status="active")
+        db.add(session)
+
+        base_points = []
+        for i, emb in enumerate(base_emb):
+            dp = DataPoint(id=f"base-{i}", dataset_id=DATASET_ID,
+                           text=base_texts[i], embedding=emb.tolist())
+            db.add(dp)
+            base_points.append(dp)
+        db.flush()
+
+        clusters, assignments, sil = initial_clustering(
+            base_points, k=args.k, session_id=SESSION_ID, turn_number=0
+        )
+        for c in clusters:
+            db.add(c)
+        for a in assignments:
+            db.add(a)
         db.commit()
-        print(f"  conversation done: {convo['n_turns']} turns, "
-              f"terminated_by={convo['terminated_by']}, "
-              f"oracle_cost=${convo['oracle_cost_usd']:.4f}, "
-              f"errors={len(convo['errors'])}  (converged snapshot at turn {converged_turn})")
-        for e in convo["errors"][:5]:
-            print(f"    · {e}")
+        backend = _last_backend(logger._clustering_log_path)
+        print(f"\nInitial clustering: {len(base_points)} points → k={args.k} "
+              f"(backend={backend}, seed={KMEANS_RANDOM_STATE}, fit silhouette={sil:.4f}).")
+
+        # Drive the throwaway session to convergence with an LLM oracle.
+        converged_turn = 0
+        if args.no_conversation:
+            print("\n--no-conversation: converging on the bare initial clustering "
+                  "(legacy behaviour).")
+            session.status = "converged"
+            db.commit()
+        else:
+            persona = load_persona(args.persona)
+            print(f"\nDriving a throwaway conversation with persona "
+                  f"'{persona.name}' (max {args.max_turns} turns)…")
+            if DRY_RUN:
+                print("  ⚠ HARNESS_DRY_RUN=true — the oracle's replies are MOCKED; the "
+                      "conversation is not meaningful. Run without dry-run for a real session.")
+            convo = _run_oracle_conversation(db, session, persona, args.max_turns)
+            # The converged snapshot is the LATEST turn that actually wrote soft
+            # assignments — NOT necessarily the last conversation turn. A turn with no
+            # operations (e.g. the oracle just acknowledging) advances the turn number
+            # but writes no new snapshot, so its turn has no rows to freeze from.
+            converged_turn = (
+                db.query(func.max(SoftAssignment.turn_number)).scalar() or 0
+            )
+            # Mark converged so the session eval + reporting read it as a finished run.
+            session.status = "converged"
+            db.commit()
+            print(f"  conversation done: {convo['n_turns']} turns, "
+                  f"terminated_by={convo['terminated_by']}, "
+                  f"oracle_cost=${convo['oracle_cost_usd']:.4f}, "
+                  f"errors={len(convo['errors'])}  (converged snapshot at turn {converged_turn})")
+            for e in convo["errors"][:5]:
+                print(f"    · {e}")
 
     # ── Session eval (A1–B4) on the converged state ──────────────────────────
-    ev = _session_eval(SESSION_ID, db)
+    ev = _session_eval(session.id, db)
     if ev is not None:
         print("\nSESSION EVAL (the converged throwaway session)")
         print(f"    k_final: {ev.k_final}")
@@ -740,7 +874,7 @@ def main() -> None:
     snap0 = _snapshot_at(db, converged_turn)
     emb0 = {
         dp.id: dp.embedding
-        for dp in db.query(DataPoint).filter(DataPoint.dataset_id == DATASET_ID).all()
+        for dp in db.query(DataPoint).filter(DataPoint.dataset_id == session.dataset_id).all()
         if dp.embedding is not None and dp.id in snap0
     }
     centroid_ids, centroids, diag_vars, log_weights = gmm_params_from_snapshot(emb0, snap0)
@@ -776,13 +910,13 @@ def main() -> None:
         if len(idx) == 0:
             continue
         batch_points = [
-            DataPoint(id=f"new-{int(i)}", dataset_id=DATASET_ID,
+            DataPoint(id=f"gen-new-{int(i)}", dataset_id=session.dataset_id,
                       text=new_texts[int(i)],
                       embedding=new_emb[int(i)].tolist())
             for i in idx
         ]
         last_turn, _ = ingest_points(
-            SESSION_ID, batch_points, centroid_ids, centroids, diag_vars, log_weights, db
+            session.id, batch_points, centroid_ids, centroids, diag_vars, log_weights, db
         )
         db.commit()
         snap = _snapshot_at(db, last_turn)
@@ -846,14 +980,17 @@ def main() -> None:
           "converged structure.")
     print("=" * 70)
 
-    # ── Close the throwaway session ──────────────────────────────────────────
-    # The in-memory DB is discarded on close — the session, its turns, clusters
-    # and the ingested points vanish with it. Nothing was ever written to
-    # demo_database.db.
+    # ── Close the in-memory DB ───────────────────────────────────────────────
+    # The clone (whether built fresh by Mode A or copied from a real session by
+    # Mode B) is discarded on close — ingested points, the +1 snapshot, and any
+    # status changes vanish with it. Nothing was written to the source DB.
     session.status = "closed"
     db.commit()
-    print(f"\nThrowaway session '{SESSION_ID}' closed and discarded "
-          f"(in-memory DB — demo_database.db was never touched).")
+    origin = (
+        f"clone of '{session.id}' from {args.db_url}"
+        if args.session_id else f"throwaway session '{session.id}'"
+    )
+    print(f"\nIn-memory DB closed ({origin}) — source DB was never touched.")
     db.close()
 
 

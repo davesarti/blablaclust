@@ -30,6 +30,7 @@ Technical documentation of features developed during the project.
 |---|---|---|
 | [semantic-reembed-report.md](semantic-reembed-report.md) | P5 | Full implementation of the semantic reembedding pipeline (`f_semantic_reembed.py`): architecture, cosine strategy, LLM fallback, hybrid matrix, test results, future directions |
 | [gmm-vs-kmeans-report.md](gmm-vs-kmeans-report.md) | P2 | Comparison of GMM and k-means clustering algorithms; rationale for the final choice |
+| [generalization-stability-report.md](generalization-stability-report.md) | P4 | Online generalization (robustness under in-distribution growth) across the 6 user sessions: A1 / A4 / B2 paired Δ with bootstrap + Wilson CIs, forest plots, per-session and cohort-level analysis, failure cases |
 
 ---
 

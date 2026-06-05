@@ -1,0 +1,808 @@
+[
+  {
+    "session_name": "baseline/amazon_reviews",
+    "session_id": "3493e19f-6700-443e-a966-2cf791c154c9",
+    "status": "converged",
+    "oracle_kind": "human",
+    "evaluated_at": "2026-06-04 21:31:16.224448",
+    "metrics": {
+      "session_id": "3493e19f-6700-443e-a966-2cf791c154c9",
+      "k_final": 5,
+      "cached": false,
+      "A1": {
+        "silhouette_initial": 0.04350962117314339,
+        "silhouette_final": 0.04350962117314339,
+        "trend": [
+          0.04350962117314339
+        ]
+      },
+      "A2": {
+        "turns": 1,
+        "weighted_turns": 2.0,
+        "termination": "converged"
+      },
+      "A3": {
+        "cognitive_load_by_turn": [
+          1
+        ],
+        "mean_cognitive_load": 1.0,
+        "cognitive_load_driver_by_turn": [],
+        "final_cognitive_load_breakdown": null
+      },
+      "B1": {
+        "overall_score": 0.88,
+        "notes": "Strong session: perfect oracle compliance with a clear instruction, and overall high internal coherence across most clusters. The one notable weakness is the Household product user reviews cluster, which includes off-topic book/media items, but this is localized and does not materially undermine the otherwise tight Movies/TV home video reviews, Book reviews across genres, Consumer electronics gear reviews, and Music albums and CDs reviews."
+      },
+      "B2": {
+        "coherence_mean": 0.85,
+        "coherence_min": 0.5,
+        "per_cluster": [
+          {
+            "cluster_id": "075f2b11-810f-4b26-b9c9-132be4bdb46f",
+            "cluster_name": "Household product user reviews",
+            "coherence": 0.5,
+            "reasoning": "Broad theme is user reviews of household tools/appliances, but several items are book/media reviews (e.g., a Tae Kwon Do instructional book, a Napoleonic Wars book, and Merck Index CD pricing) which are off-topic for household products."
+          },
+          {
+            "cluster_id": "23ee00e1-9b69-442c-a2c1-2abcde7ac9a8",
+            "cluster_name": "Movies/TV home video reviews",
+            "coherence": 0.9,
+            "reasoning": "Mostly reviews of movies/TV on DVD with comments on quality and experience; one edge case is a video game review, which is off-topic."
+          },
+          {
+            "cluster_id": "5dd03143-b32a-4606-a86c-2c8a9665f627",
+            "cluster_name": "Book reviews across genres",
+            "coherence": 0.98,
+            "reasoning": "Consistently book reviews across varied genres, discussing content and usefulness; all sampled members fit."
+          },
+          {
+            "cluster_id": "2e037cd9-6499-4d0a-8c21-d64f122fb324",
+            "cluster_name": "Consumer electronics gear reviews",
+            "coherence": 0.97,
+            "reasoning": "Unified theme of consumer electronics gear and accessories (cameras, phones, headphones, educational devices) with hands-on issues and usability; all examples fit."
+          },
+          {
+            "cluster_id": "8d0d1bd2-2145-41aa-bc91-2c83714ed220",
+            "cluster_name": "Music albums and CDs reviews",
+            "coherence": 0.9,
+            "reasoning": "Predominantly music album/CD reviews; one bottom example is a kids\u2019 TV episode/home video synopsis, which is off-topic."
+          }
+        ]
+      },
+      "B3": {
+        "compliance_score": 1.0,
+        "notes": "The oracle stated no changes were needed, and the system performed no operations. This precisely follows the request with no unintended merges, splits, or renames. Fully compliant."
+      },
+      "B4": {
+        "contradiction_score": 0.0,
+        "notes": "The oracle provided a single, clear global instruction with no changes requested. There are no shifts in criteria, contradictions, or ambiguities. Intent is stable and unambiguous throughout.",
+        "examples": [
+          "Turn 1: 'no changes needed'\u2014a single, unambiguous global directive with no subsequent turns to contradict or refine it."
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "baseline/imbd",
+    "session_id": "7d6dbb17-f865-4fed-94ee-763bd578e76f",
+    "status": "converged",
+    "oracle_kind": "human",
+    "evaluated_at": "2026-06-04 21:28:11.469785",
+    "metrics": {
+      "session_id": "7d6dbb17-f865-4fed-94ee-763bd578e76f",
+      "k_final": 5,
+      "cached": false,
+      "A1": {
+        "silhouette_initial": 0.006564230192452669,
+        "silhouette_final": 0.006564230192452669,
+        "trend": [
+          0.006564230192452669
+        ]
+      },
+      "A2": {
+        "turns": 1,
+        "weighted_turns": 2.0,
+        "termination": "converged"
+      },
+      "A3": {
+        "cognitive_load_by_turn": [
+          1
+        ],
+        "mean_cognitive_load": 1.0,
+        "cognitive_load_driver_by_turn": [],
+        "final_cognitive_load_breakdown": null
+      },
+      "B1": {
+        "overall_score": 0.86,
+        "notes": "Strong session: perfect oracle compliance and largely tight clustering. International & Arthouse Reviews and Horror & Cult Gore Movie Reviews were especially coherent, while TV Series & Specials Commentary and Snarky Takes on Mixed Movies showed some off-topic or uneven focus, trimming the score. With a clear, non-contradictory oracle, these localized coherence dents are the only caveat."
+      },
+      "B2": {
+        "coherence_mean": 0.784,
+        "coherence_min": 0.61,
+        "per_cluster": [
+          {
+            "cluster_id": "e7861596-49ae-496a-b575-5355e3955825",
+            "cluster_name": "Classic & Genre Film Critiques",
+            "coherence": 0.76,
+            "reasoning": "Classic & Genre Film Critiques groups film reviews focused on early cinema, classic Hollywood, and genre/crime titles, with detailed plot/context. A couple of edge cases (a generic TV movie and a broad critique of a Native-themed film) skew more general, but they\u2019re still film reviews."
+          },
+          {
+            "cluster_id": "3adb440c-355d-4226-9f93-67a390caf6c9",
+            "cluster_name": "Snarky Takes on Mixed Movies",
+            "coherence": 0.68,
+            "reasoning": "Snarky Takes on Mixed Movies coherently gathers opinionated film reviews across varied genres, often critical or camp-aware. Some entries are more positive or lengthy than the \u2018short/snarky\u2019 framing, but all are straightforward movie critiques."
+          },
+          {
+            "cluster_id": "e8d493ed-b9ca-41a6-876b-4e39c15940de",
+            "cluster_name": "International & Arthouse Reviews",
+            "coherence": 0.9,
+            "reasoning": "International & Arthouse Reviews tightly centers on European/Asian/Bollywood and auteur cinema (Kie\u015blowski, Wajda, Hong Kong crime). All sampled items match the international/arthouse focus."
+          },
+          {
+            "cluster_id": "def4db81-ff0e-429a-a974-57699588b4fa",
+            "cluster_name": "TV Series & Specials Commentary",
+            "coherence": 0.61,
+            "reasoning": "TV Series & Specials Commentary mainly features reactions to TV shows/specials (MTV reality, a Muppets/Denver special). However, some entries are straight theatrical film reviews (H.G. Wells\u2019 1935 film, Spirit), which are off-topic for a TV-centric cluster."
+          },
+          {
+            "cluster_id": "05f2b542-4841-41e1-ac69-2e2dc48d875a",
+            "cluster_name": "Horror & Cult Gore Movie Reviews",
+            "coherence": 0.97,
+            "reasoning": "Horror & Cult Gore Movie Reviews is very tight: all items are horror/cult genre critiques (splatter, zombies, anthology, slasher/exploitation) emphasizing gore, effects, and camp."
+          }
+        ]
+      },
+      "B3": {
+        "compliance_score": 1.0,
+        "notes": "The oracle requested no changes, and the system made no structural operations. This fully respects the intent to leave the existing clusters as-is. No requests were missed or mishandled."
+      },
+      "B4": {
+        "contradiction_score": 0.0,
+        "notes": "Single, global instruction stating no changes were needed. The intent is stable and unambiguous with no shifts or conflicting directives.",
+        "examples": []
+      }
+    }
+  },
+  {
+    "session_name": "baseline/newsgroups",
+    "session_id": "0b7469b3-0349-4cb2-a093-3ed321fc853f",
+    "status": "converged",
+    "oracle_kind": "human",
+    "evaluated_at": "2026-06-04 21:34:35.687496",
+    "metrics": {
+      "session_id": "0b7469b3-0349-4cb2-a093-3ed321fc853f",
+      "k_final": 5,
+      "cached": false,
+      "A1": {
+        "silhouette_initial": 0.050940871238708496,
+        "silhouette_final": 0.050940871238708496,
+        "trend": [
+          0.050940871238708496
+        ]
+      },
+      "A2": {
+        "turns": 1,
+        "weighted_turns": 2.0,
+        "termination": "converged"
+      },
+      "A3": {
+        "cognitive_load_by_turn": [
+          1
+        ],
+        "mean_cognitive_load": 1.0,
+        "cognitive_load_driver_by_turn": [],
+        "final_cognitive_load_breakdown": null
+      },
+      "B1": {
+        "overall_score": 0.89,
+        "notes": "Strong session: the oracle was clear, compliance was perfect, and overall coherence was high, so the system served the oracle well. The main drag was some off-topic spill in Spaceflight FAQs and auto topics, with minor leakage in Comp.graphics resources and tools and Waco siege and US gun rights, while 1990s baseball Usenet threads and General health and med advice debates were notably tight."
+      },
+      "B2": {
+        "coherence_mean": 0.806,
+        "coherence_min": 0.64,
+        "per_cluster": [
+          {
+            "cluster_id": "ef2396a2-6f65-4d1c-9a52-792f6f880e34",
+            "cluster_name": "1990s baseball Usenet threads",
+            "coherence": 0.97,
+            "reasoning": "The 1990s baseball Usenet threads cluster tightly centers on MLB talk\u2014players, stats, teams, history, and mailing lists. Even the edge cases (Phillies ERA, Babe Ruth in a film) are clearly baseball-related."
+          },
+          {
+            "cluster_id": "034f9224-d76c-46b2-a813-283033247f2d",
+            "cluster_name": "Spaceflight FAQs and auto topics",
+            "coherence": 0.64,
+            "reasoning": "Spaceflight FAQs and auto topics is largely sci.space content (astronaut FAQs, mission/engineering discussions). Some bottom items are off-topic tech/crosspost meta (ACCESS.bus spec, sci.image.processing complaint) rather than space or automotive."
+          },
+          {
+            "cluster_id": "0dcde96b-b99d-4220-b815-4d6b78b86b59",
+            "cluster_name": "Waco siege and US gun rights",
+            "coherence": 0.78,
+            "reasoning": "Waco siege and US gun rights mainly features debates on Waco, BATF/FBI actions, and broader Second Amendment issues. Bottom samples are generic flame/FAQ meta not about guns or Waco, but most content fits the theme."
+          },
+          {
+            "cluster_id": "b19c9132-c90b-4c4e-82ca-8cf46fd8fdd8",
+            "cluster_name": "General health and med advice debates",
+            "coherence": 0.88,
+            "reasoning": "General health and med advice debates consistently covers medical Q&A and argument over diagnostics, infections, pediatrics, and alternative medicine. One long post veers into philosophy of science, but remains adjacent to sci.med discourse."
+          },
+          {
+            "cluster_id": "22248c13-1209-4d54-b61a-28314f19efea",
+            "cluster_name": "Comp.graphics resources and tools",
+            "coherence": 0.76,
+            "reasoning": "Comp.graphics resources and tools focuses on graphics software, file formats, and image processing hardware. A couple of bottom items (Emacs calendar sunrise/sunset, NASM photo copying) are off-topic, but the bulk matches the graphics theme."
+          }
+        ]
+      },
+      "B3": {
+        "compliance_score": 1.0,
+        "notes": "The oracle said \"no changes needed\" and the system made no structural changes. This matches the request exactly. No operations were required or performed, so compliance is perfect."
+      },
+      "B4": {
+        "contradiction_score": 0.0,
+        "notes": "Single, clear global instruction indicating acceptance of the current state. No shifts in criteria or contradictory requests across turns. Guidance is stable and unambiguous.",
+        "examples": []
+      }
+    }
+  },
+  {
+    "session_name": "user1/newsgroups",
+    "session_id": "8a436fa9-9dc5-4188-8f46-3b787998df64",
+    "status": "converged",
+    "oracle_kind": "human",
+    "evaluated_at": "2026-06-04 22:17:16.742568",
+    "metrics": {
+      "session_id": "8a436fa9-9dc5-4188-8f46-3b787998df64",
+      "k_final": 8,
+      "cached": false,
+      "A1": {
+        "silhouette_initial": 0.050940871238708496,
+        "silhouette_final": 0.03993953764438629,
+        "trend": [
+          0.050940871238708496,
+          0.018443303182721138,
+          0.03993953764438629
+        ]
+      },
+      "A2": {
+        "turns": 5,
+        "weighted_turns": 10.0,
+        "termination": "converged"
+      },
+      "A3": {
+        "cognitive_load_by_turn": [
+          2,
+          2,
+          2,
+          2,
+          2
+        ],
+        "mean_cognitive_load": 2.0,
+        "cognitive_load_driver_by_turn": [],
+        "final_cognitive_load_breakdown": null
+      },
+      "B1": {
+        "overall_score": 0.88,
+        "notes": "Strong session: high compliance with the oracle\u2019s requests and broadly coherent clusters mean the intent shows through. One cluster\u2014Usenet tech debates and explanations\u2014remained fragmented, but the rest were focused. Given the oracle\u2019s vagueness and shifting references, those rough edges are understandable, and the system served the oracle well."
+      },
+      "B2": {
+        "coherence_mean": 0.83,
+        "coherence_min": 0.52,
+        "per_cluster": [
+          {
+            "cluster_id": "dc8f809f-831e-44e0-b090-98d00fc331e8",
+            "cluster_name": "Waco siege and US gun control debate",
+            "coherence": 0.82,
+            "reasoning": "Strong focus on Waco, gun rights, and U.S. gun control politics. A few bottom items veer into general crime/punishment or vague jokes, but remain adjacent to law-and-violence themes."
+          },
+          {
+            "cluster_id": "20120391-8a55-4dd2-9792-f777d62a34d7",
+            "cluster_name": "General medicine Q&A and controversies",
+            "coherence": 0.88,
+            "reasoning": "Consistent medical Q&A and debates over treatment and public health. Bottom items about water contamination and food/carcinogens are public-health/health-related and fit broadly."
+          },
+          {
+            "cluster_id": "a5ffa9fa-7fbe-4ca7-9279-b2c6a7e2b7af",
+            "cluster_name": "Comp.graphics resources and coding Q&A",
+            "coherence": 0.78,
+            "reasoning": "Mostly graphics software/hardware resources, file format conversion, and imaging algorithms. One bottom post seeking a rat cell line is off-topic biomedical."
+          },
+          {
+            "cluster_id": "5fdbc51c-e4ff-43d2-bced-13d36ad9a079",
+            "cluster_name": "Highly space-mission focused",
+            "coherence": 0.81,
+            "reasoning": "Centered on spaceflight, NASA/JPL, astronaut info, and related astrophysics. One bottom post about ROTC/ATF/Waco is unrelated, but the rest maintains a clear space theme."
+          },
+          {
+            "cluster_id": "1f07d06d-605e-4f2b-83ef-d69b29c336fc",
+            "cluster_name": "Usenet tech debates and explanations",
+            "coherence": 0.52,
+            "reasoning": "Mixed tech and Usenet meta: rockets regulation, software behavior, posting schedules, and general snark. The spread across disparate topics makes it fragmented despite a \u2018tech debate\u2019 vibe."
+          },
+          {
+            "cluster_id": "dd9d432f-d84e-4cd7-a219-919e82b98e03",
+            "cluster_name": "Cars: ownership, maintenance, and mods",
+            "coherence": 0.96,
+            "reasoning": "Highly consistent automotive discussion: repairs, insurance, features, buying/selling, and model impressions. Both top and bottom samples fit squarely."
+          },
+          {
+            "cluster_id": "7e223e5e-ba01-414d-942b-130954cca265",
+            "cluster_name": "MLB fan chatter: schedules, media, lore",
+            "coherence": 0.96,
+            "reasoning": "Uniform MLB fan chatter: schedules, tickets, broadcast/stadium talk, player trivia, and trade musings. All samples match the theme."
+          },
+          {
+            "cluster_id": "84968258-8b86-4010-b2ac-73ce36b7427b",
+            "cluster_name": "Sabermetric debates and rules proposals",
+            "coherence": 0.91,
+            "reasoning": "Analytical baseball discussions on player value, rules/scoring, and stats needs. Bottom items (umpire conduct and player projections) remain within sabermetric/rules debate."
+          }
+        ]
+      },
+      "B3": {
+        "compliance_score": 0.96,
+        "notes": "The system consistently executed the requested structural changes: it split the specified cluster to separate space missions, renamed the complained-of cluster, split that same cluster into three, and merged the two specified clusters with an appropriate new name. For the final turn\u2019s vague \u201cfirst cluster is too generic,\u201d it reasonably addressed the intent by splitting a cluster into two. Minor quibble: the first turn used a nonstandard \u2018cluster_reembed\u2019 label instead of a plain split, and the rename operation didn\u2019t show the new name in the log, but both clearly matched the oracle\u2019s aims."
+      },
+      "B4": {
+        "contradiction_score": 0.72,
+        "notes": "No explicit contradictions, but the guidance is largely vague and index-based, with unstable references and missing specifics. Several turns lack concrete targets, criteria, or desired outcomes, making it hard for a system to act unambiguously after prior edits.",
+        "examples": [
+          "Asked to rename a cluster without providing a new name.",
+          "Asked to split a previously referenced cluster into three without any criteria for how to divide it.",
+          "Requested merging two clusters by their positions after earlier splits/renames, risking that those positions no longer match the intended targets.",
+          "Said the first cluster is too generic without specifying what direction to refine or how to change it."
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "user2/amazon_reviews",
+    "session_id": "3a71957c-3185-4f01-85ac-25b42ea5fab9",
+    "status": "converged",
+    "oracle_kind": "human",
+    "evaluated_at": "2026-06-04 23:23:11.403186",
+    "metrics": {
+      "session_id": "3a71957c-3185-4f01-85ac-25b42ea5fab9",
+      "k_final": 6,
+      "cached": false,
+      "A1": {
+        "silhouette_initial": 0.04350962117314339,
+        "silhouette_final": 0.03315702825784683,
+        "trend": [
+          0.04350962117314339,
+          0.667663037776947,
+          0.03315702825784683
+        ]
+      },
+      "A2": {
+        "turns": 4,
+        "weighted_turns": 8.0,
+        "termination": "converged"
+      },
+      "A3": {
+        "cognitive_load_by_turn": [
+          1,
+          2,
+          1,
+          2
+        ],
+        "mean_cognitive_load": 1.5,
+        "cognitive_load_driver_by_turn": [],
+        "final_cognitive_load_breakdown": null
+      },
+      "B1": {
+        "overall_score": 0.55,
+        "notes": "The session is categorized as mixed, primarily due to the system's failure to maintain operation compliance under the weight of an ambiguous and structurally drifting oracle. While the internal coherence of clusters like Music-Related Content and Media Opinions demonstrates effective grouping, the lack of clarity regarding the baseline state of cluster definitions made the system's technical errors understandable, if still performance-limiting."
+      },
+      "B2": {
+        "coherence_mean": 0.75,
+        "coherence_min": 0.45,
+        "per_cluster": [
+          {
+            "cluster_id": "390bad50-86c0-41b9-a8bf-19c400832c30",
+            "cluster_name": "Very high music-related content",
+            "coherence": 0.95,
+            "reasoning": "This cluster is highly coherent, focusing exclusively on music reviews, album critiques, and personal reactions to artists and CDs."
+          },
+          {
+            "cluster_id": "168c3e99-2762-4e4b-88d4-a02cb464ec65",
+            "cluster_name": "Guides, Educational Materials and Texts",
+            "coherence": 0.8,
+            "reasoning": "The cluster centers effectively on educational and instructional materials; while the prenatal health book and the manual are product-based, they function as instructional resources, maintaining thematic consistency."
+          },
+          {
+            "cluster_id": "ec5113b7-7454-441e-bf07-1f468800593f",
+            "cluster_name": "Household Goods and Consumer Products",
+            "coherence": 0.45,
+            "reasoning": "This cluster is fragmented. While largely about household goods, it includes testimonials for therapeutic/educational videos that do not fit the 'physical consumer goods/household product' theme."
+          },
+          {
+            "cluster_id": "11b20e96-ffaf-4f47-8fb7-c47cc366f123",
+            "cluster_name": "Media Opinions",
+            "coherence": 0.9,
+            "reasoning": "This cluster is tightly focused on media critiques, specifically covering books and movies, including both positive and negative sentiment."
+          },
+          {
+            "cluster_id": "d6533ff0-7c78-4e43-8ebd-d62240a912a8",
+            "cluster_name": "Satisfied Product Experiences",
+            "coherence": 0.75,
+            "reasoning": "The cluster is generally coherent regarding positive consumer experiences with electronics, though the inclusion of a note about printer paper and general e-commerce delivery satisfaction slightly dilutes the core theme."
+          },
+          {
+            "cluster_id": "dff8deb6-3b06-4253-91ac-19a765cad201",
+            "cluster_name": "Dissatisfied Product Failures",
+            "coherence": 0.65,
+            "reasoning": "The cluster effectively captures negative product experiences and technical failures, though the inclusion of a complaint about a video game's privacy policy and a software firm's strategy is slightly tangential to hardware performance issues."
+          }
+        ]
+      },
+      "B3": {
+        "compliance_score": 0.5,
+        "notes": "In turn 4, the system failed to identify 'cluster 2' correctly (as the oracle used an index that did not clearly map to the current IDs or previous session output) and instead performed an operation on an ID that did not exist in the naming schema. Additionally, the system used 'cluster_reembed' for a request that called for a specific split or categorization, representing a mismatch in operation type relative to the oracle's intent to refine an existing subset."
+      },
+      "B4": {
+        "contradiction_score": 0.6,
+        "notes": "The oracle's instructions exhibit significant structural drift, moving from an initial high-level thematic reorganization to specific granular sub-clustering and merging operations. The sequence creates ambiguity by repeatedly modifying 'cluster 2' without clarifying the cumulative baseline state of that cluster after the preceding merge and split operations.",
+        "examples": [
+          "Turn 2 split a cluster, while turn 3 merged parts of that same group, and turn 4 re-requested a re-clustering of the resulting 'cluster 2' without clear continuity.",
+          "The oracle uses global instructions that rely on specific cluster IDs, which become ambiguous as the structure is continuously modified by previous steps."
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "user3/imbd",
+    "session_id": "e105c306-4443-45d7-b00d-187a82b3e6e4",
+    "status": "converged",
+    "oracle_kind": "human",
+    "evaluated_at": "2026-06-04 23:00:03.794069",
+    "metrics": {
+      "session_id": "e105c306-4443-45d7-b00d-187a82b3e6e4",
+      "k_final": 7,
+      "cached": false,
+      "A1": {
+        "silhouette_initial": 0.006564230192452669,
+        "silhouette_final": 0.02212854102253914,
+        "trend": [
+          0.006564230192452669,
+          0.027924828231334686,
+          0.02280985377728939,
+          0.028165102005004883,
+          0.03302674740552902,
+          0.02212854102253914
+        ]
+      },
+      "A2": {
+        "turns": 3,
+        "weighted_turns": 6.0,
+        "termination": "converged"
+      },
+      "A3": {
+        "cognitive_load_by_turn": [
+          2,
+          2,
+          2
+        ],
+        "mean_cognitive_load": 2.0,
+        "cognitive_load_driver_by_turn": [],
+        "final_cognitive_load_breakdown": null
+      },
+      "B1": {
+        "overall_score": 0.65,
+        "notes": "The session is a solid effort with rough edges, primarily driven by the systemic failure in compliance regarding the split request. Although the oracle's lack of clarity regarding which cluster to target excuses some operational confusion, the system failed to execute a viable alternative action, and the resulting fragmentation in 'Retrospective Media Analysis' and 'Cinematic artistry and aesthetic focus' indicates a decline in coherence. Overall, the system succeeded in maintaining clear thematic boundaries in the majority of clusters, effectively serving the core intent despite the challenging, underspecified instructions."
+      },
+      "B2": {
+        "coherence_mean": 0.667,
+        "coherence_min": 0.4,
+        "per_cluster": [
+          {
+            "cluster_id": "862a2e8e-125e-4e53-a25b-bb24276ba0b7",
+            "cluster_name": "Historical and Genre Cinema Review",
+            "coherence": 0.75,
+            "reasoning": "The cluster centers on historical context, genre analysis, and critical film reviews. While most members focus on historical/genre cinema, the inclusion of a review of low-budget 'David Prior' films at the bottom adds a slightly distinct tone of trash-cinema critique."
+          },
+          {
+            "cluster_id": "50b9c3a6-3d22-4a74-89a3-5a037a999166",
+            "cluster_name": "Positive Film Evaluations",
+            "coherence": 0.7,
+            "reasoning": "This cluster captures positive appraisals and personal enjoyment of films. A few members express mixed feelings or 'so-bad-it's-good' sentiments, which slightly tests the 'positive' grouping but remains within the context of subjective film review."
+          },
+          {
+            "cluster_id": "2cc65c54-adf7-481c-b626-069eba978101",
+            "cluster_name": "Cinematic artistry and aesthetic focus",
+            "coherence": 0.55,
+            "reasoning": "The cluster aims for technical/aesthetic cinematography analysis, but it is fragmented by the inclusion of overly casual, non-technical complaints about plot or actor performances that lack the depth suggested by the theme."
+          },
+          {
+            "cluster_id": "915abf7a-3546-4542-be59-c658f4b3fdcf",
+            "cluster_name": "Retrospective Media Analysis",
+            "coherence": 0.4,
+            "reasoning": "This cluster is highly fragmented; it mixes nostalgic reflections and franchise analyses with off-topic personal forum posts about local high school sports and queries about song titles."
+          },
+          {
+            "cluster_id": "23b52e56-df56-455f-83f8-1e3467f44432",
+            "cluster_name": "Classic and Cult Horror Cinema",
+            "coherence": 0.82,
+            "reasoning": "The cluster maintains a strong focus on horror cinema, ranging from classic monster movies to cult and low-budget gore-fests. Despite the range of quality being discussed, the shared thematic interest in horror tropes is consistent."
+          },
+          {
+            "cluster_id": "c2c7df8b-b3ae-4c76-9fe9-00ed56bd28c6",
+            "cluster_name": "High Satisfaction Narrative Reviews",
+            "coherence": 0.8,
+            "reasoning": "The cluster focuses on personal storytelling experiences and emotional resonance in film. While a few members lean toward stronger critique, they are part of the larger discussion regarding the efficacy of narrative and character work."
+          },
+          {
+            "cluster_id": "d220ad93-d2f5-43f6-be34-b6cc69568019",
+            "cluster_name": "Low Satisfaction Technical Critiques",
+            "coherence": 0.65,
+            "reasoning": "The cluster centers on technical incompetence and dissatisfaction with film production. It is slightly marred by the inclusion of one or two off-topic reviews like the John Denver Christmas Special, which does not fit the 'low-satisfaction technical critique' description perfectly."
+          }
+        ]
+      },
+      "B3": {
+        "compliance_score": 0.8,
+        "notes": "The system correctly interpreted and executed the requests in turns 1 and 2. In turn 3, the system failed to execute a 'split' operation as requested and instead performed a 'cluster_reembed', which is a distinct, heavier-weight operation not available in the specified action list and not functionally equivalent to a standard cluster split."
+      },
+      "B4": {
+        "contradiction_score": 0.8,
+        "notes": "The oracle exhibits significant ambiguity and lacks necessary context, particularly in the final turn. By requesting to split 'that cluster' without identifying which cluster was created by the previous merge operation, the oracle provides an instruction that is impossible to execute deterministically.",
+        "examples": [
+          "turn 3 uses the vague referent 'quel cluster' (that cluster) without anchoring it to the result of the explicit merge instruction provided in turn 2."
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "user4/newsgroups",
+    "session_id": "560e3bb3-fe11-46d4-a47d-a41447a4c3bf",
+    "status": "converged",
+    "oracle_kind": "human",
+    "evaluated_at": "2026-06-04 23:06:41.658357",
+    "metrics": {
+      "session_id": "560e3bb3-fe11-46d4-a47d-a41447a4c3bf",
+      "k_final": 5,
+      "cached": false,
+      "A1": {
+        "silhouette_initial": 0.050940871238708496,
+        "silhouette_final": 0.03141394630074501,
+        "trend": [
+          0.050940871238708496,
+          0.535323977470398,
+          0.03728683292865753,
+          0.03141394630074501
+        ]
+      },
+      "A2": {
+        "turns": 4,
+        "weighted_turns": 6.5,
+        "termination": "converged"
+      },
+      "A3": {
+        "cognitive_load_by_turn": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "mean_cognitive_load": 1.0,
+        "cognitive_load_driver_by_turn": [],
+        "final_cognitive_load_breakdown": null
+      },
+      "B1": {
+        "overall_score": 0.72,
+        "notes": "The session is solid with rough edges, driven by perfect oracle compliance despite a moderately contradictory and ambiguous instruction set. While the clusters display inconsistent internal coherence\u2014specifically the fragmentation in Technical Engineering and Graphics and General Social and Medical Commentary\u2014the system's ability to maintain perfect target compliance under vague guidance demonstrates strong functional capability."
+      },
+      "B2": {
+        "coherence_mean": 0.66,
+        "coherence_min": 0.4,
+        "per_cluster": [
+          {
+            "cluster_id": "0554997d-f80f-4ff7-939d-93360c9a0b0d",
+            "cluster_name": "General Social and Medical Commentary",
+            "coherence": 0.45,
+            "reasoning": "This cluster is quite fragmented, mixing intense personal anecdotes and public social commentary with stray, unrelated automotive discussions and technical debates that belong in different domains."
+          },
+          {
+            "cluster_id": "f11d0a2d-c663-4470-bf9d-13b7d2b06cda",
+            "cluster_name": "Computer Graphics and Visualization",
+            "coherence": 0.65,
+            "reasoning": "The cluster stays mostly focused on graphics hardware and image processing, though the bottom members are clearly off-topic automotive complaints that do not fit the technical theme."
+          },
+          {
+            "cluster_id": "448c0edb-fea3-4b71-9b73-dd2d4b20046f",
+            "cluster_name": "Professional Baseball Commentary",
+            "coherence": 0.95,
+            "reasoning": "This is a very tight cluster consistently focused on Major League Baseball, including subscriber requests, player statistics, and movie references related to the sport."
+          },
+          {
+            "cluster_id": "5d375270-b1e3-4908-a01d-27edb43b07eb",
+            "cluster_name": "Technical Engineering and Graphics",
+            "coherence": 0.4,
+            "reasoning": "While the top members focus on software and graphics, the bottom members include completely unrelated topics like agricultural practices in Alaska and cleaning shoe-covers, showing significant topic drift."
+          },
+          {
+            "cluster_id": "ffd2b7e9-6514-4301-894f-26d992cec522",
+            "cluster_name": "Sociopolitical and Health Discourse",
+            "coherence": 0.85,
+            "reasoning": "This cluster is highly coherent, centered on public discourse regarding newsgroups, health/medical ethics, and personal medical inquiries, with only minor irrelevant noise at the margins."
+          }
+        ]
+      },
+      "B3": {
+        "compliance_score": 1.0,
+        "notes": "The system correctly interpreted each oracle request, performing appropriate operations for re-embedding the dataset, splitting clusters, and moving a specific data point. All structural actions were executed on the intended targets with full compliance."
+      },
+      "B4": {
+        "contradiction_score": 0.4,
+        "notes": "The oracle's feedback is generally consistent in its goal of reducing cluster size, but it relies on vague, context-dependent language. Specifically, the instruction 'move it' in the final turn is highly ambiguous as it lacks a specified destination.",
+        "examples": [
+          "Turn 4 instructed to 'move it' without specifying a target cluster or criteria for where the point should be relocated.",
+          "The oracle repeatedly refers to clusters by numbers (e.g., 'cluster 3') without defining the criteria for what those clusters represent, creating a dependency on the system's current state that could lead to ambiguity if the system re-indexes."
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "user5/amazon_reviews",
+    "session_id": "990ef35b-7485-471d-9a2b-0f7044fff93f",
+    "status": "converged",
+    "oracle_kind": "human",
+    "evaluated_at": "2026-06-04 23:23:40.342999",
+    "metrics": {
+      "session_id": "990ef35b-7485-471d-9a2b-0f7044fff93f",
+      "k_final": 5,
+      "cached": false,
+      "A1": {
+        "silhouette_initial": 0.04350962117314339,
+        "silhouette_final": 0.37566623091697693,
+        "trend": [
+          0.04350962117314339,
+          0.37566623091697693
+        ]
+      },
+      "A2": {
+        "turns": 3,
+        "weighted_turns": 6.0,
+        "termination": "converged"
+      },
+      "A3": {
+        "cognitive_load_by_turn": [
+          1,
+          2,
+          1
+        ],
+        "mean_cognitive_load": 1.33,
+        "cognitive_load_driver_by_turn": [],
+        "final_cognitive_load_breakdown": null
+      },
+      "B1": {
+        "overall_score": 0.45,
+        "notes": "The session resulted in a mixed performance where the failing of the merge operation in the final turn significantly undermined the session's goal. Because the oracle was clear throughout the session, the combination of poor compliance and the high fragmentation in Media and Lifestyle Instructional Guides and Product Performance and Quality leaves the session in the mixed band."
+      },
+      "B2": {
+        "coherence_mean": 0.59,
+        "coherence_min": 0.35,
+        "per_cluster": [
+          {
+            "cluster_id": "25247cb6-0c0f-4ebb-87a3-4fcc87d3e9aa",
+            "cluster_name": "Film Analysis and Critique",
+            "coherence": 0.7,
+            "reasoning": "The cluster focuses on movie and book critiques and experiences. While the theme is generally consistent, there is some mixing of film-specific hardware technical complaints and literary reviews."
+          },
+          {
+            "cluster_id": "df3ae35a-d58f-4ab5-ad48-c6aec68bda4b",
+            "cluster_name": "Hardware and Equipment Durability",
+            "coherence": 0.85,
+            "reasoning": "This cluster is highly coherent, consistently featuring reviews regarding the physical construction, durability, and functional failure of consumer hardware and peripherals."
+          },
+          {
+            "cluster_id": "0894fa4e-e070-4f8f-bffa-895d79a3c08d",
+            "cluster_name": "Media and Lifestyle Instructional Guides",
+            "coherence": 0.35,
+            "reasoning": "This cluster is highly fragmented; it mixes diverse product reviews such as footwear, breast pumps, and holiday decor, which share little connection beyond being general consumer items."
+          },
+          {
+            "cluster_id": "fa98a7c8-915e-4eb2-b713-66533d8cba3e",
+            "cluster_name": "Media Content and Editorial Critique",
+            "coherence": 0.65,
+            "reasoning": "The cluster primarily covers reviews of media content like books and music. However, it includes some instructional video reviews and non-English reviews that deviate from the core editorial critique focus."
+          },
+          {
+            "cluster_id": "6d821e37-6c89-4515-9b9f-b9d360d2487f",
+            "cluster_name": "Product Performance and Quality",
+            "coherence": 0.4,
+            "reasoning": "This cluster is poorly defined, acting as a repository for miscellaneous physical products ranging from furniture to food and medical instructions, lacking a unified thematic center."
+          }
+        ]
+      },
+      "B3": {
+        "compliance_score": 0.66,
+        "notes": "In Turn 1, the system correctly split the data via a global Re-embedding as requested. In Turn 2, the system successfully performed a split on the referenced cluster. In Turn 3, the system failed to identify the correct cluster IDs for the 'merge' operation, attempting to merge non-existent or mis-identified clusters rather than the ones specified or clearly implied by the context of the previous turn's output."
+      },
+      "B4": {
+        "contradiction_score": 0.2,
+        "notes": "The instructions are generally consistent, transitioning logically from a global split to a refinement of subclusters, and finally to a structural consolidation. The requests remain focused on the same domain throughout, representing clear iterative progress rather than conflicting goals.",
+        "examples": [
+          "Turn 2 follows the global split in turn 1 by refining the results, and turn 3 performs a logical consolidation of clusters created in the previous step."
+        ]
+      }
+    }
+  },
+  {
+    "session_name": "user6/imbd",
+    "session_id": "dab7769f-9b99-4d08-9794-b35a8cc8f385",
+    "status": "closed",
+    "oracle_kind": "human",
+    "evaluated_at": "2026-06-04 23:16:41.699894",
+    "metrics": {
+      "session_id": "dab7769f-9b99-4d08-9794-b35a8cc8f385",
+      "k_final": 3,
+      "cached": false,
+      "A1": {
+        "silhouette_initial": 0.006564230192452669,
+        "silhouette_final": 0.7905116677284241,
+        "trend": [
+          0.006564230192452669,
+          0.5852229595184326,
+          0.7905116677284241
+        ]
+      },
+      "A2": {
+        "turns": 5,
+        "weighted_turns": 10.0,
+        "termination": "converged"
+      },
+      "A3": {
+        "cognitive_load_by_turn": [
+          1,
+          1,
+          1,
+          1,
+          2
+        ],
+        "mean_cognitive_load": 1.2,
+        "cognitive_load_driver_by_turn": [],
+        "final_cognitive_load_breakdown": null
+      },
+      "B1": {
+        "overall_score": 0.55,
+        "notes": "The session resulted in a mixed outcome, primarily driven by moderate performance across coherence and compliance. While the oracle's high levels of ambiguity and inconsistent feedback toward the end partially explain the system's struggle to maintain cluster focus and fulfill titling instructions, the failure to address existing clusters and the theme drift within Cinematic Quality Critiques signify a breakdown in operational precision."
+      },
+      "B2": {
+        "coherence_mean": 0.6,
+        "coherence_min": 0.55,
+        "per_cluster": [
+          {
+            "cluster_id": "a1ff64d9-e9b1-4bb7-93d7-f24f31812694",
+            "cluster_name": "Disappointing Cinematic Failures",
+            "coherence": 0.55,
+            "reasoning": "While centered on critical reviews of entertainment, the cluster is fragmented because it contains a highly positive, glowing review of the animated film Ice Age, which directly contradicts the 'Disappointing Cinematic Failures' theme."
+          },
+          {
+            "cluster_id": "0a7eec3c-fb6b-49e1-893a-2524b606e2a4",
+            "cluster_name": "Cinematic Quality Critiques",
+            "coherence": 0.65,
+            "reasoning": "This cluster covers general cinematic criticism and qualitative analysis; however, the inclusion of a detailed summary/review of the pre-code film 'Son of the Gods' and a travelogue-style piece on Istanbul creates some thematic drift."
+          },
+          {
+            "cluster_id": "991c39f8-6a9c-4fec-ae77-858727cae896",
+            "cluster_name": "Film Genre Analysis and Commentary",
+            "coherence": 0.6,
+            "reasoning": "The cluster focuses on genre-specific commentary and analysis, but it is somewhat loose due to a significant shift toward opera performance evaluations (Rigoletto) and biographical historical film analysis at the bottom of the set."
+          }
+        ]
+      },
+      "B3": {
+        "compliance_score": 0.6,
+        "notes": "The system correctly interpreted the global re-embedding requests in turns 2 and 3. However, in turn 4, the system used a non-existent cluster ID ('d78968c4-303e-4fed-ac0c-a89606e7f1e1') instead of applying the operation to one of the clusters created in the previous turn, and it failed to fulfill the instruction to include 'positive' in the title of the resulting clusters."
+      },
+      "B4": {
+        "contradiction_score": 0.6,
+        "notes": "The oracle's feedback is marked by significant ambiguity regarding the target of operations and increasing frustration that complicates the task. While initial instructions were broad, the failure to provide clear anchors for subsequent refinements or to clarify why previous clustering patterns were unsatisfactory creates inconsistency in the session flow.",
+        "examples": [
+          "turn 4 asks to 'divide the first one' without clear anchor definitions, making it ambiguous which cluster is being referenced.",
+          "turn 5 declares a 'total failure' without specifying which part of the previous hierarchical split failed or what the corrected output should look like, providing no path forward for the system."
+        ]
+      }
+    }
+  }
+]
