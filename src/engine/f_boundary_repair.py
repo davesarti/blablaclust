@@ -1,11 +1,15 @@
 """Post-operation boundary repair: LLM-guided reassignment of uncertain points.
 
-After a merge or split, the geometry-only k-means may have placed boundary
+After a merge or split, the geometry-only GMM may have placed boundary
 points in the wrong cluster relative to the oracle's intent. This module
-samples the N most uncertain points from each affected cluster (smallest
+samples the most uncertain points from each affected cluster (smallest
 margin between their top-2 soft-assignment probabilities), asks the LLM
 whether they belong where they are, and returns move operations for any
 misplaced ones.
+
+Sample size is 10% of the cluster, capped at BOUNDARY_POINTS_MAX (30).
+This scales with cluster size — a 400-point cluster gets 40 candidates
+(capped at 30), a 20-point cluster gets 2.
 
 One LLM call per turn regardless of how many merge/split ops ran.
 Out-of-band from the oracle — applied transparently as part of the same
@@ -28,7 +32,8 @@ from src.harness import (
 from src.logger import log, log_llm_call
 from src.models import DataPoint
 
-BOUNDARY_POINTS_PER_CLUSTER = 10
+BOUNDARY_SAMPLE_PCT = 0.10   # 10% of cluster size
+BOUNDARY_POINTS_MAX = 30     # hard cap (one LLM batch = manageable context)
 
 
 def _boundary_points(
@@ -57,7 +62,8 @@ def _boundary_points(
     all_point_ids: list[str] = []
     top_n: dict[str, list[tuple[str, float]]] = {}
     for cid in affected_ids:
-        ranked = sorted(candidates[cid], key=lambda x: x[1])[:BOUNDARY_POINTS_PER_CLUSTER]
+        n = max(1, min(BOUNDARY_POINTS_MAX, round(len(candidates[cid]) * BOUNDARY_SAMPLE_PCT)))
+        ranked = sorted(candidates[cid], key=lambda x: x[1])[:n]
         top_n[cid] = ranked
         all_point_ids.extend(pid for pid, _ in ranked)
 
